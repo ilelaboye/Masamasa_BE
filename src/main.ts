@@ -66,8 +66,7 @@ async function bootstrap() {
     new GlobalExceptionFilter(httpAdapterHost)
   );
 
-  const port = process.env.PORT || appConfig.PORT || 4000;
-  await app.listen(10000, "0.0.0.0");
+  await app.listen(appConfig.PORT);
 
   console.info(`Application is running on: ${await app.getUrl()}`);
 }
