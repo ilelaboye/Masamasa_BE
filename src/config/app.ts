@@ -13,7 +13,7 @@ export const appConfig = {
   APP_FRONTEND: process.env.APP_FRONTEND ? process.env.APP_FRONTEND : "",
   APP_URL: process.env.APP_URL ? process.env.APP_URL : "",
   WEB_FRONTEND: process.env.WEB_FRONTEND,
-  PORT: process.env.PORT || 8000,
+  PORT: process.env.PORT || 4000,
   DEBUG: process.env.DEBUG,
   ENV: process.env.ENV || "dev",
   TZ: process.env.TZ || "Africa/Lagos",
