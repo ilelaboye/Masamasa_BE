@@ -52,6 +52,7 @@ import { ConfigModuleSchema } from "./validations";
       store: redisStore,
       host: appConfig.REDIS_HOST,
       port: appConfig.REDIS_PORT,
+      password: appConfig.REDIS_PASSWORD,
     }),
     CloudinaryModule,
     PublicModule,
