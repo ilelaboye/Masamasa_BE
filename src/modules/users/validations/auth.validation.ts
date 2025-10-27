@@ -6,6 +6,7 @@ export const LoginValidation = Joi.object().keys({
 });
 
 export const ResetPasswordValidation = Joi.object().keys({
+  email: Joi.string().email().max(50).required(),
   token: Joi.string().required(),
   password: Joi.string().min(6).max(32).required().messages({
     "string.pattern.base":

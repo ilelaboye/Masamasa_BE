@@ -111,8 +111,6 @@ export class AuthService extends BaseService {
         { email },
         { email_verified_at: new Date(), remember_token: null }
       );
-    } else {
-      await this.userRepository.update({ email }, { remember_token: null });
     }
 
     return { message: "Verification successful." };
@@ -246,7 +244,11 @@ export class AuthService extends BaseService {
   async resetPassword(resetPasswordDto: ResetPasswordDto) {
     const { email, password, token, password_confirmation } = resetPasswordDto;
 
-    const user = await this.userRepository.findOneBy({ email });
+    const user = await this.userRepository
+      .createQueryBuilder("user")
+      .addSelect("user.remember_token")
+      .where("user.email = :email", { email })
+      .getOne();
     if (!user)
       throw new NotAcceptableException(
         "Invalid email and token, please try again."
@@ -266,7 +268,7 @@ export class AuthService extends BaseService {
 
     await this.userRepository.update(
       { id: user.id },
-      { password: await hashResource(password) }
+      { password: await hashResource(password), remember_token: null }
     );
     const { first_name, last_name, id } = user;
 
@@ -287,7 +289,7 @@ export class AuthService extends BaseService {
     //   }
     // );
 
-    this.userRepository.update({ id }, { remember_token: null });
+    // this.userRepository.update({ id }, { remember_token: null });
     return { message: "Password reset successfully." };
   }
 }
