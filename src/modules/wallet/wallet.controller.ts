@@ -18,8 +18,8 @@ import { CreateWalletValidation } from "./wallet.validation";
 import { CreateWalletDto } from "./wallet.dto";
 
 @ApiCookieAuth(_AUTH_COOKIE_NAME_)
-@ApiTags("Wallet")
 @UseGuards(AuthGuard)
+@ApiTags("Wallet")
 @Controller("wallet")
 export class WalletController {
   constructor(private readonly walletService: WalletService) {}

@@ -1,7 +1,10 @@
 import type { Request } from "express";
 import { User } from "./modules/users/entities/user.entity";
+import { Administrator } from "./modules/administrator/entities/administrator.entity";
 
 export type UserRequest = Request & { user: User };
+
+export type AdminRequest = Request & { admin: Administrator };
 
 export type CloudinaryUpload = {
   asset_id: string;
@@ -32,6 +35,11 @@ export enum SystemPreferenceFetcher {
 export type iCookieData = {
   token: string;
   user: User;
+};
+
+export type iAdminCookieData = {
+  token: string;
+  admin: Administrator;
 };
 
 export type CurrencyType = {

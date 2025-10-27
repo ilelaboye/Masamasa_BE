@@ -27,7 +27,7 @@ export class Wallet {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @ManyToOne(() => User, (relationship) => relationship.notifications)
+  @ManyToOne(() => User, (relationship) => relationship.id)
   @JoinColumn({ name: "user_id" })
   user: User;
 

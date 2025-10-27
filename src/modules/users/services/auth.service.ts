@@ -62,8 +62,6 @@ export class AuthService extends BaseService {
       throw new NotAcceptableException(
         "Incorrect login details given, please try again"
       );
-
-    console.log("user", user);
     const verified = await verifyHash(loginStaffDto.password, user.password);
     if (!verified)
       throw new NotAcceptableException(

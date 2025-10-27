@@ -56,11 +56,7 @@ export class AuthController {
       });
     }
     const cookieData = { token, user: extractUserForCookie(user) };
-    res.cookie(
-      _AUTH_COOKIE_NAME_,
-      encodeURIComponent(JSON.stringify(cookieData)),
-      CookieOptions
-    );
+    res.cookie(_AUTH_COOKIE_NAME_, encryptData(cookieData), CookieOptions);
 
     return {
       data: user,

@@ -24,7 +24,7 @@ export class WalletService {
 
   async findAll(req: UserRequest) {
     return await this.walletRepository.find({
-      where: { user: req.user },
+      where: { user: { id: req.user.id } },
     });
   }
 }

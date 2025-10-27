@@ -2,6 +2,7 @@ import type { CookieOptions as CookieOptionsType } from "express";
 
 export const _IS_PROD_ = process.env.ENV === "production",
   _AUTH_COOKIE_NAME_ = "__8139a745d54__",
+  _ADMIN_AUTH_COOKIE_NAME_ = "__18p36s745d09__",
   _TTL_ = 1000 * 60 * 60 * 24 * 7,
   _THROTTLE_TTL_ = 60 * 5; //5mins
 

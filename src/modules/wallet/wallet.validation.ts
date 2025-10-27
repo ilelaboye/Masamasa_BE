@@ -1,4 +1,4 @@
-import Joi from "joi";
+import * as Joi from "joi";
 
 export const CreateWalletValidation = Joi.object().keys({
   user: Joi.number().required(),

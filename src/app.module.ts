@@ -19,6 +19,9 @@ import {
   ScheduledTaskModule,
   UsersModule,
   WalletModule,
+  TransactionModule,
+  AdministratorModule,
+  ExchangeRateModule,
 } from "./modules";
 import { ConfigModuleSchema } from "./validations";
 
@@ -61,6 +64,9 @@ import { ConfigModuleSchema } from "./validations";
     CacheContainerModule,
     UsersModule,
     WalletModule,
+    TransactionModule,
+    AdministratorModule,
+    ExchangeRateModule,
   ],
   providers: [JwtService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
