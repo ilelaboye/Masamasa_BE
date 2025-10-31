@@ -23,6 +23,8 @@ import { _ADMIN_AUTH_COOKIE_NAME_, _AUTH_COOKIE_NAME_ } from "@/constants";
 import { AdminAuthGuard } from "@/guards/admin-auth.guard";
 import { AdminRequest, SystemCache } from "@/definitions";
 import { CacheService } from "@/modules/global/cache-container/cache-container.service";
+import { ExchangeRateService } from "@/modules/exchange-rates/exchange-rates.service";
+import { CreateExchangeRateDto } from "../dto/admin.dto";
 
 @ApiTags("Admin")
 @ApiCookieAuth(_ADMIN_AUTH_COOKIE_NAME_)
@@ -66,6 +68,22 @@ export class AdministratorController {
   // async companies(@Req() req: AdminRequest) {
   //   return await this.adminCompanyService.getCompanies(req);
   // }
+
+  @Get("users")
+  async users(@Req() req: AdminRequest) {
+    return this.administratorService.getUsers(req);
+  }
+
+  @Post("create-exchange-rate")
+  async createExchangeRate(
+    @Body() createExchangeRateDto: CreateExchangeRateDto,
+    @Req() req: AdminRequest
+  ) {
+    return this.administratorService.saveExchangeRate(
+      createExchangeRateDto,
+      req
+    );
+  }
 
   @Delete("logout")
   async logout(@Req() req: AdminRequest, @Res() res: Response) {

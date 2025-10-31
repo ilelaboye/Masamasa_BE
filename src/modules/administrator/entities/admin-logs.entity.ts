@@ -11,13 +11,7 @@ import { Administrator } from "./administrator.entity";
 import { User } from "@/modules/users/entities/user.entity";
 
 export enum AdminLogEntities {
-  ENTITY_PAYEE = "ENTITY_PAYEE",
-  ENTITY_PREFERENCE = "ENTITY_PREFERENCE",
-  ENTITY_PERMISSION = "ENTITY_PERMISSION",
-  ENTITY_PAYMENT_REQUESTS = "ENTITY_PAYMENT_REQUESTS",
-  ENTITY_BUDGET_CATEGORY = "ENTITY_BUDGET_CATEGORY",
-  ENTITY_ORGANIZATION = "ENTITY_ORGANIZATION",
-  ENTITY_DOCUMENTS_TYPE = "ENTITY_DOCUMENTS_TYPE",
+  EXCHANGE_RATE = "EXCHANGE_RATE",
 }
 
 @Entity({ name: "admin_logs" })

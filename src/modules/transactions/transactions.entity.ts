@@ -52,6 +52,9 @@ export class Transactions {
   @Column("double precision", { default: 0, nullable: true })
   dollar_amount: number;
 
+  @Column("double precision", { default: 0, nullable: true })
+  coin_exchange_rate: number;
+
   @ManyToOne(() => ExchangeRate, (exchangeRate) => exchangeRate.id, {
     nullable: true,
   })
@@ -83,7 +86,7 @@ export class Transactions {
   entity_id: number | string;
 
   @Column("json", { nullable: true })
-  metadata?: unknown;
+  metadata?: any;
 
   @CreateDateColumn({ type: "timestamp" })
   created_at!: Date;

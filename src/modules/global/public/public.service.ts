@@ -6,11 +6,105 @@ import { User } from "@/modules/users/entities/user.entity";
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
+import { TransactionWebhookDto } from "./dto";
+import { Wallet } from "@/modules/wallet/wallet.entity";
+import {
+  TransactionEntityType,
+  TransactionModeType,
+  Transactions,
+} from "@/modules/transactions/transactions.entity";
+import { Webhook, WebhookEntityType } from "./entities/webhook.entity";
+import axios from "axios";
+import { ExchangeRateService } from "@/modules/exchange-rates/exchange-rates.service";
 
 @Injectable()
 export class PublicService {
   constructor(
     @InjectRepository(User)
-    private readonly userRepository: Repository<User>
+    private readonly userRepository: Repository<User>,
+    @InjectRepository(Wallet)
+    private readonly walletRepository: Repository<Wallet>,
+    @InjectRepository(Transactions)
+    private readonly transactionsRepository: Repository<Transactions>,
+    @InjectRepository(Webhook)
+    private readonly webhookRepository: Repository<Webhook>,
+    private readonly exchangeRateService: ExchangeRateService
   ) {}
+
+  async transactionWebhook(transactionWebhook: TransactionWebhookDto) {
+    const { address, network, amount, token_symbol } = transactionWebhook;
+
+    const wb = await this.webhookRepository.save({
+      address,
+      entity_type: WebhookEntityType.deposit,
+      metadata: JSON.stringify(transactionWebhook),
+    });
+
+    const wallet = await this.walletRepository.findOne({
+      where: { wallet_address: address },
+    });
+    if (!wallet) throw new BadRequestException("Wallet address not found");
+
+    const rate = await this.exchangeRateService.getActiveRate();
+    var exchange = 0;
+    if (rate) {
+      exchange = rate.rate;
+    }
+    var coin_price = 0;
+    var price = await this.getPrice(`${token_symbol}USDT`);
+    if (price.status) {
+      coin_price = price.price.price;
+    }
+
+    const trans = await this.transactionsRepository.save({
+      user_id: wallet.user_id,
+      network: network,
+      coin_amount: amount,
+      wallet_address: wallet,
+      mode: TransactionModeType.credit,
+      entity_type: TransactionEntityType.deposit,
+      metadata: JSON.stringify(transactionWebhook),
+      exchange_rate_id: rate ? rate.id : null,
+      currency: token_symbol,
+      entity_id: wb.id,
+      dollar_amount: coin_price * amount,
+      amount: coin_price * amount * exchange,
+      coin_exchange_rate: coin_price,
+    } as unknown as Transactions);
+
+    return trans;
+  }
+
+  async getPrice(symbol) {
+    try {
+      const price = await axios.get(
+        `https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`
+      );
+      return { status: true, price: price.data };
+    } catch {
+      return { status: false };
+    }
+  }
+
+  async getPrices() {
+    try {
+      const symbols = ["BTCUSDT", "ETHUSDT", "ADAUSDT"];
+      const responses = await Promise.all(
+        symbols.map((symbol) =>
+          axios.get(
+            `https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`
+          )
+        )
+      );
+
+      const prices = responses.map((res) => ({
+        symbol: res.data.symbol,
+        price: parseFloat(res.data.price),
+      }));
+
+      return prices;
+    } catch (error) {
+      throw new BadRequestException("Failed to fetch prices");
+    }
+  }
 }

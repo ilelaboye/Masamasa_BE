@@ -7,6 +7,7 @@ import {
   Get,
   Param,
   Post,
+  Req,
   Res,
   UseInterceptors,
   UsePipes,
@@ -18,11 +19,16 @@ import {
   ActionOnStaffInviteValidation,
   // ConfirmUserEmailValidation,
 } from "./validations";
+import { TransactionWebhookDto } from "./dto";
+import { ExchangeRateService } from "@/modules/exchange-rates/exchange-rates.service";
 
 @ApiTags("Public Routes")
 @Controller()
 export class PublicController {
-  constructor(private readonly publicService: PublicService) {}
+  constructor(
+    private readonly publicService: PublicService,
+    private readonly exchangeRateService: ExchangeRateService
+  ) {}
 
   // @UsePipes(new JoiValidationPipe(ConfirmUserEmailValidation))
   // @Post("auth/confirm-email")
@@ -34,4 +40,29 @@ export class PublicController {
   //     await this.publicService.confirmUserEmail(confirmUserEmailDto);
   //   successResponse(res, response);
   // }
+
+  @Post("webhook/transaction")
+  async transaction(@Body() transactionWebhookDto: TransactionWebhookDto) {
+    return await this.publicService.transactionWebhook(transactionWebhookDto);
+  }
+
+  @Get("prices")
+  async prices() {
+    return await this.publicService.getPrices();
+  }
+
+  @Get("price")
+  async price() {
+    return await this.publicService.getPrice("ADAUSDT");
+  }
+
+  @Get("exchange-rates")
+  async exchangeRates() {
+    return this.exchangeRateService.findAll();
+  }
+
+  @Get("active-exchange-rate")
+  async activeExchangeRate() {
+    return this.exchangeRateService.getActiveRate();
+  }
 }

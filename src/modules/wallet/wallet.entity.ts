@@ -32,12 +32,15 @@ export class Wallet {
   user: User;
 
   @Column()
+  user_id: number;
+
+  @Column()
   network: string;
 
   @Column({ nullable: true })
   currency: string;
 
-  @Column()
+  @Column({ unique: true })
   wallet_address: string;
 
   @Column({

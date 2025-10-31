@@ -1,5 +1,5 @@
 import { UserRequest } from "@/definitions";
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import { CreateWalletDto } from "./wallet.dto";
 import { Wallet } from "./wallet.entity";
 import { Repository } from "typeorm";
@@ -13,6 +13,12 @@ export class WalletService {
   ) {}
 
   async saveWalletAddress(createWalletDto: CreateWalletDto, req: UserRequest) {
+    const existing = await this.walletRepository.exists({
+      where: { wallet_address: createWalletDto.wallet_address },
+    });
+    if (existing) {
+      throw new BadRequestException("Wallet address already exist");
+    }
     const wallet = this.walletRepository.create({
       user: req.user,
       network: createWalletDto.network,
