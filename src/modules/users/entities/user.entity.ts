@@ -45,6 +45,9 @@ export class User {
   @Column({ select: false, nullable: true })
   password?: string;
 
+  @Column({ select: false, nullable: true })
+  pin?: string;
+
   @Column({ nullable: true })
   phone: string;
 

@@ -9,7 +9,7 @@ import { Repository } from "typeorm";
 import { BaseService } from "../../base.service";
 import { User } from "../entities/user.entity";
 import { ChangeUserPasswordDto, CreatePinDto } from "../dto";
-import { verifyHash } from "@/core/utils";
+import { hashResourceSync, verifyHash } from "@/core/utils";
 
 @Injectable()
 export class UsersService extends BaseService {
@@ -28,6 +28,14 @@ export class UsersService extends BaseService {
     if (!createPinDto.pin || !isNaN(createPinDto.pin)) {
       throw new BadRequestException("Invalid pin");
     }
+    const { user } = req;
+
+    const save = await this.userRepository.update(
+      { id: user.id },
+      { pin: hashResourceSync(`${createPinDto.pin}`) }
+    );
+
+    return save;
   }
 
   async changePassword(
