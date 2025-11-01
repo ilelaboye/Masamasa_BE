@@ -53,7 +53,7 @@ export class PublicController {
 
   @Get("price")
   async price() {
-    return await this.publicService.getPrice("ADAUSDT");
+    return await this.publicService.getPrice("ADA");
   }
 
   @Get("exchange-rates")

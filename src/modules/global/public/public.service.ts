@@ -51,9 +51,11 @@ export class PublicService {
       exchange = rate.rate;
     }
     var coin_price = 0;
-    var price = await this.getPrice(`${token_symbol}USDT`);
+    var price: { status: boolean; price: any } = await this.getPrice(
+      `${token_symbol}USDT`
+    );
     if (price.status) {
-      coin_price = price.price.price;
+      coin_price = price.price;
     }
 
     const trans = await this.transactionsRepository.save({
@@ -75,35 +77,61 @@ export class PublicService {
     return trans;
   }
 
-  async getPrice(symbol) {
+  async getPrice(symbol): Promise<{ status: boolean; price: any }> {
+    // try {
+    //   const price = await axios.get(
+    //     `https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`
+    //   );
+    //   return { status: true, price: price.data };
+    // } catch {
+    //   return { status: false };
+    // }
     try {
-      const price = await axios.get(
-        `https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`
+      const coin = await axios.get(
+        `https://api.coingecko.com/api/v3/search?query=${symbol}`
       );
-      return { status: true, price: price.data };
-    } catch {
-      return { status: false };
+      // return coin;
+      const api_symbol = coin.data.coins[0].api_symbol;
+      const responses = await axios.get(
+        `https://api.coingecko.com/api/v3/simple/price?ids=${api_symbol}&vs_currencies=usd`
+      );
+      return { status: true, price: responses.data[api_symbol].usd };
+    } catch (error) {
+      console.log(error);
+      return { status: false, price: null };
     }
   }
 
   async getPrices() {
     console.log("djdjf");
+    // Binance does not work in USA
+    // try {
+    //   const symbols = ["BTCUSDT", "ETHUSDT", "ADAUSDT"];
+    //   const responses = await Promise.all(
+    //     symbols.map((symbol) =>
+    //       axios.get(
+    //         `https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`
+    //       )
+    //     )
+    //   );
+
+    //   const prices = responses.map((res) => ({
+    //     symbol: res.data.symbol,
+    //     price: parseFloat(res.data.price),
+    //   }));
+
+    //   return prices;
+    // } catch (error) {
+    //   console.log(error);
+    //   throw new BadRequestException("Failed to fetch prices");
+    // }
+
     try {
-      const symbols = ["BTCUSDT", "ETHUSDT", "ADAUSDT"];
-      const responses = await Promise.all(
-        symbols.map((symbol) =>
-          axios.get(
-            `https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`
-          )
-        )
+      const responses = await axios.get(
+        `https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,binancecoin,solana,tether,usd-coin,cardano,doge,ripple&vs_currencies=usd`
       );
 
-      const prices = responses.map((res) => ({
-        symbol: res.data.symbol,
-        price: parseFloat(res.data.price),
-      }));
-
-      return prices;
+      return responses;
     } catch (error) {
       console.log(error);
       throw new BadRequestException("Failed to fetch prices");
