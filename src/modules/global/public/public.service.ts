@@ -87,6 +87,7 @@ export class PublicService {
   }
 
   async getPrices() {
+    console.log("djdjf");
     try {
       const symbols = ["BTCUSDT", "ETHUSDT", "ADAUSDT"];
       const responses = await Promise.all(
@@ -104,6 +105,7 @@ export class PublicService {
 
       return prices;
     } catch (error) {
+      console.log(error);
       throw new BadRequestException("Failed to fetch prices");
     }
   }

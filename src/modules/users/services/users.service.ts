@@ -8,7 +8,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { BaseService } from "../../base.service";
 import { User } from "../entities/user.entity";
-import { ChangeUserPasswordDto } from "../dto";
+import { ChangeUserPasswordDto, CreatePinDto } from "../dto";
 import { verifyHash } from "@/core/utils";
 
 @Injectable()
@@ -21,6 +21,13 @@ export class UsersService extends BaseService {
   }
   async getAuthStaff(req: UserRequest) {
     return req.user;
+  }
+
+  async setPin(createPinDto: CreatePinDto, req: UserRequest) {
+    console.log("pin", createPinDto.pin);
+    if (!createPinDto.pin || !isNaN(createPinDto.pin)) {
+      throw new BadRequestException("Invalid pin");
+    }
   }
 
   async changePassword(

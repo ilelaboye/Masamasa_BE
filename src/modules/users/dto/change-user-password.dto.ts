@@ -1,12 +1,17 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty } from "@nestjs/swagger";
 
 export class ChangeUserPasswordDto {
-  @ApiProperty({ example: '_Pa$$w0rd!XYZ' })
+  @ApiProperty({ example: "_Pa$$w0rd!XYZ" })
   old_password: string;
 
-  @ApiProperty({ example: '_Pa$$w0rd!XYZ01' })
+  @ApiProperty({ example: "_Pa$$w0rd!XYZ01" })
   new_password: string;
 
-  @ApiProperty({ example: '_Pa$$w0rd!XYZ01' })
+  @ApiProperty({ example: "_Pa$$w0rd!XYZ01" })
   new_password_confirmation?: string;
+}
+
+export class CreatePinDto {
+  @ApiProperty({ example: "12345" })
+  pin: number;
 }
