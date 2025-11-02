@@ -8,7 +8,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { BaseService } from "../../base.service";
 import { User } from "../entities/user.entity";
-import { ChangeUserPasswordDto, CreatePinDto } from "../dto";
+import { ChangePinDto, ChangeUserPasswordDto, CreatePinDto } from "../dto";
 import { hashResourceSync, verifyHash } from "@/core/utils";
 
 @Injectable()
@@ -24,18 +24,56 @@ export class UsersService extends BaseService {
   }
 
   async setPin(createPinDto: CreatePinDto, req: UserRequest) {
-    console.log("pin", createPinDto.pin);
-    if (!createPinDto.pin || !isNaN(createPinDto.pin)) {
-      throw new BadRequestException("Invalid pin");
+    if (!createPinDto.pin || !/^\d{4}$/.test(createPinDto.pin)) {
+      throw new BadRequestException("Invalid pin, pin must be 4-digit");
     }
     const { user } = req;
+
+    const fetch = await this.userRepository
+      .createQueryBuilder("user")
+      .addSelect("user.pin")
+      .where("user.id = :id", { id: user.id })
+      .getOne();
+
+    if (fetch && fetch.pin) {
+      throw new BadRequestException(
+        "Pin has already been set, please click on change pin to proceed"
+      );
+    }
 
     const save = await this.userRepository.update(
       { id: user.id },
       { pin: hashResourceSync(`${createPinDto.pin}`) }
     );
 
-    return save;
+    return user;
+  }
+
+  async changePin(changePinDto: ChangePinDto, req: UserRequest) {
+    const { user } = req;
+    if (!changePinDto.old_pin) {
+      throw new BadRequestException("Old pin is required");
+    }
+    const fetch = await this.userRepository
+      .createQueryBuilder("user")
+      .addSelect("user.pin")
+      .where("user.id = :id", { id: user.id })
+      .getOne();
+    if (fetch) {
+      const verified = await verifyHash(changePinDto.old_pin, fetch.pin);
+      if (!verified) throw new BadRequestException("Incorrect old pin");
+    }
+
+    if (!changePinDto.pin || !/^\d{4}$/.test(changePinDto.pin)) {
+      throw new BadRequestException("Invalid new pin, pin must be 4-digit");
+    }
+
+    const save = await this.userRepository.update(
+      { id: user.id },
+      { pin: hashResourceSync(`${changePinDto.pin}`) }
+    );
+
+    return user;
   }
 
   async changePassword(

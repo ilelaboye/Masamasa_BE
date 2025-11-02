@@ -16,7 +16,12 @@ import {
 } from "@nestjs/common";
 import { ApiCookieAuth, ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
-import { ChangeUserPasswordDto, CreatePinDto, EditUserDto } from "../dto";
+import {
+  ChangePinDto,
+  ChangeUserPasswordDto,
+  CreatePinDto,
+  EditUserDto,
+} from "../dto";
 import { UsersService } from "../services/users.service";
 import {
   ChangeUserPasswordValidation,
@@ -41,6 +46,12 @@ export class UsersController {
   @Post("create-pin")
   async setPin(@Body() createPinDto: CreatePinDto, @Req() req: UserRequest) {
     return await this.usersService.setPin(createPinDto, req);
+  }
+
+  @Post("change-pin")
+  async changePin(@Body() changePinDto: ChangePinDto, @Req() req: UserRequest) {
+    console.log("body", changePinDto);
+    return await this.usersService.changePin(changePinDto, req);
   }
 
   // @UsePipes(new JoiValidationPipe(EditUserValidation))

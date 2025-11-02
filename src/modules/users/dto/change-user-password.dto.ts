@@ -12,6 +12,14 @@ export class ChangeUserPasswordDto {
 }
 
 export class CreatePinDto {
-  @ApiProperty({ example: "12345" })
-  pin: number;
+  @ApiProperty({ example: "1234" })
+  pin: string;
+}
+
+export class ChangePinDto {
+  @ApiProperty({ example: "1234" })
+  pin: string;
+
+  @ApiProperty({ example: "1234" })
+  old_pin: string;
 }
