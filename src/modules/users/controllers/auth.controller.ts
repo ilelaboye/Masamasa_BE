@@ -89,7 +89,7 @@ export class AuthController {
   }
 
   @UsePipes(new JoiValidationPipe(ConfirmUserEmailValidation))
-  @Post("confirm-email")
+  @Post("verify-code")
   async confirmEmailVerification(@Body() VerifyTokenDto: VerifyTokenDto) {
     return await this.authService.verifyToken(VerifyTokenDto);
   }

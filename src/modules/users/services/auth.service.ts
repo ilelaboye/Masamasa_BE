@@ -181,6 +181,23 @@ export class AuthService extends BaseService {
         country: user.country,
       };
 
+      sendMailJetWithTemplate(
+        {
+          to: {
+            name: `${capitalizeString(user.first_name)} ${capitalizeString(user.last_name)}`,
+            email,
+          },
+        },
+        {
+          subject: "Verification Code",
+          templateId: MAILJETTemplates.verify_email,
+          variables: {
+            firstName: capitalizeString(user.first_name),
+            token: rememberToken,
+          },
+        }
+      );
+
       const data = {
         user: userData,
       };
@@ -210,22 +227,22 @@ export class AuthService extends BaseService {
     const remember_token = generateRandomNumberString(6);
     this.userRepository.update({ email }, { remember_token });
 
-    // sendMailJetWithTemplate(
-    //   {
-    //     to: {
-    //       name: `${capitalizeString(user.first_name)} ${capitalizeString(user.last_name)}`,
-    //       email,
-    //     },
-    //   },
-    //   {
-    //     subject: "Reset Password",
-    //     templateId: MAILJETTemplates.reset_password_request,
-    //     variables: {
-    //       firstName: capitalizeString(user.first_name),
-    //       resetLink: `${appConfig.APP_FRONTEND}/reset-password?token=${remember_token}&name=${user.first_name}&timestamps=${new Date().toISOString()}`,
-    //     },
-    //   }
-    // );
+    sendMailJetWithTemplate(
+      {
+        to: {
+          name: `${capitalizeString(user.first_name)} ${capitalizeString(user.last_name)}`,
+          email,
+        },
+      },
+      {
+        subject: "Forgot Password",
+        templateId: MAILJETTemplates.verify_email,
+        variables: {
+          firstName: capitalizeString(user.first_name),
+          token: remember_token,
+        },
+      }
+    );
 
     //Save in redis
     this.cacheService.set(
@@ -237,7 +254,7 @@ export class AuthService extends BaseService {
     return {
       message: resend
         ? "Check your email account to continue. Please check your spam if not received on time."
-        : "Check your email account to receive further instructions",
+        : "Verification code has been sent to your email, Please check your spam if not received on time",
     };
   }
 

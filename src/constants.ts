@@ -14,13 +14,5 @@ export const CookieOptions = {
 } satisfies CookieOptionsType;
 
 export const MAILJETTemplates = {
-  staff_otp: 6420784,
-  invite_staff: 6420688,
-  company_welcome_mail: 6420777,
-  verify_email_address: 6420768,
-  verify_email_link: 6420761,
-  reset_password_request: 6420775,
-  password_request_success: 6420770,
-  user_join_reminder: 6420762,
-  email_confirmation_success: 6420759,
+  verify_email: 7451545,
 };
