@@ -16,6 +16,8 @@ import {
 import { Webhook, WebhookEntityType } from "./entities/webhook.entity";
 import axios from "axios";
 import { ExchangeRateService } from "@/modules/exchange-rates/exchange-rates.service";
+import { NotificationsService } from "@/modules/notifications/notifications.service";
+import { NotificationTag } from "@/modules/notifications/entities/notification.entity";
 
 @Injectable()
 export class PublicService {
@@ -28,7 +30,8 @@ export class PublicService {
     private readonly transactionsRepository: Repository<Transactions>,
     @InjectRepository(Webhook)
     private readonly webhookRepository: Repository<Webhook>,
-    private readonly exchangeRateService: ExchangeRateService
+    private readonly exchangeRateService: ExchangeRateService,
+    private readonly notificationsService: NotificationsService
   ) {}
 
   async transactionWebhook(transactionWebhook: TransactionWebhookDto) {
@@ -65,7 +68,7 @@ export class PublicService {
       wallet_address: wallet,
       mode: TransactionModeType.credit,
       entity_type: TransactionEntityType.deposit,
-      metadata: JSON.stringify(transactionWebhook),
+      metadata: transactionWebhook,
       exchange_rate_id: rate ? rate.id : null,
       currency: token_symbol,
       entity_id: wb.id,
@@ -73,6 +76,13 @@ export class PublicService {
       amount: coin_price * amount * exchange,
       coin_exchange_rate: coin_price,
     } as unknown as Transactions);
+
+    this.notificationsService.create({
+      userId: wallet.user_id,
+      message: `Your deposit of ${amount} ${token_symbol} is confirmed`,
+      tag: NotificationTag.deposit,
+      metadata: transactionWebhook,
+    });
 
     return trans;
   }

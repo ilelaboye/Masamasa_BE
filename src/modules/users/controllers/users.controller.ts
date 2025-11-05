@@ -21,11 +21,13 @@ import {
   ChangeUserPasswordDto,
   CreatePinDto,
   EditUserDto,
+  TransferDto,
 } from "../dto";
 import { UsersService } from "../services/users.service";
 import {
   ChangeUserPasswordValidation,
   EditUserValidation,
+  TransferValidation,
 } from "../validations";
 
 @ApiCookieAuth(_AUTH_COOKIE_NAME_)
@@ -50,15 +52,19 @@ export class UsersController {
 
   @Post("change-pin")
   async changePin(@Body() changePinDto: ChangePinDto, @Req() req: UserRequest) {
-    console.log("body", changePinDto);
     return await this.usersService.changePin(changePinDto, req);
   }
 
-  // @UsePipes(new JoiValidationPipe(EditUserValidation))
-  // @Post("profile")
-  // async edit(@Body() editUserDto: EditUserDto, @Req() req: UserRequest) {
-  //   return await this.staffsService.editUser(editUserDto, req);
-  // }
+  @Post("transfer")
+  @UsePipes(new JoiValidationPipe(TransferValidation))
+  async transfer(@Body() transferDto: TransferDto, @Req() req: UserRequest) {
+    return await this.usersService.transfer(transferDto, req);
+  }
+
+  @Get("wallet-balance")
+  async walletBalance(@Req() req: UserRequest) {
+    return await this.usersService.walletBalance(req);
+  }
 
   @UsePipes(new JoiValidationPipe(ChangeUserPasswordValidation))
   @Post("change-password")

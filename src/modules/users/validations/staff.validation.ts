@@ -40,3 +40,9 @@ export const EditUserValidation = Joi.object().keys({
   address: Joi.string().optional().allow(null),
   phone: Joi.string().optional().allow(null),
 });
+
+export const TransferValidation = Joi.object().keys({
+  pin: Joi.string().required(),
+  email: Joi.string().email().required(),
+  amount: Joi.number().required().min(100),
+});

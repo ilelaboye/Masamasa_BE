@@ -1,8 +1,14 @@
 import { UserRequest } from "@/definitions";
 import { Injectable } from "@nestjs/common";
-import { Repository } from "typeorm";
+import { Repository, SelectQueryBuilder } from "typeorm";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Transactions } from "./transactions.entity";
+import {
+  TransactionEntityType,
+  TransactionModeType,
+  Transactions,
+} from "./transactions.entity";
+import { endOfDay, getRequestQuery } from "@/core/utils";
+import { paginate } from "@/core/helpers";
 
 @Injectable()
 export class TransactionService {
@@ -12,8 +18,106 @@ export class TransactionService {
   ) {}
 
   async findAll(req: UserRequest) {
-    return await this.transactionRepository.find({
-      where: { user: { id: req.user.id } },
-    });
+    const { limit, page, skip, date_from, date_to } = getRequestQuery(req);
+    let count = 0;
+    let transactions;
+    let queryRunner: SelectQueryBuilder<Transactions> =
+      this.transactionRepository
+        .createQueryBuilder("transactions")
+        .where("user_id = :user_id", { user_id: req.user.id })
+        .orderBy("transactions.created_at", "DESC");
+
+    if (date_from) {
+      queryRunner = queryRunner.andWhere(
+        "transactions.created_at BETWEEN :startDate AND :endDate",
+        {
+          startDate: new Date(date_from).toISOString(),
+          endDate: new Date().toISOString(),
+        }
+      );
+    }
+    if (date_to) {
+      queryRunner = queryRunner.andWhere(
+        "transactions.created_at BETWEEN :startDate AND :endDate",
+        {
+          startDate: new Date(1970).toISOString(),
+          endDate: endOfDay(new Date(date_to)),
+        }
+      );
+    }
+    if (date_from && date_to) {
+      queryRunner = queryRunner.andWhere(
+        "transactions.created_at BETWEEN :startDate AND :endDate",
+        {
+          startDate: new Date(date_from).toISOString(),
+          endDate: endOfDay(new Date(date_to)),
+        }
+      );
+    }
+
+    count = await queryRunner.getCount();
+    transactions = await queryRunner.skip(skip).take(limit).getMany();
+
+    const metadata = paginate(count, page, limit);
+    return { transactions, metadata };
+  }
+
+  async getAccountBalance(req: UserRequest) {
+    const { user } = req;
+    const result = await this.transactionRepository
+      .createQueryBuilder("transaction")
+      .select(
+        `
+      SUM(
+        CASE WHEN transaction.mode = :credit THEN transaction.amount ELSE 0 END
+      ) -
+      SUM(
+        CASE WHEN transaction.mode = :debit THEN transaction.amount ELSE 0 END
+      )
+    `,
+        "balance"
+      )
+      .where("transaction.user_id = :user_id", { user_id: user.id })
+      .setParameters({
+        credit: TransactionModeType.credit,
+        debit: TransactionModeType.debit,
+      })
+      .getRawOne();
+
+    // console.log("result", result);
+    return parseFloat(result.balance) || 0;
+  }
+
+  async saveTransaction({
+    user_id,
+    amount,
+    mode,
+    entity_type,
+    entity_id,
+    network,
+    coin_amount,
+    wallet_address,
+    metadata,
+    exchange_rate_id,
+    currency,
+    dollar_amount,
+    coin_exchange_rate,
+  }) {
+    const trans = await this.transactionRepository.save({
+      user_id: user_id,
+      network: network,
+      coin_amount: coin_amount,
+      wallet_address: wallet_address,
+      mode: mode,
+      entity_type: entity_type,
+      metadata: metadata,
+      exchange_rate_id: exchange_rate_id,
+      currency: currency,
+      entity_id: entity_id,
+      dollar_amount: dollar_amount,
+      amount: amount,
+      coin_exchange_rate: coin_exchange_rate,
+    } as unknown as Transactions);
+    return trans;
   }
 }

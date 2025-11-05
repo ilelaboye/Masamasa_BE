@@ -23,3 +23,14 @@ export class ChangePinDto {
   @ApiProperty({ example: "1234" })
   old_pin: string;
 }
+
+export class TransferDto {
+  @ApiProperty({ example: "1234" })
+  pin: string;
+
+  @ApiProperty({ example: "lekan@gmail.com" })
+  email: string;
+
+  @ApiProperty({ example: 4500 })
+  amount: number;
+}

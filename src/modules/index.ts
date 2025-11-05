@@ -5,3 +5,4 @@ export * from "./wallet/wallet.module";
 export * from "./transactions/transactions.module";
 export * from "./administrator/administrator.module";
 export * from "./exchange-rates/exchange-rates.module";
+export * from "./transfers/transfers.module";

@@ -32,6 +32,7 @@ export enum TransactionEntityType {
   deposit = "deposit",
   withdrawal = "withdrawal",
   transfer = "transfer",
+  bill = "bill",
 }
 
 @Entity({ name: "transactions" })

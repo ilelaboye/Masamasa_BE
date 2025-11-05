@@ -8,6 +8,10 @@ import {
   PrimaryGeneratedColumn,
 } from "typeorm";
 
+export enum NotificationTag {
+  deposit = "deposit",
+  wallet_credit = "wallet_credit",
+}
 @Entity({ name: "notifications" })
 export class Notification {
   @PrimaryGeneratedColumn()
