@@ -6,9 +6,10 @@ import {
   TransactionEntityType,
   TransactionModeType,
   Transactions,
+  TransactionStatusType,
 } from "./transactions.entity";
 import { endOfDay, getRequestQuery } from "@/core/utils";
-import { paginate } from "@/core/helpers";
+import { generateMasamasaRef, paginate } from "@/core/helpers";
 
 @Injectable()
 export class TransactionService {
@@ -102,6 +103,7 @@ export class TransactionService {
     currency,
     dollar_amount,
     coin_exchange_rate,
+    status = TransactionStatusType.success,
   }) {
     const trans = await this.transactionRepository.save({
       user_id: user_id,
@@ -117,6 +119,8 @@ export class TransactionService {
       dollar_amount: dollar_amount,
       amount: amount,
       coin_exchange_rate: coin_exchange_rate,
+      masamasa_ref: generateMasamasaRef(),
+      status: status,
     } as unknown as Transactions);
     return trans;
   }

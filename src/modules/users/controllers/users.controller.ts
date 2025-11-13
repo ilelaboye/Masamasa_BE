@@ -22,12 +22,14 @@ import {
   CreatePinDto,
   EditUserDto,
   TransferDto,
+  WithdrawalDto,
 } from "../dto";
 import { UsersService } from "../services/users.service";
 import {
   ChangeUserPasswordValidation,
   EditUserValidation,
   TransferValidation,
+  WithdrawalValidation,
 } from "../validations";
 
 @ApiCookieAuth(_AUTH_COOKIE_NAME_)
@@ -59,6 +61,15 @@ export class UsersController {
   @UsePipes(new JoiValidationPipe(TransferValidation))
   async transfer(@Body() transferDto: TransferDto, @Req() req: UserRequest) {
     return await this.usersService.transfer(transferDto, req);
+  }
+
+  @Post("withdrawal")
+  @UsePipes(new JoiValidationPipe(WithdrawalValidation))
+  async withdrawal(
+    @Body() withdrawalDto: WithdrawalDto,
+    @Req() req: UserRequest
+  ) {
+    return await this.usersService.withdrawal(withdrawalDto, req);
   }
 
   @Get("wallet-balance")

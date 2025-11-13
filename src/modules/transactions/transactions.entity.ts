@@ -34,6 +34,11 @@ export enum TransactionEntityType {
   transfer = "transfer",
   bill = "bill",
 }
+export enum TransactionStatusType {
+  success = "success",
+  failed = "failed",
+  processing = "processing",
+}
 
 @Entity({ name: "transactions" })
 export class Transactions {
@@ -76,6 +81,15 @@ export class Transactions {
 
   @Column({ nullable: true })
   wallet_address: string;
+
+  @Column({ type: "varchar", default: TransactionStatusType.success })
+  status: TransactionStatusType;
+
+  @Column({ nullable: true })
+  masamasa_ref: string;
+
+  @Column({ nullable: true })
+  session_id: string;
 
   @Column({ type: "enum", enum: TransactionModeType })
   mode: TransactionModeType;

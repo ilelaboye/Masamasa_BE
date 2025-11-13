@@ -14,14 +14,17 @@ import {
   ChangeUserPasswordDto,
   CreatePinDto,
   TransferDto,
+  WithdrawalDto,
 } from "../dto";
 import { hashResourceSync, verifyHash } from "@/core/utils";
 import { TransactionService } from "@/modules/transactions/transactions.service";
 import {
   TransactionEntityType,
   TransactionModeType,
+  TransactionStatusType,
 } from "@/modules/transactions/transactions.entity";
 import { Transfer } from "@/modules/transfers/transfers.entity";
+import { generateMasamasaRef } from "@/core/helpers";
 
 @Injectable()
 export class UsersService extends BaseService {
@@ -209,6 +212,51 @@ export class UsersService extends BaseService {
       dollar_amount: 0,
       amount: transferDto.amount,
       coin_exchange_rate: 0,
+    });
+
+    return trans;
+  }
+
+  async withdrawal(withdrawalDto: WithdrawalDto, req: UserRequest) {
+    const user = await this.userRepository
+      .createQueryBuilder("user")
+      .addSelect("user.pin")
+      .where("user.id = :user_id", { user_id: req.user.id })
+      .getOne();
+    if (!user) {
+      throw new UnauthorizedException(
+        "Auth user not found, please login again"
+      );
+    }
+    const balance = await this.transactionService.getAccountBalance(req);
+    if (balance < withdrawalDto.amount) {
+      throw new BadRequestException("Insufficient wallet balance");
+    }
+    const verified = await verifyHash(withdrawalDto.pin, user.pin);
+    if (!verified) throw new BadRequestException("Incorrect pin");
+
+    delete user.pin;
+
+    const trans = await this.transactionService.saveTransaction({
+      user_id: user.id,
+      network: null,
+      coin_amount: 0,
+      wallet_address: null,
+      mode: TransactionModeType.debit,
+      entity_type: TransactionEntityType.withdrawal,
+      metadata: {
+        bankCode: withdrawalDto.bankCode,
+        accountNumber: withdrawalDto.accountNumber,
+        accountName: withdrawalDto.accountName,
+        bankName: withdrawalDto.bankName,
+      },
+      exchange_rate_id: null,
+      currency: "NGN",
+      entity_id: 0,
+      dollar_amount: 0,
+      amount: withdrawalDto.amount,
+      coin_exchange_rate: 0,
+      status: TransactionStatusType.processing,
     });
 
     return trans;

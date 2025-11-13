@@ -34,3 +34,23 @@ export class TransferDto {
   @ApiProperty({ example: 4500 })
   amount: number;
 }
+
+export class WithdrawalDto {
+  @ApiProperty({ example: "1234" })
+  pin: string;
+
+  @ApiProperty({ example: "8102222333" })
+  accountNumber: string;
+
+  @ApiProperty({ example: "lekan@gmail.com" })
+  accountName: string;
+
+  @ApiProperty({ example: "Access Bank" })
+  bankName: string;
+
+  @ApiProperty({ example: 4500 })
+  amount: number;
+
+  @ApiProperty({ example: "0001" })
+  bankCode: string;
+}
