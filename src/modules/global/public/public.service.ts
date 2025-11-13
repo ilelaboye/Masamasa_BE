@@ -1,12 +1,12 @@
 import { appConfig } from "@/config";
 import { MAILJETTemplates } from "@/constants";
 import { capitalizeString } from "@/core/helpers";
-import { sendMailJetWithTemplate } from "@/core/utils";
+import { axiosClient, sendMailJetWithTemplate } from "@/core/utils";
 import { User } from "@/modules/users/entities/user.entity";
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
-import { TransactionWebhookDto } from "./dto";
+import { BankAccountVerificationDto, TransactionWebhookDto } from "./dto";
 import { Wallet } from "@/modules/wallet/wallet.entity";
 import {
   TransactionEntityType,
@@ -149,6 +149,58 @@ export class PublicService {
     } catch (error) {
       console.log(error);
       throw new BadRequestException("Failed to fetch prices");
+    }
+  }
+
+  async getPaystackBanks() {
+    try {
+      const { status, data } = await axiosClient(
+        `https://api.paystack.co/bank`,
+        {
+          headers: { Authorization: `Bearer ${appConfig.PAYSTACK_SECRET_KEY}` },
+        }
+      );
+
+      if (!status)
+        throw new BadRequestException("Banks cannot be fetched at the moment");
+      console.log("banks", data);
+      return data;
+    } catch (error) {
+      throw new BadRequestException(error.message);
+    }
+  }
+
+  async verifyAccountNumber(
+    bankAccountVerificationDto: BankAccountVerificationDto
+  ) {
+    const { accountNumber, bankCode, bankName } = bankAccountVerificationDto;
+
+    try {
+      const response = await axiosClient(
+        `https://api.paystack.co/bank/resolve?account_number=${accountNumber}&bank_code=${bankCode}`,
+        {
+          headers: { Authorization: `Bearer ${appConfig.PAYSTACK_SECRET_KEY}` },
+        }
+      );
+      if (!response.status)
+        throw new BadRequestException("Account number verification failed");
+
+      // const verification = this.bankVerificationRepository.create({
+      //   type: BankVerificationType.accountNumber,
+      //   value: accountNumber,
+      //   hashed_value: hashResourceSync(bankCode),
+      //   metadata: { bank_name: bankName, ...response.data },
+      // });
+      // await this.bankVerificationRepository.save(verification);
+
+      // delete verification.hashed_value;
+
+      return {
+        message: "Account number verified",
+        data: { bank_name: bankName, ...response.data },
+      };
+    } catch (error) {
+      throw new BadRequestException(error.message);
     }
   }
 }

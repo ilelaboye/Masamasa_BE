@@ -17,9 +17,10 @@ import { Response } from "express";
 import { PublicService } from "./public.service";
 import {
   ActionOnStaffInviteValidation,
+  BankAccountVerificationValidation,
   // ConfirmUserEmailValidation,
 } from "./validations";
-import { TransactionWebhookDto } from "./dto";
+import { BankAccountVerificationDto, TransactionWebhookDto } from "./dto";
 import { ExchangeRateService } from "@/modules/exchange-rates/exchange-rates.service";
 
 @ApiTags("Public Routes")
@@ -44,6 +45,21 @@ export class PublicController {
   @Post("webhook/transaction")
   async transaction(@Body() transactionWebhookDto: TransactionWebhookDto) {
     return await this.publicService.transactionWebhook(transactionWebhookDto);
+  }
+
+  @Get("banks")
+  async banks() {
+    return await this.publicService.getPaystackBanks();
+  }
+
+  @UsePipes(new JoiValidationPipe(BankAccountVerificationValidation))
+  @Post("bank-verification/verify-account-details")
+  async verifyAccountNumber(
+    @Body() bankAccountVerificationDto: BankAccountVerificationDto
+  ) {
+    return await this.publicService.verifyAccountNumber(
+      bankAccountVerificationDto
+    );
   }
 
   @Get("prices")

@@ -43,4 +43,6 @@ export const appConfig = {
   REDIS_PASSWORD: process.env.REDIS_PASSWORD,
   REDIS_URL: process.env.REDIS_URL,
   OTP_TIMEOUT: 15,
+
+  PAYSTACK_SECRET_KEY: process.env.PAYSTACK_SECRET_KEY,
 };
