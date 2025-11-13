@@ -52,22 +52,26 @@ export class AuthService extends BaseService {
     //   where: { email: loginStaffDto.email },
     // });
 
-    const user = await this.userRepository
+    const fetch = await this.userRepository
       .createQueryBuilder("user")
       .addSelect("user.password")
+      .addSelect("user.pin")
       .where("user.email = :email", { email: loginStaffDto.email })
       .getOne();
 
-    if (!user)
+    if (!fetch)
       throw new NotAcceptableException(
         "Incorrect login details given, please try again"
       );
-    const verified = await verifyHash(loginStaffDto.password, user.password);
+    const verified = await verifyHash(loginStaffDto.password, fetch.password);
     if (!verified)
       throw new NotAcceptableException(
         "Incorrect details given, please try again"
       );
-    delete user.password;
+
+    delete fetch.password;
+    const user = { ...fetch, hasPin: fetch.pin ? true : false };
+    delete user.pin;
 
     if (!user.email_verified_at) {
       throw new BadRequestException(
