@@ -50,13 +50,16 @@ export class PublicService {
 
     const rate = await this.exchangeRateService.getActiveRate();
     var exchange = 0;
+    console.log("rate", rate);
     if (rate) {
       exchange = rate.rate;
     }
+    console.log("exchange", exchange);
     var coin_price = 0;
     var price: { status: boolean; price: any } = await this.getPrice(
-      `${token_symbol}USDT`
+      `${token_symbol}`
     );
+    console.log("price", price);
     if (price.status) {
       coin_price = price.price;
     }
@@ -100,6 +103,7 @@ export class PublicService {
       const coin = await axios.get(
         `https://api.coingecko.com/api/v3/search?query=${symbol}`
       );
+      console.log("coin", coin);
       // return coin;
       const api_symbol = coin.data.coins[0].api_symbol;
       const responses = await axios.get(
