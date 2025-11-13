@@ -46,7 +46,7 @@ export class PublicController {
 
   // move this out of here
   @UsePipes(new JoiValidationPipe(CreateWalletValidation))
-  @Post("create")
+  @Post("wallet/create")
   async create(@Body() createWalletDto: CreateWalletDto) {
     return await this.publicService.saveWalletAddress(createWalletDto);
   }
