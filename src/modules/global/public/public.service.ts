@@ -18,6 +18,7 @@ import axios from "axios";
 import { ExchangeRateService } from "@/modules/exchange-rates/exchange-rates.service";
 import { NotificationsService } from "@/modules/notifications/notifications.service";
 import { NotificationTag } from "@/modules/notifications/entities/notification.entity";
+import { CreateWalletDto } from "@/modules/wallet/wallet.dto";
 
 @Injectable()
 export class PublicService {
@@ -168,6 +169,36 @@ export class PublicService {
     } catch (error) {
       throw new BadRequestException(error.message);
     }
+  }
+
+  async saveWalletAddress(createWalletDto: CreateWalletDto) {
+    const existing = await this.walletRepository.exists({
+      where: { wallet_address: createWalletDto.wallet_address },
+    });
+    if (existing) {
+      throw new BadRequestException("Wallet address already exist");
+    }
+    const user = await this.userRepository.exists({
+      where: { id: createWalletDto.user_id },
+    });
+    if (!user) {
+      throw new BadRequestException("User not found");
+    }
+    const user_wall = await this.walletRepository.exists({
+      where: { user_id: createWalletDto.user_id },
+    });
+    if (user_wall) {
+      throw new BadRequestException(
+        "Wallet has already been created for this user"
+      );
+    }
+    const wallet = this.walletRepository.create({
+      user: { id: createWalletDto.user_id },
+      network: createWalletDto.network,
+      currency: createWalletDto.currency,
+      wallet_address: createWalletDto.wallet_address,
+    });
+    return await this.walletRepository.save(wallet);
   }
 
   async verifyAccountNumber(

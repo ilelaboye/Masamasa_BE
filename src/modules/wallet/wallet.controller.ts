@@ -24,15 +24,6 @@ import { CreateWalletDto } from "./wallet.dto";
 export class WalletController {
   constructor(private readonly walletService: WalletService) {}
 
-  @UsePipes(new JoiValidationPipe(CreateWalletValidation))
-  @Post("create")
-  async create(
-    @Body() createWalletDto: CreateWalletDto,
-    @Req() req: UserRequest
-  ) {
-    return await this.walletService.saveWalletAddress(createWalletDto, req);
-  }
-
   @Get("")
   async findAll(@Req() req: UserRequest) {
     return await this.walletService.findAll(req);

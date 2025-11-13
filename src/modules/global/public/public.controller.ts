@@ -22,6 +22,8 @@ import {
 } from "./validations";
 import { BankAccountVerificationDto, TransactionWebhookDto } from "./dto";
 import { ExchangeRateService } from "@/modules/exchange-rates/exchange-rates.service";
+import { CreateWalletValidation } from "@/modules/wallet/wallet.validation";
+import { CreateWalletDto } from "@/modules/wallet/wallet.dto";
 
 @ApiTags("Public Routes")
 @Controller()
@@ -41,6 +43,13 @@ export class PublicController {
   //     await this.publicService.confirmUserEmail(confirmUserEmailDto);
   //   successResponse(res, response);
   // }
+
+  // move this out of here
+  @UsePipes(new JoiValidationPipe(CreateWalletValidation))
+  @Post("create")
+  async create(@Body() createWalletDto: CreateWalletDto) {
+    return await this.publicService.saveWalletAddress(createWalletDto);
+  }
 
   @Post("webhook/transaction")
   async transaction(@Body() transactionWebhookDto: TransactionWebhookDto) {
