@@ -38,6 +38,7 @@ export enum TransactionStatusType {
   success = "success",
   failed = "failed",
   processing = "processing",
+  pending = "pending",
 }
 
 @Entity({ name: "transactions" })
@@ -96,6 +97,9 @@ export class Transactions {
 
   @Column("varchar")
   entity_type: TransactionEntityType;
+
+  @Column({ default: 0 })
+  retry: number;
 
   @Column("varchar")
   entity_id: number | string;

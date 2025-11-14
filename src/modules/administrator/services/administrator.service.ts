@@ -13,6 +13,7 @@ import { paginate } from "@/core/helpers";
 import {
   TransactionModeType,
   Transactions,
+  TransactionStatusType,
 } from "@/modules/transactions/transactions.entity";
 
 @Injectable()
@@ -119,10 +120,10 @@ export class AdministratorService {
       .select(
         `
       SUM(
-        CASE WHEN transaction.mode = :credit THEN transaction.amount ELSE 0 END
+        CASE WHEN transaction.mode = :credit AND transaction.status = :success THEN transaction.amount ELSE 0 END
       ) -
       SUM(
-        CASE WHEN transaction.mode = :debit THEN transaction.amount ELSE 0 END
+        CASE WHEN transaction.mode = :debit AND transaction.status = :success THEN transaction.amount ELSE 0 END
       )
     `,
         "balance"
@@ -131,6 +132,7 @@ export class AdministratorService {
       .setParameters({
         credit: TransactionModeType.credit,
         debit: TransactionModeType.debit,
+        success: TransactionStatusType.success,
       })
       .getRawOne();
 

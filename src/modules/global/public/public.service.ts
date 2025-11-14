@@ -1,7 +1,7 @@
 import { appConfig } from "@/config";
 import { MAILJETTemplates } from "@/constants";
 import { capitalizeString } from "@/core/helpers";
-import { axiosClient, sendMailJetWithTemplate } from "@/core/utils";
+import { axiosClient, getBanks, sendMailJetWithTemplate } from "@/core/utils";
 import { User } from "@/modules/users/entities/user.entity";
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -153,21 +153,22 @@ export class PublicService {
   }
 
   async getPaystackBanks() {
-    try {
-      const { status, data } = await axiosClient(
-        `https://api.paystack.co/bank`,
-        {
-          headers: { Authorization: `Bearer ${appConfig.PAYSTACK_SECRET_KEY}` },
-        }
-      );
+    return getBanks();
+    // try {
+    //   const { status, data } = await axiosClient(
+    //     `https://api.paystack.co/bank`,
+    //     {
+    //       headers: { Authorization: `Bearer ${appConfig.PAYSTACK_SECRET_KEY}` },
+    //     }
+    //   );
 
-      if (!status)
-        throw new BadRequestException("Banks cannot be fetched at the moment");
-      console.log("banks", data);
-      return data;
-    } catch (error) {
-      throw new BadRequestException(error.message);
-    }
+    //   if (!status)
+    //     throw new BadRequestException("Banks cannot be fetched at the moment");
+    //   console.log("banks", data);
+    //   return data;
+    // } catch (error) {
+    //   throw new BadRequestException(error.message);
+    // }
   }
 
   async saveWalletAddress(createWalletDto: CreateWalletDto) {

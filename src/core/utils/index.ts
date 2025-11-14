@@ -6,3 +6,4 @@ export * from "./httpErrorResponse";
 export * from "./luxon";
 export * from "./mailer";
 export * from "./response";
+export * from "./flutterwave";

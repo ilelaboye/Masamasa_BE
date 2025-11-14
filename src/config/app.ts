@@ -45,4 +45,7 @@ export const appConfig = {
   OTP_TIMEOUT: 15,
 
   PAYSTACK_SECRET_KEY: process.env.PAYSTACK_SECRET_KEY,
+
+  FLW_PUBLIC_KEY: process.env.FLW_PUBLIC_KEY,
+  FLW_SECRET_KEY: process.env.FLW_SECRET_KEY,
 };
