@@ -118,7 +118,6 @@ export class PublicService {
   }
 
   async getPrices() {
-    console.log("djdjf");
     // Binance does not work in USA
     // try {
     //   const symbols = ["BTCUSDT", "ETHUSDT", "ADAUSDT"];
@@ -172,12 +171,19 @@ export class PublicService {
   }
 
   async saveWalletAddress(createWalletDto: CreateWalletDto) {
+    console.log(
+      "called saveWalletAddress",
+      createWalletDto.user_id,
+      createWalletDto.network,
+      createWalletDto.wallet_address
+    );
     const existing = await this.walletRepository.exists({
       where: { wallet_address: createWalletDto.wallet_address },
     });
     if (existing) {
       throw new BadRequestException("Wallet address already exist");
     }
+
     const user = await this.userRepository.exists({
       where: { id: createWalletDto.user_id },
     });
@@ -198,6 +204,7 @@ export class PublicService {
       currency: createWalletDto.currency,
       wallet_address: createWalletDto.wallet_address,
     });
+    console.log("done", wallet);
     return await this.walletRepository.save(wallet);
   }
 
