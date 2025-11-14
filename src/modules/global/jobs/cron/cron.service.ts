@@ -11,8 +11,8 @@ export class CronService {
     this.cronJob.processPaymentJob();
   }
 
-  // @Interval(60000)
-  // async verifyTransactions() {
-  //   this.cronJob.verifyTransactionJob();
-  // }
+  @Interval(6000)
+  async verifyTransactions() {
+    this.cronJob.verifyTransactionJob();
+  }
 }
