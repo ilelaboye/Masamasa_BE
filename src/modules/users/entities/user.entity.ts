@@ -1,4 +1,5 @@
 import { Notification } from "@/modules/notifications/entities/notification.entity";
+import { Wallet } from "@/modules/wallet/wallet.entity";
 import {
   Column,
   CreateDateColumn,
@@ -81,4 +82,8 @@ export class User {
   @OneToMany(() => Notification, (r) => r.user)
   @JoinColumn({ name: "user_id" })
   notifications: Notification[];
+
+  @OneToMany(() => Wallet, (wallet) => wallet.user)
+  @JoinColumn({ name: "user_id" })
+  wallet: Wallet;
 }

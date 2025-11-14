@@ -80,6 +80,8 @@ export class UsersService extends BaseService {
     if (fetch) {
       const verified = await verifyHash(changePinDto.old_pin, fetch.pin);
       if (!verified) throw new BadRequestException("Incorrect old pin");
+    } else {
+      throw new BadRequestException("User not found");
     }
 
     if (!changePinDto.pin || !/^\d{4}$/.test(changePinDto.pin)) {
@@ -91,7 +93,7 @@ export class UsersService extends BaseService {
       { pin: hashResourceSync(`${changePinDto.pin}`) }
     );
 
-    return user;
+    return { ...user, hasPin: fetch.pin ? true : false };
   }
 
   async changePassword(

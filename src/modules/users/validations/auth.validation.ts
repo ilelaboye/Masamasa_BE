@@ -32,7 +32,7 @@ export const ConfirmUserEmailValidation = Joi.object().keys({
 export const WithdrawalValidation = Joi.object().keys({
   accountNumber: Joi.string().max(10).required().label("Account number"),
   bankCode: Joi.string().max(50).required().label("Bank code"),
-  accountName: Joi.string().max(10).required().label("Account name"),
+  accountName: Joi.string().required().label("Account name"),
   bankName: Joi.string().max(50).required().label("Bank name"),
   amount: Joi.number().max(100000).required().label("Amount"),
   pin: Joi.number().required().label("Pin"),

@@ -7,9 +7,12 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import { AdminAuthService } from "./services/admin-auth.service";
 import { AdminLogs } from "./entities/admin-logs.entity";
 import { User } from "../users/entities/user.entity";
+import { Transactions } from "../transactions/transactions.entity";
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Administrator, AdminLogs, User])],
+  imports: [
+    TypeOrmModule.forFeature([Administrator, AdminLogs, User, Transactions]),
+  ],
   controllers: [AdministratorController, AdminAuthController],
   providers: [AdministratorService, AdminAuthService],
 })

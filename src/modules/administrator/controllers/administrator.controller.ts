@@ -74,6 +74,45 @@ export class AdministratorController {
     return this.administratorService.getUsers(req);
   }
 
+  @ApiOperation({ summary: "Get a single user details" })
+  @Get("user/:id")
+  async getUser(@Param("id") id: string, @Req() req: AdminRequest) {
+    return await this.administratorService.getUser(+id, req);
+  }
+
+  @ApiOperation({ summary: "Get a user transactions" })
+  @Get("user/:id/transactions")
+  async getUserTransaction(@Param("id") id: string, @Req() req: AdminRequest) {
+    return await this.administratorService.getUserTransactions(+id, req);
+  }
+
+  @Get("dashboard-kpi")
+  async getDashboardKPI(@Req() req: AdminRequest) {
+    return this.administratorService.getDashboardKPI(req);
+  }
+
+  @ApiOperation({ summary: "Get a single transaction details" })
+  @Get("transaction/:id")
+  async transaction(@Param("id") id: string, @Req() req: AdminRequest) {
+    return await this.administratorService.transaction(+id, req);
+  }
+
+  @ApiOperation({ summary: "Get all transactions" })
+  @ApiQuery({
+    name: "date_from",
+    required: false,
+    description: "Filter transaction by date range",
+  })
+  @ApiQuery({
+    name: "date_to",
+    required: false,
+    description: "Filter transaction by date range",
+  })
+  @Get("transactions")
+  async transactions(@Req() req: AdminRequest) {
+    return this.administratorService.transactions(req);
+  }
+
   @Post("create-exchange-rate")
   async createExchangeRate(
     @Body() createExchangeRateDto: CreateExchangeRateDto,
