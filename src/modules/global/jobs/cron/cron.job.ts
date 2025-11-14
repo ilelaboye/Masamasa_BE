@@ -64,10 +64,11 @@ export class CronJob {
             {
               status: TransactionStatusType.pending,
               retry: trans.retry + 1,
-              session_id: resp.data.id,
+              session_id: resp.data.data.id,
               metadata: {
                 ...trans.metadata,
                 error: null,
+                initiate_resp: resp.data,
               },
             }
           );
