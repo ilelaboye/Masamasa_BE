@@ -48,4 +48,5 @@ export const appConfig = {
 
   FLW_PUBLIC_KEY: process.env.FLW_PUBLIC_KEY,
   FLW_SECRET_KEY: process.env.FLW_SECRET_KEY,
+  CLAN_TOKEN: process.env.CLAN_TOKEN,
 };

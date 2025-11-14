@@ -215,29 +215,41 @@ export class PublicService {
     const { accountNumber, bankCode, bankName } = bankAccountVerificationDto;
 
     try {
-      const response = await axiosClient(
-        `https://api.paystack.co/bank/resolve?account_number=${accountNumber}&bank_code=${bankCode}`,
-        {
-          headers: { Authorization: `Bearer ${appConfig.PAYSTACK_SECRET_KEY}` },
-        }
-      );
-      if (!response.status)
-        throw new BadRequestException("Account number verification failed");
+      // const response = await axiosClient(
+      //   `https://api.paystack.co/bank/resolve?account_number=${accountNumber}&bank_code=${bankCode}`,
+      //   {
+      //     headers: { Authorization: `Bearer ${appConfig.PAYSTACK_SECRET_KEY}` },
+      //   }
+      // );
+      // if (!response.status)
+      //   throw new BadRequestException("Account number verification failed");
 
-      // const verification = this.bankVerificationRepository.create({
-      //   type: BankVerificationType.accountNumber,
-      //   value: accountNumber,
-      //   hashed_value: hashResourceSync(bankCode),
-      //   metadata: { bank_name: bankName, ...response.data },
-      // });
-      // await this.bankVerificationRepository.save(verification);
+      // return {
+      //   message: "Account number verified",
+      //   data: { bank_name: bankName, ...response.data },
+      // };
+      try {
+        const response = await axiosClient(
+          `https://mobile.creditclan.com/webapi/v1/account/resolve`,
+          {
+            method: "POST",
+            body: {
+              bank_code: bankCode,
+              account_number: accountNumber,
+            },
+            headers: { "x-api-key": `${appConfig.CLAN_TOKEN}` },
+          }
+        );
+        if (!response.status)
+          throw new BadRequestException("Account number verification failed");
 
-      // delete verification.hashed_value;
-
-      return {
-        message: "Account number verified",
-        data: { bank_name: bankName, ...response.data },
-      };
+        return {
+          message: "Account number verified",
+          data: { bank_name: bankName, ...response.data },
+        };
+      } catch (error) {
+        throw new BadRequestException(error.message);
+      }
     } catch (error) {
       throw new BadRequestException(error.message);
     }
