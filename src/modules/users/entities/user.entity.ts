@@ -18,6 +18,13 @@ export enum Status {
   archived = "archived",
 }
 
+export enum KycStatus {
+  success = "success",
+  pending = "pending",
+  failed = "failed",
+  none = "none",
+}
+
 export enum TokenType {
   email_verification = "email_verification",
   forgot_password = "forgot_password",
@@ -39,6 +46,24 @@ export class User {
     default: Status.active,
   })
   status: Status;
+
+  @Column({
+    type: "varchar",
+    default: KycStatus.none,
+  })
+  kyc_status: KycStatus;
+
+  @Column({ nullable: true })
+  kyc_image?: string;
+
+  @Column({ nullable: true })
+  kyc_error?: string;
+
+  @Column({ nullable: true })
+  profile_image?: string;
+
+  @Column({ nullable: true })
+  kyc_type?: string;
 
   @Column({ unique: true })
   email: string;

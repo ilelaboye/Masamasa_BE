@@ -41,6 +41,11 @@ export const EditUserValidation = Joi.object().keys({
   phone: Joi.string().optional().allow(null),
 });
 
+export const UploadImageValidation = Joi.object().keys({
+  type: Joi.string().required(),
+  image: Joi.string().required().uri(),
+});
+
 export const TransferValidation = Joi.object().keys({
   pin: Joi.string().required(),
   email: Joi.string().email().required(),

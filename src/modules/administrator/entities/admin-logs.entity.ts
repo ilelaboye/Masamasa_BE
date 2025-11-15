@@ -12,6 +12,7 @@ import { User } from "@/modules/users/entities/user.entity";
 
 export enum AdminLogEntities {
   EXCHANGE_RATE = "EXCHANGE_RATE",
+  KYC_STATUS = "KYC_STATUS",
 }
 
 @Entity({ name: "admin_logs" })

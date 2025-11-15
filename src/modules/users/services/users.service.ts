@@ -8,12 +8,13 @@ import {
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { BaseService } from "../../base.service";
-import { User } from "../entities/user.entity";
+import { KycStatus, User } from "../entities/user.entity";
 import {
   ChangePinDto,
   ChangeUserPasswordDto,
   CreatePinDto,
   TransferDto,
+  UploadImageDto,
   WithdrawalDto,
 } from "../dto";
 import { hashResourceSync, verifyHash } from "@/core/utils";
@@ -38,7 +39,15 @@ export class UsersService extends BaseService {
     super();
   }
   async getAuthStaff(req: UserRequest) {
-    return req.user;
+    const fetch = await this.userRepository
+      .createQueryBuilder("user")
+      .addSelect("user.pin")
+      .where("user.id = :id", { id: req.user.id })
+      .getOne();
+    if (!fetch) throw new UnauthorizedException("User not found, please login");
+    const user = { ...fetch, hasPin: fetch.pin ? true : false };
+    delete user.pin;
+    return user;
   }
 
   async setPin(createPinDto: CreatePinDto, req: UserRequest) {
@@ -128,6 +137,39 @@ export class UsersService extends BaseService {
       { password: changeUserPasswordDto.new_password }
     );
     return saved;
+  }
+
+  async uploadImage(uploadImageDto: UploadImageDto, req: UserRequest) {
+    const user = await this.userRepository
+      .createQueryBuilder("user")
+      .where("user.id = :id", { id: req.user.id })
+      .getOne();
+    if (!user) throw new BadRequestException("User not found");
+
+    if (uploadImageDto.type == "kyc") {
+      if (user.kyc_status == KycStatus.pending) {
+        throw new BadRequestException(
+          "We are currently verifying your document, you can't upload another document during this period"
+        );
+      }
+      if (user.kyc_status == KycStatus.success) {
+        throw new BadRequestException("KYC has already been verified");
+      }
+
+      await this.userRepository.update(
+        { id: user.id },
+        { kyc_image: uploadImageDto.image, kyc_status: KycStatus.pending }
+      );
+      return { message: "KYC document uploaded successfully" };
+    } else if (uploadImageDto.type == "profile_image") {
+      await this.userRepository.update(
+        { id: user.id },
+        { profile_image: uploadImageDto.image }
+      );
+      return { message: "Profile image uploaded successfully" };
+    } else {
+      throw new BadRequestException("Invalid document type");
+    }
   }
 
   async walletBalance(req: UserRequest) {

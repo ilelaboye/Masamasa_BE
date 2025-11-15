@@ -24,7 +24,7 @@ import { AdminAuthGuard } from "@/guards/admin-auth.guard";
 import { AdminRequest, SystemCache } from "@/definitions";
 import { CacheService } from "@/modules/global/cache-container/cache-container.service";
 import { ExchangeRateService } from "@/modules/exchange-rates/exchange-rates.service";
-import { CreateExchangeRateDto } from "../dto/admin.dto";
+import { CreateExchangeRateDto, DeclineKycDto } from "../dto/admin.dto";
 
 @ApiTags("Admin")
 @ApiCookieAuth(_ADMIN_AUTH_COOKIE_NAME_)
@@ -86,9 +86,31 @@ export class AdministratorController {
     return await this.administratorService.getUserTransactions(+id, req);
   }
 
+  @ApiOperation({ summary: "Get dashboard KPI" })
   @Get("dashboard-kpi")
   async getDashboardKPI(@Req() req: AdminRequest) {
     return this.administratorService.getDashboardKPI(req);
+  }
+
+  @ApiOperation({ summary: "Get users with pending kyc" })
+  @Get("get-pending-kyc")
+  async pendingKYC(@Req() req: AdminRequest) {
+    return await this.administratorService.getPendingKYC(req);
+  }
+
+  @ApiOperation({ summary: "Verify user kyc" })
+  @Get("verify-kyc/:id")
+  async verifyKyc(@Param("id") id: string, @Req() req: AdminRequest) {
+    return this.administratorService.verifyKyc(+id, req);
+  }
+
+  @ApiOperation({ summary: "Decline user kyc" })
+  @Post("decline-kyc")
+  async declineKyc(
+    @Body() declineKycDto: DeclineKycDto,
+    @Req() req: AdminRequest
+  ) {
+    return this.administratorService.declineKyc(declineKycDto, req);
   }
 
   @ApiOperation({ summary: "Get a single transaction details" })

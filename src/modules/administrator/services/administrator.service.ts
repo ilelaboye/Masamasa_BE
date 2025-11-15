@@ -5,9 +5,9 @@ import { Brackets, Repository, SelectQueryBuilder } from "typeorm";
 import { InjectRepository } from "@nestjs/typeorm";
 import { AdminLogEntities, AdminLogs } from "../entities/admin-logs.entity";
 import { AdminRequest } from "@/definitions";
-import { CreateExchangeRateDto } from "../dto/admin.dto";
+import { CreateExchangeRateDto, DeclineKycDto } from "../dto/admin.dto";
 import { ExchangeRateService } from "@/modules/exchange-rates/exchange-rates.service";
-import { Status, User } from "@/modules/users/entities/user.entity";
+import { KycStatus, Status, User } from "@/modules/users/entities/user.entity";
 import { endOfDay, getRequestQuery } from "@/core/utils";
 import { paginate } from "@/core/helpers";
 import {
@@ -138,6 +138,65 @@ export class AdministratorService {
 
     // console.log("result", result);
     return parseFloat(result.balance) || 0;
+  }
+
+  async getPendingKYC(req: AdminRequest) {
+    const { limit, page, skip } = getRequestQuery(req);
+    let queryRunner = this.userRepository
+      .createQueryBuilder("users")
+      .where("user.kyc_status = :status", { status: KycStatus.pending });
+
+    var count = await queryRunner.getCount();
+    var kyc = await queryRunner.skip(skip).take(limit).getMany();
+
+    const metadata = paginate(count, page, limit);
+    return { kyc, metadata };
+  }
+
+  async verifyKyc(user_id: number, req: AdminRequest) {
+    const user = await this.userRepository
+      .createQueryBuilder("user")
+      .where("user.id = :id", { id: user_id })
+      .getOne();
+    if (!user) throw new BadRequestException("User not found");
+
+    if (!user.kyc_image) {
+      throw new BadRequestException("User has not upload kyc image");
+    }
+    if (user.kyc_status != KycStatus.pending) {
+      throw new BadRequestException("This user does not have a pending kyc");
+    }
+
+    const update = await this.userRepository.update(
+      { id: user_id },
+      { kyc_status: KycStatus.success }
+    );
+
+    var msg = `${req.admin.first_name} ${req.admin.last_name} verified ${user.first_name} ${user.last_name} kyc`;
+    this.createAdminLog(null, req.admin, AdminLogEntities.KYC_STATUS, msg);
+
+    return update;
+  }
+
+  async declineKyc(declineKycDto: DeclineKycDto, req: AdminRequest) {
+    if (!declineKycDto.reason || declineKycDto.reason.length < 2) {
+      throw new BadRequestException("Decline reason is required");
+    }
+    const user = await this.userRepository
+      .createQueryBuilder("user")
+      .where("user.id = :id", { id: declineKycDto.user })
+      .getOne();
+    if (!user) throw new BadRequestException("User not found");
+
+    const update = await this.userRepository.update(
+      { id: user.id },
+      { kyc_status: KycStatus.failed, kyc_error: declineKycDto.reason }
+    );
+
+    var msg = `${req.admin.first_name} ${req.admin.last_name} declined ${user.first_name} ${user.last_name} kyc because: ${declineKycDto.reason}`;
+    this.createAdminLog(null, req.admin, AdminLogEntities.KYC_STATUS, msg);
+
+    return update;
   }
 
   async transaction(id: number, req: AdminRequest) {

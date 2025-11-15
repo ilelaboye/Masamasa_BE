@@ -5,3 +5,11 @@ export class CreateExchangeRateDto {
   @ApiProperty({ example: 1400 })
   rate: number;
 }
+
+export class DeclineKycDto {
+  @ApiProperty({ example: 2 })
+  user: number;
+
+  @ApiProperty({ example: "Image not clear" })
+  reason: string;
+}
