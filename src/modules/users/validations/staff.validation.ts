@@ -19,6 +19,17 @@ export const CreateAccountValidation = Joi.object().keys({
     .label("Confirm password"),
 });
 
+export const UpdateAccountValidation = Joi.object().keys({
+  first_name: Joi.string().required().label("First name"),
+  last_name: Joi.string().required().label("Last name"),
+  email: Joi.optional().allow(null).label("Email"),
+  phone: Joi.string().max(50).required().label("Phone"),
+  country: Joi.string().optional().allow(null).label("Country"),
+  address: Joi.string().optional().allow(null).label("Address"),
+  city: Joi.string().optional().allow(null).label("City"),
+  state: Joi.string().optional().allow(null).label("State"),
+});
+
 export const ChangeUserPasswordValidation = Joi.object().keys({
   old_password: Joi.string().required().label("Old password"),
   new_password: Joi.string().min(6).max(50).required().messages({

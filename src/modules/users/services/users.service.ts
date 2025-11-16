@@ -14,6 +14,7 @@ import {
   ChangeUserPasswordDto,
   CreatePinDto,
   TransferDto,
+  UpdateAccountDto,
   UploadImageDto,
   WithdrawalDto,
 } from "../dto";
@@ -48,6 +49,21 @@ export class UsersService extends BaseService {
     const user = { ...fetch, hasPin: fetch.pin ? true : false };
     delete user.pin;
     return user;
+  }
+
+  async updateProfile(updateAccountDto: UpdateAccountDto, req: UserRequest) {
+    const update = await this.userRepository.update(
+      { id: req.user.id },
+      {
+        phone: updateAccountDto.phone,
+        address: updateAccountDto.address,
+        first_name: updateAccountDto.first_name,
+        last_name: updateAccountDto.last_name,
+        city: updateAccountDto.city,
+        state: updateAccountDto.state,
+        country: updateAccountDto.country,
+      }
+    );
   }
 
   async setPin(createPinDto: CreatePinDto, req: UserRequest) {

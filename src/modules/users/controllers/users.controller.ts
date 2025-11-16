@@ -22,6 +22,7 @@ import {
   CreatePinDto,
   EditUserDto,
   TransferDto,
+  UpdateAccountDto,
   UploadImageDto,
   WithdrawalDto,
 } from "../dto";
@@ -30,6 +31,7 @@ import {
   ChangeUserPasswordValidation,
   EditUserValidation,
   TransferValidation,
+  UpdateAccountValidation,
   UploadImageValidation,
   WithdrawalValidation,
 } from "../validations";
@@ -95,6 +97,15 @@ export class UsersController {
     @Req() req: UserRequest
   ) {
     return await this.usersService.uploadImage(uploadImageDto, req);
+  }
+
+  @UsePipes(new JoiValidationPipe(UpdateAccountValidation))
+  @Post("update-profile")
+  async updateProfile(
+    @Body() updateAccountDto: UpdateAccountDto,
+    @Req() req: UserRequest
+  ) {
+    return await this.usersService.updateProfile(updateAccountDto, req);
   }
 
   // @Post("email-verification")

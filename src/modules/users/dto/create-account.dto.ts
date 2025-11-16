@@ -24,6 +24,29 @@ export class CreateAccountDto {
   country: string;
 }
 
+export class UpdateAccountDto {
+  @ApiProperty({ example: "janet" })
+  first_name: string;
+
+  @ApiProperty({ example: "christmas" })
+  last_name: string;
+
+  @ApiProperty({ example: "+2349094749994" })
+  phone: string;
+
+  @ApiProperty({ example: "Omole phase 1" })
+  address: string;
+
+  @ApiProperty({ example: "Lagos" })
+  state: string;
+
+  @ApiProperty({ example: "Ikeja" })
+  city: string;
+
+  @ApiProperty({ example: "Nigeria" })
+  country: string;
+}
+
 export class VerifyTokenDto {
   @ApiProperty({ example: "ilelaboyealekan@gmail.com" })
   email: string;
