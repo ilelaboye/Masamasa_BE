@@ -88,6 +88,13 @@ export class AdministratorService {
       .setParameters({ active: Status.active, pending: Status.pending })
       .getRawOne();
 
+    const kyc = await this.userRepository
+      .createQueryBuilder("users")
+      .where("users.kyc_status = :kyc_status", {
+        kyc_status: KycStatus.pending,
+      })
+      .getCount();
+
     const trans = await this.transactionsRepository
       .createQueryBuilder("trans")
       .select("SUM(trans.amount)", "totalAmount")
@@ -99,6 +106,7 @@ export class AdministratorService {
     return {
       transactions: totalAmount,
       ...result,
+      pending_kyc: kyc,
     };
   }
 
@@ -144,7 +152,7 @@ export class AdministratorService {
     const { limit, page, skip } = getRequestQuery(req);
     let queryRunner = this.userRepository
       .createQueryBuilder("users")
-      .where("user.kyc_status = :status", { status: KycStatus.pending });
+      .where("users.kyc_status = :status", { status: KycStatus.pending });
 
     var count = await queryRunner.getCount();
     var kyc = await queryRunner.skip(skip).take(limit).getMany();
