@@ -15,27 +15,37 @@ export class AdminAuthService {
     private readonly jwtService: JwtService
   ) {}
   async login(adminLoginDto: AdminLoginDto, req: AdminRequest) {
-    const { admin } = req;
+    // const { admin } = req;
+    const admin = await this.adminRepository
+      .createQueryBuilder("admin")
+      .addSelect("admin.password")
+      .where("admin.email = :email", { email: adminLoginDto.email })
+      .getOne();
+
+    if (!admin)
+      throw new NotAcceptableException(
+        "Incorrect email & password, please try again"
+      );
     const verified = await verifyHash(adminLoginDto.password, admin.password);
     if (!verified)
       throw new NotAcceptableException(
         "Incorrect details given, please try again"
       );
 
-    let adminData = getAdminCookieData(admin.email, req);
+    // let adminData = getAdminCookieData(admin.email, req);
 
-    if (!adminData) {
-      adminData = await this.adminRepository.findOne({
-        where: { email: admin.email, status: AdminStatus.active },
-      });
-      if (!adminData)
-        throw new NotAcceptableException(
-          "No admin data is currently associated with your account"
-        );
-    }
+    // if (!adminData) {
+    //   adminData = await this.adminRepository.findOne({
+    //     where: { email: admin.email, status: AdminStatus.active },
+    //   });
+    //   if (!adminData)
+    //     throw new NotAcceptableException(
+    //       "No admin data is currently associated with your account"
+    //     );
+    // }
     delete admin.password;
     const token = this.jwtService.sign({ ...admin });
 
-    return { user: adminData, token };
+    return { user: admin, token };
   }
 }
