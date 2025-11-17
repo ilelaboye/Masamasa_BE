@@ -25,6 +25,7 @@ import { AdminRequest, SystemCache } from "@/definitions";
 import { CacheService } from "@/modules/global/cache-container/cache-container.service";
 import { ExchangeRateService } from "@/modules/exchange-rates/exchange-rates.service";
 import { CreateExchangeRateDto, DeclineKycDto } from "../dto/admin.dto";
+import { PublicService } from "@/modules/global/public/public.service";
 
 @ApiTags("Admin")
 @ApiCookieAuth(_ADMIN_AUTH_COOKIE_NAME_)
@@ -33,41 +34,9 @@ import { CreateExchangeRateDto, DeclineKycDto } from "../dto/admin.dto";
 export class AdministratorController {
   constructor(
     private readonly administratorService: AdministratorService,
-    private readonly cacheService: CacheService
+    private readonly cacheService: CacheService,
+    private readonly exchangeRateService: ExchangeRateService
   ) {}
-
-  // @ApiOperation({ summary: "Get Companies" })
-  // @ApiQuery({
-  //   name: "search",
-  //   required: false,
-  //   description: "Search by company name",
-  // })
-  // @ApiQuery({
-  //   name: "limit",
-  //   required: false,
-  //   description: "How many data per page? Maximum of 100 data",
-  //   type: "number",
-  // })
-  // @ApiQuery({
-  //   name: "page",
-  //   required: false,
-  //   description: "Page of payment request data",
-  //   type: "number",
-  // })
-  // @ApiQuery({
-  //   name: "date_from",
-  //   required: false,
-  //   description: "Filter by date created",
-  // })
-  // @ApiQuery({
-  //   name: "date_to",
-  //   required: false,
-  //   description: "Filter by date created",
-  // })
-  // @Get("companies")
-  // async companies(@Req() req: AdminRequest) {
-  //   return await this.adminCompanyService.getCompanies(req);
-  // }
 
   @Get("users")
   async users(@Req() req: AdminRequest) {
@@ -102,6 +71,12 @@ export class AdministratorController {
   @Get("verify-kyc/:id")
   async verifyKyc(@Param("id") id: string, @Req() req: AdminRequest) {
     return this.administratorService.verifyKyc(+id, req);
+  }
+
+  @ApiOperation({ summary: "Verify user kyc" })
+  @Get("exchange-rates")
+  async getExchangeRates(@Req() req: AdminRequest) {
+    return this.exchangeRateService.findAll();
   }
 
   @ApiOperation({ summary: "Decline user kyc" })
