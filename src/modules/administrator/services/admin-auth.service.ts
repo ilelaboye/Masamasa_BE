@@ -22,6 +22,8 @@ export class AdminAuthService {
       .where("admin.email = :email", { email: adminLoginDto.email })
       .getOne();
 
+    console.log("admin", admin);
+
     if (!admin)
       throw new NotAcceptableException(
         "Incorrect email & password, please try again"
