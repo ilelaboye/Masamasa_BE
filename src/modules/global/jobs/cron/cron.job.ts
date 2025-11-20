@@ -1,13 +1,17 @@
 import { transfer, verifyTransfer } from "@/core/utils";
 import { AdministratorService } from "@/modules/administrator/services/administrator.service";
 import {
+  PurchaseRequest,
+  PurchaseStatus,
+} from "@/modules/purchases/entities/purchases.entity";
+import { ProviderService } from "@/modules/purchases/services/providers.service";
+import {
   TransactionEntityType,
   Transactions,
   TransactionStatusType,
 } from "@/modules/transactions/transactions.entity";
 import { Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { retry } from "rxjs";
 import { Repository } from "typeorm";
 
 @Injectable()
@@ -15,7 +19,10 @@ export class CronJob {
   constructor(
     @InjectRepository(Transactions)
     private readonly transactionsRepository: Repository<Transactions>,
-    private readonly adminService: AdministratorService
+    @InjectRepository(PurchaseRequest)
+    private readonly purchaseRequestRepository: Repository<PurchaseRequest>,
+    private readonly adminService: AdministratorService,
+    private readonly providerService: ProviderService
   ) {}
 
   // Handles all notification jobs
@@ -135,6 +142,59 @@ export class CronJob {
         }
       } catch (e) {
         console.log("eerrr eee", e);
+      }
+    }
+  }
+
+  async verifyProcessingVtpassTransactions() {
+    Logger.log("START VERIFYING VTPASS TRANSACTION");
+    const purchases = await this.purchaseRequestRepository
+      .createQueryBuilder("purchase")
+      .where("purchase.status = :status", {
+        status: PurchaseStatus.processing,
+      })
+      .getMany();
+
+    for (const purchase of purchases) {
+      // Logic to verify VTPass transaction
+      const verify = await this.providerService.verifyVtpassTransaction(
+        purchase.masamasa_ref
+      );
+      console.log("verify vtpass", verify);
+      if (verify.status) {
+        if (
+          verify.body.content &&
+          verify.body.content.transactions &&
+          verify.body.content.transactions.status == "delivered"
+        ) {
+          this.purchaseRequestRepository.update(
+            { id: purchase.id },
+            {
+              status: PurchaseStatus.processed,
+              commission: verify.body.content.transactions.commission,
+              other_ref: verify.body.content.transactions.transactionId,
+              metadata: {
+                ...purchase.metadata,
+                provider_response: verify.body,
+              },
+            }
+          );
+        } else if (
+          verify.body.content &&
+          verify.body.content.transactions &&
+          verify.body.content.transactions.status == "pending"
+        ) {
+          this.purchaseRequestRepository.update(
+            { id: purchase.id },
+            {
+              metadata: {
+                error: "Transaction processing",
+                ...purchase.metadata,
+                provider_response: verify.body,
+              },
+            }
+          );
+        }
       }
     }
   }

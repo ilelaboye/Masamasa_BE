@@ -22,6 +22,9 @@ export class CreateAccountDto {
 
   @ApiProperty({ example: "Nigeria" })
   country: string;
+
+  @ApiProperty({ example: "eiieieieieiieieie" })
+  google_id?: string;
 }
 
 export class UpdateAccountDto {

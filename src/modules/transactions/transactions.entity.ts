@@ -32,7 +32,10 @@ export enum TransactionEntityType {
   deposit = "deposit",
   withdrawal = "withdrawal",
   transfer = "transfer",
-  bill = "bill",
+  airtime = "airtime",
+  electricity_bill = "electricity_bill",
+  tv_subscription = "tv_subscription",
+  data = "data",
 }
 export enum TransactionStatusType {
   success = "success",
@@ -69,19 +72,19 @@ export class Transactions {
   exchange_rate: ExchangeRate;
 
   @Column({ nullable: true })
-  exchange_rate_id: number;
+  exchange_rate_id: number | null;
 
   @Column("double precision", { default: 0 })
   coin_amount: number;
 
   @Column({ nullable: true })
-  network: string;
+  network?: string;
 
   @Column({ nullable: true })
   currency: string;
 
   @Column({ nullable: true })
-  wallet_address: string;
+  wallet_address?: string;
 
   @Column({ type: "varchar", default: TransactionStatusType.success })
   status: TransactionStatusType;

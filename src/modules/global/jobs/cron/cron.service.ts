@@ -15,4 +15,9 @@ export class CronService {
   async verifyTransactions() {
     this.cronJob.verifyTransactionJob();
   }
+
+  @Interval(6000)
+  async verifyProcessingVtpassTransactions() {
+    this.cronJob.verifyProcessingVtpassTransactions();
+  }
 }

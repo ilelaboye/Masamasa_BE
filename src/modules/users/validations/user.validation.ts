@@ -4,6 +4,7 @@ export const CreateAccountValidation = Joi.object().keys({
   first_name: Joi.string().required().label("First name"),
   last_name: Joi.string().required().label("Last name"),
   email: Joi.string().email().required().label("Email"),
+  google_id: Joi.string().optional().allow(null, ""),
   phone: Joi.string().max(50).required().label("Phone"),
   country: Joi.string().required().label("Country"),
   password: Joi.string().min(6).max(50).required().messages({

@@ -72,6 +72,9 @@ export class User {
   password?: string;
 
   @Column({ select: false, nullable: true })
+  google_id?: string;
+
+  @Column({ select: false, nullable: true })
   pin?: string;
 
   @Column({ nullable: true })

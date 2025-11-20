@@ -10,5 +10,5 @@ export const generateAlphaNumericString = (length = 20): string => {
 };
 
 export const generateMasamasaRef = (): string => {
-  return `MSA${generateAlphaNumericString(10)}00${Date.now()}`;
+  return `MASA${generateAlphaNumericString(10)}00${Date.now()}`;
 };

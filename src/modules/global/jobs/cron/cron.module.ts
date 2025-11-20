@@ -8,6 +8,8 @@ import { AdministratorService } from "@/modules/administrator/services/administr
 import { Administrator } from "@/modules/administrator/entities/administrator.entity";
 import { User } from "@/modules/users/entities/user.entity";
 import { AdminLogs } from "@/modules/administrator/entities/admin-logs.entity";
+import { PurchaseRequest } from "@/modules/purchases/entities/purchases.entity";
+import { ProviderService } from "@/modules/purchases/services/providers.service";
 
 @Module({
   imports: [
@@ -17,8 +19,9 @@ import { AdminLogs } from "@/modules/administrator/entities/admin-logs.entity";
       Administrator,
       User,
       AdminLogs,
+      PurchaseRequest,
     ]),
   ],
-  providers: [CronService, CronJob, AdministratorService],
+  providers: [CronService, CronJob, AdministratorService, ProviderService],
 })
 export class CronModule {}
