@@ -26,6 +26,8 @@ import { CacheService } from "@/modules/global/cache-container/cache-container.s
 import { ExchangeRateService } from "@/modules/exchange-rates/exchange-rates.service";
 import { CreateExchangeRateDto, DeclineKycDto } from "../dto/admin.dto";
 import { PublicService } from "@/modules/global/public/public.service";
+import { JoiValidationPipe } from "@/pipes/joi.validation.pipe";
+import { CreateUpdateExchangeRateValidation } from "../validations/admin.validation";
 
 @ApiTags("Admin")
 @ApiCookieAuth(_ADMIN_AUTH_COOKIE_NAME_)
@@ -111,6 +113,7 @@ export class AdministratorController {
   }
 
   @Post("create-exchange-rate")
+  @UsePipes(new JoiValidationPipe(CreateUpdateExchangeRateValidation))
   async createExchangeRate(
     @Body() createExchangeRateDto: CreateExchangeRateDto,
     @Req() req: AdminRequest

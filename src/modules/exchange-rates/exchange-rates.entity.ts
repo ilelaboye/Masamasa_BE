@@ -15,6 +15,18 @@ export enum ExchangeRateStatus {
   disabled = "disabled",
 }
 
+export enum CurrencyCoin {
+  usdt = "usdt",
+  eth = "eth",
+  usdc = "usdc",
+  btc = "btc",
+  sol = "sol",
+  bnb = "bnb",
+  doge = "doge",
+  xrp = "xrp",
+  ada = "ada",
+}
+
 @Entity({ name: "exchange_rates" })
 export class ExchangeRate {
   @PrimaryGeneratedColumn()
@@ -26,6 +38,9 @@ export class ExchangeRate {
 
   @Column()
   admin_id: number;
+
+  @Column("varchar", { default: CurrencyCoin.btc })
+  currency: CurrencyCoin;
 
   @Column("double precision", { default: 1 })
   rate: number;

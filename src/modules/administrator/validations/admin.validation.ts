@@ -1,6 +1,9 @@
+import { CurrencyCoin } from "@/modules/exchange-rates/exchange-rates.entity";
 import * as Joi from "joi";
 
-// export const CompanyPreferenceVisibilityValidation = Joi.object().keys({
-//   company_id: Joi.required(),
-//   preference_id: Joi.required(),
-// });
+export const CreateUpdateExchangeRateValidation = Joi.object().keys({
+  rate: Joi.number().required(),
+  currency: Joi.string()
+    .valid(...Object.values(CurrencyCoin))
+    .required(),
+});

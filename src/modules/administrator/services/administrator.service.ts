@@ -68,8 +68,13 @@ export class AdministratorService {
     ) {
       throw new BadRequestException("Rate is required");
     }
+
+    if (!createExchangeRateDto.currency) {
+      throw new BadRequestException("Currency is required");
+    }
     const save = await this.exchangeRateService.saveNewRate(
       req.admin.id,
+      createExchangeRateDto.currency,
       createExchangeRateDto.rate
     );
 

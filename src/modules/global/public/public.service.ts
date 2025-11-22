@@ -49,7 +49,9 @@ export class PublicService {
     });
     if (!wallet) throw new BadRequestException("Wallet address not found");
 
-    const rate = await this.exchangeRateService.getActiveRate();
+    const rate = await this.exchangeRateService.getCurrencyActiveRate(
+      token_symbol.toLowerCase()
+    );
     var exchange = 0;
     console.log("rate", rate);
     if (rate) {
