@@ -27,6 +27,8 @@ import {
 } from "@/modules/transactions/transactions.entity";
 import { Transfer } from "@/modules/transfers/transfers.entity";
 import { generateMasamasaRef } from "@/core/helpers";
+import { BVNVerificationDto } from "@/modules/global/bank-verification/dto/bvn-verification.dto";
+import { BankVerificationService } from "@/modules/global/bank-verification/bank-verification.service";
 
 @Injectable()
 export class UsersService extends BaseService {
@@ -35,7 +37,8 @@ export class UsersService extends BaseService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(Transfer)
     private readonly transferRepository: Repository<Transfer>,
-    private readonly transactionService: TransactionService
+    private readonly transactionService: TransactionService,
+    private readonly bankVerificationService: BankVerificationService
   ) {
     super();
   }
@@ -320,5 +323,48 @@ export class UsersService extends BaseService {
     });
 
     return trans;
+  }
+
+  async userKyc(bVNVerificationDto: BVNVerificationDto, req: UserRequest) {
+    const { first_name, last_name, id } = req.user;
+    const { bvn, dob, gender } = bVNVerificationDto;
+
+    const user = await this.userRepository.findOne({
+      where: { id: req.user.id },
+    });
+    if (user && user.kyc_status == KycStatus.success)
+      return { message: "You are already verified." };
+
+    try {
+      const { data, success } =
+        await this.bankVerificationService.bvnVerification(bvn, {
+          first_name,
+          last_name,
+          dob,
+          gender,
+        });
+
+      if (!success) {
+        if (!data)
+          throw new BadRequestException(
+            "BVN verification can not be processed at the moment, please try again later"
+          );
+        throw new BadRequestException(
+          "BVN information does not match the user details provided"
+        );
+      }
+
+      const save = await this.userRepository.update(
+        { id: req.user.id },
+        { kyc_status: KycStatus.success }
+      );
+      console.log("save", save);
+      return {
+        message: "KYC verification successful",
+        data,
+      };
+    } catch (error) {
+      throw new BadRequestException(error.message);
+    }
   }
 }

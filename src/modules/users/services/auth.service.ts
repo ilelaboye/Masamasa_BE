@@ -52,25 +52,71 @@ export class AuthService extends BaseService {
     //   where: { email: loginStaffDto.email },
     // });
 
+    if (loginStaffDto.google_id) {
+      const fetch = await this.userRepository
+        .createQueryBuilder("user")
+        .addSelect("user.password")
+        .addSelect("user.pin")
+        .where("user.email = :email", { email: loginStaffDto.email })
+        .andWhere("user.google_id = :google_id", {
+          google_id: loginStaffDto.google_id,
+        })
+        .getOne();
+    }
+
     const fetch = await this.userRepository
       .createQueryBuilder("user")
       .addSelect("user.password")
       .addSelect("user.pin")
+      .addSelect("user.google_id")
       .where("user.email = :email", { email: loginStaffDto.email })
       .getOne();
 
-    if (!fetch)
+    if (!fetch) {
       throw new NotAcceptableException(
-        "Incorrect login details given, please try again"
+        "User with this login details was not found, please try again"
       );
-    const verified = await verifyHash(loginStaffDto.password, fetch.password);
-    if (!verified)
-      throw new NotAcceptableException(
-        "Incorrect details given, please try again"
+    }
+    // if(loginStaffDto.google_id ){
+    // if user does not have google id but is trying to login with google id, save the google ID
+    if (!fetch.google_id && loginStaffDto.google_id) {
+      await this.userRepository.update(
+        { id: fetch.id },
+        { google_id: loginStaffDto.google_id }
       );
+    } else if (fetch.google_id && loginStaffDto.google_id) {
+      if (fetch.google_id !== loginStaffDto.google_id) {
+        throw new NotAcceptableException(
+          "Google mail does not match our records, please try again"
+        );
+      }
+    } else {
+      const verified = await verifyHash(loginStaffDto.password, fetch.password);
+      if (!verified)
+        throw new NotAcceptableException(
+          "Incorrect details given, please try again"
+        );
+    }
 
     delete fetch.password;
-    const user = { ...fetch, hasPin: fetch.pin ? true : false };
+    var device_id = fetch?.device_id;
+    var notification_token = fetch?.notification_token;
+
+    if (loginStaffDto.device_id) device_id = loginStaffDto.device_id;
+    if (loginStaffDto.notification_token)
+      notification_token = loginStaffDto.notification_token;
+
+    await this.userRepository.update(
+      { id: fetch.id },
+      { device_id, notification_token }
+    );
+
+    const user = {
+      ...fetch,
+      device_id,
+      notification_token,
+      hasPin: fetch.pin ? true : false,
+    };
     delete user.pin;
 
     if (!user.email_verified_at) {
@@ -144,7 +190,8 @@ export class AuthService extends BaseService {
 
     await queryRunner.startTransaction();
     try {
-      const { email, first_name, last_name, phone, country } = createAccountDto;
+      const { email, first_name, last_name, phone, country, google_id } =
+        createAccountDto;
 
       const existingUser = await this.userRepository.exists({
         where: [{ email }],
@@ -173,6 +220,7 @@ export class AuthService extends BaseService {
         remember_token: rememberToken,
         password: hashResourceSync(createAccountDto.password),
         status: Status.active,
+        google_id: google_id,
       });
 
       await queryRunner.commitTransaction();
@@ -185,22 +233,30 @@ export class AuthService extends BaseService {
         country: user.country,
       };
 
-      sendMailJetWithTemplate(
-        {
-          to: {
-            name: `${capitalizeString(user.first_name)} ${capitalizeString(user.last_name)}`,
-            email,
+      if (google_id) {
+        await queryRunner.manager.update(
+          User,
+          { id: user.id },
+          { email_verified_at: new Date(), remember_token: null }
+        );
+      } else {
+        sendMailJetWithTemplate(
+          {
+            to: {
+              name: `${capitalizeString(user.first_name)} ${capitalizeString(user.last_name)}`,
+              email,
+            },
           },
-        },
-        {
-          subject: "Verification Code",
-          templateId: MAILJETTemplates.verify_email,
-          variables: {
-            firstName: capitalizeString(user.first_name),
-            token: rememberToken,
-          },
-        }
-      );
+          {
+            subject: "Verification Code",
+            templateId: MAILJETTemplates.verify_email,
+            variables: {
+              firstName: capitalizeString(user.first_name),
+              token: rememberToken,
+            },
+          }
+        );
+      }
 
       const data = {
         user: userData,

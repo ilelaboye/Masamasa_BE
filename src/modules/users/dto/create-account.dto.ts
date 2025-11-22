@@ -66,7 +66,16 @@ export class LoginStaffDto {
   email: string;
 
   @ApiProperty({ example: "123456" })
-  password: string;
+  password?: string;
+
+  @ApiProperty({ example: "123456" })
+  google_id?: string;
+
+  @ApiProperty({ example: "123456" })
+  device_id?: string;
+
+  @ApiProperty({ example: "123456" })
+  notification_token?: string;
 }
 
 export class ForgotPasswordDto {

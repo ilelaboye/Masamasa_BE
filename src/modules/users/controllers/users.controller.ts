@@ -35,6 +35,8 @@ import {
   UploadImageValidation,
   WithdrawalValidation,
 } from "../validations";
+import { BVNVerificationValidation } from "@/modules/global/bank-verification/validations/bvn-verification.validation";
+import { BVNVerificationDto } from "@/modules/global/bank-verification/dto/bvn-verification.dto";
 
 @ApiCookieAuth(_AUTH_COOKIE_NAME_)
 @UseGuards(AuthGuard)
@@ -106,6 +108,15 @@ export class UsersController {
     @Req() req: UserRequest
   ) {
     return await this.usersService.updateProfile(updateAccountDto, req);
+  }
+
+  @Post("kyc")
+  @UsePipes(new JoiValidationPipe(BVNVerificationValidation))
+  async kyc(
+    @Body() bVNVerificationDto: BVNVerificationDto,
+    @Req() req: UserRequest
+  ) {
+    return await this.usersService.userKyc(bVNVerificationDto, req);
   }
 
   // @Post("email-verification")

@@ -92,6 +92,12 @@ export class User {
   @Column({ nullable: true })
   country: string;
 
+  @Column({ nullable: true })
+  device_id: string;
+
+  @Column({ nullable: true })
+  notification_token: string;
+
   @Column({ nullable: true, type: "text", select: false })
   remember_token?: string | null;
 
