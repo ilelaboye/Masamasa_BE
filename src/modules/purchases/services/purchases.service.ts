@@ -107,7 +107,7 @@ export class PurchaseService {
           {
             status: PurchaseStatus.processed,
             commission: resp.data.content.transactions.commission,
-            other_ref: resp.data.body.content.transactions.transactionId,
+            other_ref: resp.data.content.transactions.transactionId,
             metadata: {
               ...createdPurchaseRequests.metadata,
               provider_response: resp.data,
