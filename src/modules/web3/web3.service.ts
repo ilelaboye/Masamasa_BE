@@ -3,7 +3,7 @@ import { ethers, formatUnits } from "ethers";
 import axios from "axios";
 import { appConfig } from "@/config";
 import { WithdrawEthDto, WithdrawTokenDto } from "./web3.dto";
-
+import FormData from "form-data"; //
 
 // ABI for WalletManagerRemix (relevant functions)
 const walletManagerAbi = [
@@ -149,6 +149,39 @@ export class Web3Service {
     } catch (err: any) {
       console.error("Get recent transactions failed:", err);
       throw new BadRequestException(err.message || "Get recent transactions failed");
+    }
+  }
+
+   // -------------------------
+  // UPLOAD IMAGE USING AXIOS
+  // -------------------------
+  async uploadImage(file: Express.Multer.File) {
+    try {
+      if (!file) {
+        throw new BadRequestException("Image file not provided");
+      }
+
+      const form = new FormData();
+      form.append("file", file.buffer, { filename: file.originalname });
+      form.append("upload_preset", appConfig.CLOUDINARY_UPLOAD_PRESET);
+
+      const response = await axios.post(
+        `https://api.cloudinary.com/v1_1/${appConfig.CLOUDINARY_CLOUD_NAME}/image/upload`,
+        form,
+        {
+          headers: form.getHeaders(), // very important!
+        }
+      );
+
+      const data = response.data;
+
+      if (!data.secure_url) {
+        throw new BadRequestException("Cloudinary upload failed");
+      }
+
+      return { success: true, imageUrl: data.secure_url };
+    } catch (err: any) {
+      throw new BadRequestException(err.response?.data || err.message || "Image upload failed");
     }
   }
 }
