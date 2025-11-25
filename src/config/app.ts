@@ -60,4 +60,29 @@ export const appConfig = {
 
   PREMBLY_IDENTITY_PASSAPIKEY: process.env.PREMBLY_IDENTITY_PASSAPIKEY,
   PREMBLY_IDENTITY_PASSAPPID: process.env.PREMBLY_IDENTITY_PASSAPPID,
+
+   // -----------------------------
+  // Ethereum / WalletManager
+  // -----------------------------
+  ETH_RPC_URL: process.env.RPC_URL,
+  ETH_PRIVATE_KEY: process.env.PRIVATE_KEY ?? "",
+  ETH_WALLET_MANAGER_ADDRESS: process.env.WALLET_MANAGER_ADDRESS,
+
+  BASE_RPC_URL: process.env.RPC_URL_BASE,
+  BASE_PRIVATE_KEY: process.env.PRIVATE_KEY_BASE ?? "",
+  BASE_WALLET_MANAGER_ADDRESS: process.env.WALLET_MANAGER_ADDRESS_BASE,
+
+  SOL_RPC_URL: process.env.RPC_URL_SOL,
+  SOL_PRIVATE_KEY: process.env.PRIVATE_KEY_SOL ?? "",
+  SOL_WALLET_MANAGER_ADDRESS: process.env.WALLET_MANAGER_ADDRESS_SOL,
+
+  BEP20_RPC_URL: process.env.RPC_URL_BEP20,
+  BEP20_PRIVATE_KEY: process.env.PRIVATE_KEY_BEP20 ?? "",
+  BEP20_WALLET_MANAGER_ADDRESS: process.env.WALLET_MANAGER_ADDRESS_BEP20,
+
+  TRON_RPC_URL: process.env.RPC_URL_TRON,
+  TRON_PRIVATE_KEY: process.env.PRIVATE_KEY_TRON ?? "",
+  TRON_WALLET_MANAGER_ADDRESS: process.env.WALLET_MANAGER_ADDRESS_TRON,
+
+
 };
