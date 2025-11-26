@@ -16,3 +16,8 @@ export const CookieOptions = {
 export const MAILJETTemplates = {
   verify_email: 7451545,
 };
+
+export const ZohoMailTemplates = {
+  verify_email:
+    "2d6f.7b2fb6a80c080b10.k1.d608a9c0-c856-11f0-87e5-aeb2e8ed505e.19ab03ff65c",
+};
