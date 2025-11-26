@@ -18,6 +18,9 @@ export class ExchangeRateService {
   async findAll() {
     return await this.exchangeRateRepository
       .createQueryBuilder("exchange_rate")
+      .where("exchange_rate.status = :status", {
+        status: ExchangeRateStatus.active,
+      })
       .orderBy("created_at", "DESC")
       .getMany();
   }

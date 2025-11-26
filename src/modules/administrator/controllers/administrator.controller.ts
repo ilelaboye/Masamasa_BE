@@ -75,7 +75,7 @@ export class AdministratorController {
     return this.administratorService.verifyKyc(+id, req);
   }
 
-  @ApiOperation({ summary: "Verify user kyc" })
+  @ApiOperation({ summary: "Get exchange rates" })
   @Get("exchange-rates")
   async getExchangeRates(@Req() req: AdminRequest) {
     return this.exchangeRateService.findAll();
