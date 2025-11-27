@@ -1,7 +1,7 @@
 import { ethers } from "ethers";
 
 export class CreateWalletDto {
-  username: string;
+  id: string;
 }
 
 export class WithdrawEthDto {

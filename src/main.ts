@@ -68,6 +68,6 @@ async function bootstrap() {
 
   await app.listen(appConfig.PORT);
 
-  console.info(`Application is running on: ${await app.getUrl()}`);
+  console.log(`Application is running on: ${await app.getUrl()}`);
 }
 bootstrap();

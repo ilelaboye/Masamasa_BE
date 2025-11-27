@@ -1,7 +1,7 @@
 import * as Joi from "joi";
 
 export const CreateWalletValidation = Joi.object({
-  username: Joi.string().required(),
+  id: Joi.string(),
 });
 
 export const WithdrawEthValidation = Joi.object({
