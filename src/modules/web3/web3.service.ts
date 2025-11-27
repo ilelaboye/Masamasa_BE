@@ -40,7 +40,7 @@ export class Web3Service {
     // -----------------------------
     // INIT PROVIDER + HD WALLET
     // -----------------------------
-    this.provider = new ethers.JsonRpcProvider(appConfig.ETH_RPC_URL);
+    this.provider = new ethers.JsonRpcProvider(appConfig.EVM_RPC_URL);
 
     if (!appConfig.MASTER_MNEMONIC) {
       throw new Error("MASTER_MNEMONIC is missing in .env");
@@ -139,7 +139,7 @@ export class Web3Service {
   async withdrawETH(req, payload: WithdrawEthDto) {
     try {
       const signer = this.getSigner();
-      const walletManager = this.getContract(appConfig.BASE_WALLET_MANAGER_ADDRESS, signer);
+      const walletManager = this.getContract("", signer);
 
       const tx = await walletManager.withdrawContractETH(payload.amount, payload.to);
       await tx.wait();
@@ -156,7 +156,7 @@ export class Web3Service {
   async withdrawToken(payload: WithdrawTokenDto) {
     try {
       const signer = this.getSigner();
-      const walletManager = this.getContract(appConfig.BASE_WALLET_MANAGER_ADDRESS, signer);
+      const walletManager = this.getContract("appConfig", signer);
 
       const tx = await walletManager.withdrawContractToken(payload.tokenAddress, payload.amount, payload.to);
       await tx.wait();
@@ -253,7 +253,7 @@ export class Web3Service {
   async getRecentTransactions() {
     try {
       const signer = this.getSigner();
-      const walletManager = this.getContract(appConfig.BASE_WALLET_MANAGER_ADDRESS, signer);
+      const walletManager = this.getContract("appConfig", signer);
 
       const raw = await walletManager.getAllTransactions();
       return raw.map((tx: any) => ({
