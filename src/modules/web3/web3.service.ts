@@ -3,12 +3,17 @@ import { ethers, formatUnits } from "ethers";
 import axios from "axios";
 import { appConfig } from "@/config";
 import { WithdrawEthDto, WithdrawTokenDto } from "./web3.dto";
-import FormData from "form-data"; //
+import { Connection, Keypair, LAMPORTS_PER_SOL, SystemProgram, Transaction, sendAndConfirmTransaction, PublicKey } from "@solana/web3.js";
+import FormData from "form-data";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Wallet } from "../wallet/wallet.entity";
 import { Repository } from "typeorm";
+import { HDWallet } from "./hd-wallet";
+import { TronHDWallet } from "./tron-hd-wallet";
+import { SolHDWallet } from "./sol-hd-wallet";
+const TronWeb = require("tronweb");
+import { getAssociatedTokenAddress, getAccount } from "@solana/spl-token";
 
-// ABI for WalletManagerRemix (relevant functions)
 const walletManagerAbi = [
   "function getWalletByUserId(string userId) view returns (address)",
   "function createWallet(string userId) returns (address)",
@@ -22,151 +27,115 @@ const walletManagerAbi = [
 
 @Injectable()
 export class Web3Service {
-
+  private hd: HDWallet;
+  private provider: ethers.JsonRpcProvider;
+  private conn: Connection;
+  private hdSol: SolHDWallet;
+  private hdTRX: TronHDWallet;
+  private tronWeb: any;
   constructor(
     @InjectRepository(Wallet)
     private readonly walletRepository: Repository<Wallet>
-  ) { }
-  //--------------------------------------
-  // HELPER: get signer
-  //--------------------------------------
-  private getSigner(): ethers.Wallet {
-    const provider = new ethers.JsonRpcProvider(appConfig.ETH_RPC_URL);
-    return new ethers.Wallet(appConfig.ETH_PRIVATE_KEY, provider);
+  ) {
+    // -----------------------------
+    // INIT PROVIDER + HD WALLET
+    // -----------------------------
+    this.provider = new ethers.JsonRpcProvider(appConfig.ETH_RPC_URL);
+
+    if (!appConfig.MASTER_MNEMONIC) {
+      throw new Error("MASTER_MNEMONIC is missing in .env");
+    }
+
+    this.hd = new HDWallet(appConfig.MASTER_MNEMONIC);
+    this.conn = new Connection(appConfig.SOL_RPC_URL, "confirmed");
+    this.hdSol = new SolHDWallet(appConfig.SOL_MASTER_MNEMONIC);
+    this.hdTRX = new TronHDWallet(appConfig.TRX_MASTER_MNEMONIC);
+    this.tronWeb = this.hdTRX.getTronWebInstance()
   }
 
-  //--------------------------------------
-  // HELPER: get contract instance
-  //--------------------------------------
+  // -----------------------------
+  // HELPER: signer
+  // -----------------------------
+  private getSigner(): ethers.Wallet {
+    return new ethers.Wallet(appConfig.ETH_PRIVATE_KEY, this.provider);
+  }
+
+  // -----------------------------
+  // HELPER: contract
+  // -----------------------------
   private getContract(address?: string, signerOrProvider?: ethers.Signer | ethers.Provider) {
     return new ethers.Contract(address ?? "", walletManagerAbi, signerOrProvider);
   }
 
-  //--------------------------------------
-  // CREATE WALLET
-  //--------------------------------------
+  // -----------------------------
+  // CREATE HD WALLET FOR USER
+  // -----------------------------
   async createWallet(req, payload: any) {
     try {
-      console.log("Creating wallet for user ID:", payload, req.user);
-      //base
-      const provider = new ethers.JsonRpcProvider(appConfig.BASE_RPC_URL);
-      const signer = new ethers.Wallet(appConfig.BASE_PRIVATE_KEY, provider);
-      const walletManager = this.getContract(appConfig.BASE_WALLET_MANAGER_ADDRESS, signer);
+      const userId = payload.id.toString();
 
-      //solana
-      const providerSol = new ethers.JsonRpcProvider(appConfig.SOL_RPC_URL);
-      const signerSol = new ethers.Wallet(appConfig.SOL_PRIVATE_KEY, provider);
-      const walletManagerSol = this.getContract(appConfig.SOL_WALLET_MANAGER_ADDRESS, signer);
-      // binance
-      const providerBNB = new ethers.JsonRpcProvider(appConfig.BEP20_RPC_URL);
-      const signerBNB = new ethers.Wallet(appConfig.BEP20_PRIVATE_KEY, provider);
-      const walletManagerBNB = this.getContract(appConfig.BEP20_WALLET_MANAGER_ADDRESS, signer);
+      // Each user gets a derived child wallet
+      const childWallet = this.hd.getChildWallet(userId, this.provider);
+      const solChildWallet = this.hdSol.deriveKeypair(userId).publicKey.toBase58();
+      const tronChildWallet = this.hdTRX.getChildAddress(userId);
 
-      //TRX
-      const providerTRX = new ethers.JsonRpcProvider(appConfig.TRON_RPC_URL);
-      const signerTRX = new ethers.Wallet(appConfig.TRON_PRIVATE_KEY, provider);
-      const walletManagerTRX = this.getContract(appConfig.TRON_WALLET_MANAGER_ADDRESS, signer);
+      const existWallet = await this.walletRepository.findOne({
+        where: { wallet_address: childWallet.address },
+      });
+      const existWalletSOL = await this.walletRepository.findOne({
+        where: { wallet_address: solChildWallet },
+      });
 
+      const existWalletTRX = await this.walletRepository.findOne({
+        where: { wallet_address: tronChildWallet },
+      });
 
-      let walletAddress: string;
-      let walletAddressSol: string;
-      let walletAddressBNB: string;
-      let walletAddressTRX: string;
-      try {
-        walletAddress = await walletManager.getWalletByUserId(payload.id);
-        walletAddressSol = await walletManagerSol.getWalletByUserId(payload.id)
-        walletAddressBNB = await walletManagerBNB.getWalletByUserId(payload.id)
-        walletAddressTRX = await walletManagerTRX.getWalletByUserId(payload.id)
-      } catch {
-        walletAddress = ethers.ZeroAddress;
-        walletAddressSol = ethers.ZeroAddress;
-        walletAddressBNB = ethers.ZeroAddress;
-        walletAddressTRX = ethers.ZeroAddress;
-      }
-
-      if (!walletAddress || walletAddress === ethers.ZeroAddress) {
-        const tx = await walletManager.createWallet(payload.id);
-        const receipt = await tx.wait();
-
-        // optional: get wallet address from event
-        const event = receipt.events?.find((e: any) => e.event === "WalletCreated");
-        walletAddress = await walletManager.getWalletByUserId(payload.id);
-        const wallet = this.walletRepository.create({
+      // Save to DB
+      if (!existWallet) {
+        const base = this.walletRepository.create({
           user: req.user,
-          network: "Base Testnet",
-          currency: "ETHT",
-          wallet_address: walletAddress,
+          network: "Base",
+          currency: "ETH",
+          wallet_address: childWallet.address,
         });
-
-        await this.walletRepository.save(wallet);
+        await this.walletRepository.save(base);
       }
 
-      if (!walletAddressSol || walletAddressSol === ethers.ZeroAddress) {
-        const tx = await walletManagerSol.createWallet(payload.id);
-        const receipt = await tx.wait();
-
-        // optional: get wallet address from event
-        const event = receipt.events?.find((e: any) => e.event === "WalletCreated");
-        walletAddressSol = await walletManagerSol.getWalletByUserId(payload.id);
-        const wallet = this.walletRepository.create({
+      if (!existWalletSOL) {
+        const SOL = this.walletRepository.create({
           user: req.user,
-          network: "SOL Testnet",
-          currency: "SOLT",
-          wallet_address: walletAddressSol,
+          network: "SOLANA",
+          currency: "SOL",
+          wallet_address: solChildWallet
         });
-
-        await this.walletRepository.save(wallet);
+        await this.walletRepository.save(SOL);
       }
 
-      if (!walletAddressBNB || walletAddressBNB === ethers.ZeroAddress) {
-        const tx = await walletManagerBNB.createWallet(payload.id);
-        const receipt = await tx.wait();
-
-        // optional: get wallet address from event
-        const event = receipt.events?.find((e: any) => e.event === "WalletCreated");
-        walletAddressBNB = await walletManagerBNB.getWalletByUserId(payload.id);
-        const wallet = this.walletRepository.create({
+      if (!existWalletTRX) {
+        const TRX = this.walletRepository.create({
           user: req.user,
-          network: "BEP20 Testnet",
-          currency: "BNBT",
-          wallet_address: walletAddressBNB,
+          network: "TRON",
+          currency: "TRX",
+          wallet_address: tronChildWallet
         });
-
-        await this.walletRepository.save(wallet);
+        await this.walletRepository.save(TRX);
       }
-
-      if (!walletAddressTRX || walletAddressTRX === ethers.ZeroAddress) {
-        const tx = await walletManagerTRX.createWallet(payload.id);
-        const receipt = await tx.wait();
-
-        // optional: get wallet address from event
-        const event = receipt.events?.find((e: any) => e.event === "WalletCreated");
-        walletAddressTRX = await walletManagerTRX.getWalletByUserId(payload.id);
-        const wallet = this.walletRepository.create({
-          user: req.user,
-          network: "Tron Testnet",
-          currency: "TRXT",
-          wallet_address: walletAddressTRX,
-        });
-
-        await this.walletRepository.save(wallet);
-      }
-
 
       return {
-        walletAddress,
-        walletAddressSol,
-        walletAddressBNB,
-        walletAddressTRX
+        eth: childWallet.address,
+        sol: solChildWallet,
+        trx: tronChildWallet
+
       };
     } catch (err: any) {
-      return err;
+      console.error(err);
+      throw new BadRequestException("Wallet creation failed");
     }
   }
 
-  //--------------------------------------
+  // -----------------------------
   // WITHDRAW ETH
-  //--------------------------------------
+  // -----------------------------
   async withdrawETH(req, payload: WithdrawEthDto) {
     try {
       const signer = this.getSigner();
@@ -181,9 +150,9 @@ export class Web3Service {
     }
   }
 
-  //--------------------------------------
+  // -----------------------------
   // WITHDRAW TOKEN
-  //--------------------------------------
+  // -----------------------------
   async withdrawToken(payload: WithdrawTokenDto) {
     try {
       const signer = this.getSigner();
@@ -198,36 +167,96 @@ export class Web3Service {
     }
   }
 
-  //--------------------------------------
-  // GET ALL BALANCES
-  //--------------------------------------
-  async getAllBalances() {
+  // -----------------------------
+  // GET BALANCES
+  // -----------------------------
+  // ERC20 / BEP20 Token balances
+  private async getTokenBalanceETH(tokenAddress: string, decimals = 18): Promise<number> {
+    const masterAddress = this.hd.getMasterWallet(this.provider).address;
+    if (!tokenAddress) return 0;
+
+    const contract = new ethers.Contract(
+      tokenAddress,
+      ["function balanceOf(address) view returns (uint256)"],
+      this.provider
+    );
+
+    const balance = await contract.balanceOf(masterAddress);
+    return Number(formatUnits(balance, decimals));
+  }
+
+  // TRC20 token balance
+  private async getTokenBalanceTRX(tokenAddress: string): Promise<number> {
+    if (!tokenAddress) return 0;
+    const master = this.hdTRX.getMasterWallet().address;
+    const contract = await this.tronWeb.contract().at(tokenAddress);
+    const balance = await contract.balanceOf(master).call();
+    return Number(balance) / 1e6; // TRC20 usually 6 decimals
+  }
+
+  // SPL token balance
+  private async getTokenBalanceSOL(tokenMint: PublicKey, owner: PublicKey): Promise<number> {
     try {
-      const signer = this.getSigner();
-      const walletManager = this.getContract(appConfig.BASE_WALLET_MANAGER_ADDRESS, signer);
-
-      const balances = await walletManager.getAllBalances();
-      const serializedBalances = balances.map((b: any) => ({
-        symbol: b.symbol,
-        balance: formatUnits(b.balance, b.decimals ?? 18)
-      }));
-
-      return serializedBalances;
-    } catch (err: any) {
-      throw new BadRequestException(err.message || "Get all balances failed:");
+      const tokenAddr = await getAssociatedTokenAddress(tokenMint, owner);
+      const tokenAcc = await getAccount(this.conn, tokenAddr);
+      return Number(tokenAcc.amount) / 1e6; // USDC/USDT usually 6 decimals
+    } catch (err) {
+      // If the account doesn't exist yet, treat balance as 0
+      return 0;
     }
   }
 
-  //--------------------------------------
-  // GET RECENT TRANSACTIONS
-  //--------------------------------------
+  // Main function to get all balances
+  async getAllBalances() {
+    try {
+      // --- ETH-like / Base ---
+      // --- ETH/Base ---
+      const masterETH = this.hd.getMasterWallet(this.provider).address;
+      const ethBalance = Number(formatUnits(await this.provider.getBalance(masterETH), 18));
+      const usdtBalance = await this.getTokenBalanceETH("0xdAC17F958D2ee523a2206206994597C13D831ec7", 6);
+      const bnbBalance = await this.getTokenBalanceETH("0xBB4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c", 18);
+      // --- TRON ---
+      const masterTRX = this.hdTRX.getMasterWallet().address;
+      const trxBalance = (await this.tronWeb.trx.getBalance(masterTRX)) / 1e6;
+      const trxUSDTBalance = await this.getTokenBalanceTRX("TXLAQ63Xg1NAzckPwKHvzw7CSEmLMEqcdj");
+
+      // --- Solana ---
+      const masterSOL = this.hdSol.getMasterKeypair().publicKey;
+      const solBalance = (await this.conn.getBalance(masterSOL)) / LAMPORTS_PER_SOL;
+      const solUSDCBalance = await this.getTokenBalanceSOL(
+        new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"),
+        masterSOL
+      );
+      const solUSDTBalance = await this.getTokenBalanceSOL(
+        new PublicKey("Es9vMFrzaCERn8X3jPbU9Uq5o1T2yD8KK3FWrHQXgk2"),
+        masterSOL
+      );
+
+      return {
+        ETH: ethBalance,
+        BNB: bnbBalance,
+        // USDC: usdcBalance,
+        USDT: usdtBalance,
+        TRX: trxBalance,
+        TRX_USDT: trxUSDTBalance,
+        SOL: solBalance,
+        SOL_USDC: solUSDCBalance,
+        SOL_USDT: solUSDTBalance
+      };
+    } catch (err: any) {
+      throw new BadRequestException(err.message || "Failed to fetch balances");
+    }
+  }
+  // -----------------------------
+  // GET TRANSACTIONS
+  // -----------------------------
   async getRecentTransactions() {
     try {
       const signer = this.getSigner();
       const walletManager = this.getContract(appConfig.BASE_WALLET_MANAGER_ADDRESS, signer);
 
-      const rawTransactions = await walletManager.getAllTransactions();
-      const transactions = rawTransactions.map((tx: any) => ({
+      const raw = await walletManager.getAllTransactions();
+      return raw.map((tx: any) => ({
         network: tx.network,
         wallet: tx.wallet,
         amount: (Number(tx.amount) / 1e18).toString(),
@@ -235,22 +264,17 @@ export class Web3Service {
         tokenAddress: tx.tokenAddress,
         timestamp: tx.timestamp.toString()
       }));
-
-      return transactions;
     } catch (err: any) {
-      console.error("Get recent transactions failed:", err);
       throw new BadRequestException(err.message || "Get recent transactions failed");
     }
   }
 
-  // -------------------------
-  // UPLOAD IMAGE USING AXIOS
-  // -------------------------
+  // -----------------------------
+  // UPLOAD IMAGE
+  // -----------------------------
   async uploadImage(file: Express.Multer.File) {
     try {
-      if (!file) {
-        throw new BadRequestException("Image file not provided");
-      }
+      if (!file) throw new BadRequestException("Image file not provided");
 
       const form = new FormData();
       form.append("file", file.buffer, { filename: file.originalname });
@@ -259,18 +283,10 @@ export class Web3Service {
       const response = await axios.post(
         `https://api.cloudinary.com/v1_1/${appConfig.CLOUDINARY_CLOUD_NAME}/image/upload`,
         form,
-        {
-          headers: form.getHeaders(), // very important!
-        }
+        { headers: form.getHeaders() }
       );
 
-      const data = response.data;
-
-      if (!data.secure_url) {
-        throw new BadRequestException("Cloudinary upload failed");
-      }
-
-      return { success: true, imageUrl: data.secure_url };
+      return { success: true, imageUrl: response.data.secure_url };
     } catch (err: any) {
       throw new BadRequestException(err.response?.data || err.message || "Image upload failed");
     }

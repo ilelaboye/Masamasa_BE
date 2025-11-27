@@ -61,18 +61,16 @@ export const appConfig = {
   PREMBLY_IDENTITY_PASSAPIKEY: process.env.PREMBLY_IDENTITY_PASSAPIKEY,
   PREMBLY_IDENTITY_PASSAPPID: process.env.PREMBLY_IDENTITY_PASSAPPID,
 
-   // -----------------------------
+  // -----------------------------
   // Ethereum / WalletManager
   // -----------------------------
   ETH_RPC_URL: process.env.RPC_URL,
-  ETH_PRIVATE_KEY: process.env.PRIVATE_KEY ?? "",
   ETH_WALLET_MANAGER_ADDRESS: process.env.WALLET_MANAGER_ADDRESS,
 
   BASE_RPC_URL: process.env.RPC_URL_BASE,
   BASE_PRIVATE_KEY: process.env.PRIVATE_KEY_BASE ?? "",
   BASE_WALLET_MANAGER_ADDRESS: process.env.WALLET_MANAGER_ADDRESS_BASE,
 
-  SOL_RPC_URL: process.env.RPC_URL_SOL,
   SOL_PRIVATE_KEY: process.env.PRIVATE_KEY_SOL ?? "",
   SOL_WALLET_MANAGER_ADDRESS: process.env.WALLET_MANAGER_ADDRESS_SOL,
 
@@ -84,7 +82,17 @@ export const appConfig = {
   TRON_PRIVATE_KEY: process.env.PRIVATE_KEY_TRON ?? "",
   TRON_WALLET_MANAGER_ADDRESS: process.env.WALLET_MANAGER_ADDRESS_TRON,
 
-// IMAGE UPLOAD
- CLOUDINARY_UPLOAD_PRESET : process.env.CLOUDINARY_UPLOAD_PRESET,
- CLOUDINARY_CLOUD_NAME : process.env.CLOUDINARY_CLOUD_NAME
+  // IMAGE UPLOAD
+  CLOUDINARY_UPLOAD_PRESET: process.env.CLOUDINARY_UPLOAD_PRESET,
+  CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME,
+
+  // seed phrase for HD wallet
+  MASTER_MNEMONIC: "glue bicycle alien lamp practice head undo tool peace price wrestle street",
+  SOL_MASTER_MNEMONIC: "trouble test waste exercise airport pepper frown umbrella trip erupt teach win",
+  TRX_MASTER_MNEMONIC: "gift apology cloth barely pair memory dial when neither decrease expand unusual",
+  EVM_RPC_URL: "https://bsc-dataseed.binance.org/",
+  SOL_RPC_URL: "https://api.mainnet-beta.solana.com",
+  TRX_API_KEY: "d12ff04b-0531-4af7-8135-42ea27952387",
+  ETH_PRIVATE_KEY: process.env.PRIVATE_KEY ?? "",
+
 };
