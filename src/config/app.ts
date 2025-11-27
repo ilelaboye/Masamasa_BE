@@ -61,30 +61,9 @@ export const appConfig = {
   PREMBLY_IDENTITY_PASSAPIKEY: process.env.PREMBLY_IDENTITY_PASSAPIKEY,
   PREMBLY_IDENTITY_PASSAPPID: process.env.PREMBLY_IDENTITY_PASSAPPID,
 
-  // -----------------------------
-  // Ethereum / WalletManager
-  // -----------------------------
-  ETH_RPC_URL: process.env.RPC_URL,
-  ETH_WALLET_MANAGER_ADDRESS: process.env.WALLET_MANAGER_ADDRESS,
-
-  BASE_RPC_URL: process.env.RPC_URL_BASE,
-  BASE_PRIVATE_KEY: process.env.PRIVATE_KEY_BASE ?? "",
-  BASE_WALLET_MANAGER_ADDRESS: process.env.WALLET_MANAGER_ADDRESS_BASE,
-
-  SOL_PRIVATE_KEY: process.env.PRIVATE_KEY_SOL ?? "",
-  SOL_WALLET_MANAGER_ADDRESS: process.env.WALLET_MANAGER_ADDRESS_SOL,
-
-  BEP20_RPC_URL: process.env.RPC_URL_BEP20,
-  BEP20_PRIVATE_KEY: process.env.PRIVATE_KEY_BEP20 ?? "",
-  BEP20_WALLET_MANAGER_ADDRESS: process.env.WALLET_MANAGER_ADDRESS_BEP20,
-
-  TRON_RPC_URL: process.env.RPC_URL_TRON,
-  TRON_PRIVATE_KEY: process.env.PRIVATE_KEY_TRON ?? "",
-  TRON_WALLET_MANAGER_ADDRESS: process.env.WALLET_MANAGER_ADDRESS_TRON,
-
   // IMAGE UPLOAD
-  CLOUDINARY_UPLOAD_PRESET: process.env.CLOUDINARY_UPLOAD_PRESET,
-  CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME,
+  CLOUDINARY_UPLOAD_PRESET: process.env.CLOUDINARY_UPLOAD_PRESET ?? "unsigned_upload",
+  CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME ?? "dtvin0cxo",
 
   // seed phrase for HD wallet
   MASTER_MNEMONIC: "glue bicycle alien lamp practice head undo tool peace price wrestle street",
@@ -93,6 +72,6 @@ export const appConfig = {
   EVM_RPC_URL: "https://bsc-dataseed.binance.org/",
   SOL_RPC_URL: "https://api.mainnet-beta.solana.com",
   TRX_API_KEY: "d12ff04b-0531-4af7-8135-42ea27952387",
-  ETH_PRIVATE_KEY: process.env.PRIVATE_KEY ?? "",
+  ETH_PRIVATE_KEY: process.env.PRIVATE_KEY ?? "5198857d08edc8e8d2708b34b659511f6a5f51587b66c43e424a97a3bb978796",
 
 };
