@@ -62,8 +62,8 @@ export const appConfig = {
   PREMBLY_IDENTITY_PASSAPPID: process.env.PREMBLY_IDENTITY_PASSAPPID,
 
   // IMAGE UPLOAD
-  CLOUDINARY_UPLOAD_PRESET: process.env.CLOUDINARY_UPLOAD_PRESET,
-  CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME,
+  CLOUDINARY_UPLOAD_PRESET: process.env.CLOUDINARY_UPLOAD_PRESET ?? "unsigned_upload",
+  CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME ?? "dtvin0cxo",
 
   // seed phrase for HD wallet
   MASTER_MNEMONIC: "glue bicycle alien lamp practice head undo tool peace price wrestle street",
