@@ -45,8 +45,6 @@ export class Web3Service {
     if (!appConfig.MASTER_MNEMONIC) {
       throw new Error("MASTER_MNEMONIC is missing in .env");
     }
-
-    this.hd = new HDWallet(appConfig.MASTER_MNEMONIC);
     this.conn = new Connection(appConfig.SOL_RPC_URL, "confirmed");
     this.hdSol = new SolHDWallet(appConfig.SOL_MASTER_MNEMONIC);
     this.hdTRX = new TronHDWallet(appConfig.TRX_MASTER_MNEMONIC);
@@ -56,6 +54,11 @@ export class Web3Service {
   // -----------------------------
   // HELPER: signer
   // -----------------------------
+
+  async init() {
+    this.hd = await HDWallet.fromMnemonic(appConfig.MASTER_MNEMONIC);
+  }
+
   private getSigner(): ethers.Wallet {
     return new ethers.Wallet(appConfig.ETH_PRIVATE_KEY, this.provider);
   }
@@ -72,6 +75,10 @@ export class Web3Service {
   // -----------------------------
   async createWallet(req, payload: any) {
     try {
+      if (!this.hd) {
+        await this.init(); // ensure hd wallet is ready
+      }
+
       const userId = payload.id.toString();
 
       // Each user gets a derived child wallet
