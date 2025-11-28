@@ -1,22 +1,46 @@
 import { ethers, hexlify } from "ethers";
 import * as bip39 from "bip39";
-import { HDKey } from "@scure/bip32";
 
 const DERIVATION_PATH = "m/44'/60'/0'/0";
 
-export class HDWallet {
-  private root: HDKey;
+let HDKey: any;
 
-  constructor(private mnemonic: string) {
+/**
+ * Dynamically import @scure/bip32 (ESM only)
+ */
+async function loadHDKey() {
+  if (!HDKey) {
+    const bip32 = await import("@scure/bip32");
+    HDKey = bip32.HDKey;
+  }
+  return HDKey;
+}
+
+export class HDWallet {
+  private root: any;
+
+  private constructor(private mnemonic: string, root: any) {
+    this.root = root;
+  }
+
+  /**
+   * Factory method to create HDWallet instance
+   */
+  static async fromMnemonic(mnemonic: string): Promise<HDWallet> {
     if (!bip39.validateMnemonic(mnemonic)) {
       throw new Error("Invalid mnemonic");
     }
 
     const seed = bip39.mnemonicToSeedSync(mnemonic);
-    this.root = HDKey.fromMasterSeed(seed);
+    const HDKeyModule = await loadHDKey();
+    const root = HDKeyModule.fromMasterSeed(seed);
+
+    return new HDWallet(mnemonic, root);
   }
 
-  // MASTER WALLET (index 0)
+  /**
+   * Master wallet (index 0)
+   */
   getMasterWallet(provider: ethers.JsonRpcProvider) {
     const child = this.root.derive(`${DERIVATION_PATH}/0`);
     if (!child.privateKey) throw new Error("No private key derived");
@@ -25,13 +49,14 @@ export class HDWallet {
     return new ethers.Wallet(privateKey, provider);
   }
 
-  // CHILD DEPOSIT WALLET
+  /**
+   * Child wallet at a specific index
+   */
   getChildWallet(index: number, provider: ethers.JsonRpcProvider) {
     const child = this.root.derive(`${DERIVATION_PATH}/${index}`);
     if (!child.privateKey) throw new Error("No private key derived");
 
     const privateKey = hexlify(child.privateKey);
-
     const wallet = new ethers.Wallet(privateKey, provider);
 
     return {
@@ -42,7 +67,9 @@ export class HDWallet {
     };
   }
 
-  // SWEEP CHILD → MASTER
+  /**
+   * Sweep funds from a child wallet to master address
+   */
   async sweep(child: any, masterAddress: string) {
     const balance = await child.wallet.getBalance();
 
