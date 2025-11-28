@@ -3,7 +3,11 @@ import { ethers, formatUnits } from "ethers";
 import axios from "axios";
 import { appConfig } from "@/config";
 import { WithdrawEthDto, WithdrawTokenDto } from "./web3.dto";
-import { Connection, Keypair, LAMPORTS_PER_SOL, SystemProgram, Transaction, sendAndConfirmTransaction, PublicKey } from "@solana/web3.js";
+import {
+  Connection,
+  LAMPORTS_PER_SOL,
+  PublicKey
+} from "@solana/web3.js";
 import FormData from "form-data";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Wallet } from "../wallet/wallet.entity";
@@ -11,8 +15,9 @@ import { Repository } from "typeorm";
 import { HDWallet } from "./hd-wallet";
 import { TronHDWallet } from "./tron-hd-wallet";
 import { SolHDWallet } from "./sol-hd-wallet";
-const TronWeb = require("tronweb");
 import { getAssociatedTokenAddress, getAccount } from "@solana/spl-token";
+
+const TronWeb = require("tronweb");
 
 const walletManagerAbi = [
   "function getWalletByUserId(string userId) view returns (address)",
@@ -27,38 +32,41 @@ const walletManagerAbi = [
 
 @Injectable()
 export class Web3Service {
-  private hd: HDWallet;
+  private hd!: HDWallet;
   private provider: ethers.JsonRpcProvider;
   private conn: Connection;
   private hdSol: SolHDWallet;
   private hdTRX: TronHDWallet;
   private tronWeb: any;
+
   constructor(
     @InjectRepository(Wallet)
     private readonly walletRepository: Repository<Wallet>
   ) {
-    // -----------------------------
-    // INIT PROVIDER + HD WALLET
-    // -----------------------------
     this.provider = new ethers.JsonRpcProvider(appConfig.EVM_RPC_URL);
 
     if (!appConfig.MASTER_MNEMONIC) {
       throw new Error("MASTER_MNEMONIC is missing in .env");
     }
+
     this.conn = new Connection(appConfig.SOL_RPC_URL, "confirmed");
     this.hdSol = new SolHDWallet(appConfig.SOL_MASTER_MNEMONIC);
     this.hdTRX = new TronHDWallet(appConfig.TRX_MASTER_MNEMONIC);
-    this.tronWeb = this.hdTRX.getTronWebInstance()
+    this.tronWeb = this.hdTRX.getTronWebInstance();
+  }
+
+  // -----------------------------
+  // INIT HDWallet (async)
+  // -----------------------------
+  private async initHDWallet() {
+    if (!this.hd) {
+      this.hd = await HDWallet.fromMnemonic(appConfig.MASTER_MNEMONIC);
+    }
   }
 
   // -----------------------------
   // HELPER: signer
   // -----------------------------
-
-  async init() {
-    this.hd = await HDWallet.fromMnemonic(appConfig.MASTER_MNEMONIC);
-  }
-
   private getSigner(): ethers.Wallet {
     return new ethers.Wallet(appConfig.ETH_PRIVATE_KEY, this.provider);
   }
@@ -74,31 +82,20 @@ export class Web3Service {
   // CREATE HD WALLET FOR USER
   // -----------------------------
   async createWallet(req, payload: any) {
-    try {
-      if (!this.hd) {
-        await this.init(); // ensure hd wallet is ready
-      }
+    await this.initHDWallet(); // ensure hd wallet is ready
 
+    try {
       const userId = payload.id.toString();
 
-      // Each user gets a derived child wallet
       const childWallet = this.hd.getChildWallet(userId, this.provider);
       const solChildWallet = this.hdSol.deriveKeypair(userId).publicKey.toBase58();
       const tronChildWallet = this.hdTRX.getChildAddress(userId);
 
-      const existWallet = await this.walletRepository.findOne({
-        where: { wallet_address: childWallet.address },
-      });
-      const existWalletSOL = await this.walletRepository.findOne({
-        where: { wallet_address: solChildWallet },
-      });
+      const existWalletETH = await this.walletRepository.findOne({ where: { wallet_address: childWallet.address } });
+      const existWalletSOL = await this.walletRepository.findOne({ where: { wallet_address: solChildWallet } });
+      const existWalletTRX = await this.walletRepository.findOne({ where: { wallet_address: tronChildWallet } });
 
-      const existWalletTRX = await this.walletRepository.findOne({
-        where: { wallet_address: tronChildWallet },
-      });
-
-      // Save to DB
-      if (!existWallet) {
+      if (!existWalletETH) {
         const base = this.walletRepository.create({
           user: req.user,
           network: "Base",
@@ -109,30 +106,29 @@ export class Web3Service {
       }
 
       if (!existWalletSOL) {
-        const SOL = this.walletRepository.create({
+        const sol = this.walletRepository.create({
           user: req.user,
           network: "SOLANA",
           currency: "SOL",
           wallet_address: solChildWallet
         });
-        await this.walletRepository.save(SOL);
+        await this.walletRepository.save(sol);
       }
 
       if (!existWalletTRX) {
-        const TRX = this.walletRepository.create({
+        const trx = this.walletRepository.create({
           user: req.user,
           network: "TRON",
           currency: "TRX",
           wallet_address: tronChildWallet
         });
-        await this.walletRepository.save(TRX);
+        await this.walletRepository.save(trx);
       }
 
       return {
         eth: childWallet.address,
         sol: solChildWallet,
         trx: tronChildWallet
-
       };
     } catch (err: any) {
       console.error(err);
@@ -175,10 +171,10 @@ export class Web3Service {
   }
 
   // -----------------------------
-  // GET BALANCES
+  // GET TOKEN BALANCES
   // -----------------------------
-  // ERC20 / BEP20 Token balances
   private async getTokenBalanceETH(tokenAddress: string, decimals = 18): Promise<number> {
+    await this.initHDWallet();
     const masterAddress = this.hd.getMasterWallet(this.provider).address;
     if (!tokenAddress) return 0;
 
@@ -192,42 +188,40 @@ export class Web3Service {
     return Number(formatUnits(balance, decimals));
   }
 
-  // TRC20 token balance
   private async getTokenBalanceTRX(tokenAddress: string): Promise<number> {
     if (!tokenAddress) return 0;
     const master = this.hdTRX.getMasterWallet().address;
     const contract = await this.tronWeb.contract().at(tokenAddress);
     const balance = await contract.balanceOf(master).call();
-    return Number(balance) / 1e6; // TRC20 usually 6 decimals
+    return Number(balance) / 1e6;
   }
 
-  // SPL token balance
   private async getTokenBalanceSOL(tokenMint: PublicKey, owner: PublicKey): Promise<number> {
     try {
       const tokenAddr = await getAssociatedTokenAddress(tokenMint, owner);
       const tokenAcc = await getAccount(this.conn, tokenAddr);
-      return Number(tokenAcc.amount) / 1e6; // USDC/USDT usually 6 decimals
-    } catch (err) {
-      // If the account doesn't exist yet, treat balance as 0
+      return Number(tokenAcc.amount) / 1e6;
+    } catch {
       return 0;
     }
   }
 
-  // Main function to get all balances
+  // -----------------------------
+  // GET ALL BALANCES
+  // -----------------------------
   async getAllBalances() {
+    await this.initHDWallet();
+
     try {
-      // --- ETH-like / Base ---
-      // --- ETH/Base ---
       const masterETH = this.hd.getMasterWallet(this.provider).address;
       const ethBalance = Number(formatUnits(await this.provider.getBalance(masterETH), 18));
       const usdtBalance = await this.getTokenBalanceETH("0xdAC17F958D2ee523a2206206994597C13D831ec7", 6);
       const bnbBalance = await this.getTokenBalanceETH("0xBB4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c", 18);
-      // --- TRON ---
+
       const masterTRX = this.hdTRX.getMasterWallet().address;
       const trxBalance = (await this.tronWeb.trx.getBalance(masterTRX)) / 1e6;
       const trxUSDTBalance = await this.getTokenBalanceTRX("TXLAQ63Xg1NAzckPwKHvzw7CSEmLMEqcdj");
 
-      // --- Solana ---
       const masterSOL = this.hdSol.getMasterKeypair().publicKey;
       const solBalance = (await this.conn.getBalance(masterSOL)) / LAMPORTS_PER_SOL;
       const solUSDCBalance = await this.getTokenBalanceSOL(
@@ -242,7 +236,6 @@ export class Web3Service {
       return {
         ETH: ethBalance,
         BNB: bnbBalance,
-        // USDC: usdcBalance,
         USDT: usdtBalance,
         TRX: trxBalance,
         TRX_USDT: trxUSDTBalance,
@@ -254,8 +247,9 @@ export class Web3Service {
       throw new BadRequestException(err.message || "Failed to fetch balances");
     }
   }
+
   // -----------------------------
-  // GET TRANSACTIONS
+  // GET RECENT TRANSACTIONS
   // -----------------------------
   async getRecentTransactions() {
     try {
