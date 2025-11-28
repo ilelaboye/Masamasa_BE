@@ -1,30 +1,24 @@
 import { ethers, hexlify } from "ethers";
-import * as bip39 from "bip39";
+// CommonJS require
+const bip39 = require("bip39");
+const ecc = require('tiny-secp256k1')
+const { BIP32Factory } = require('bip32')
+// You must wrap a tiny-secp256k1 compatible implementation
+const bip32 = BIP32Factory(ecc)
 
 const DERIVATION_PATH = "m/44'/60'/0'/0";
 
-let HDKey: any;
-
-/**
- * Dynamically import @scure/bip32 (ESM only)
- */
-async function loadHDKey() {
-  if (!HDKey) {
-    const bip32 = await import("@scure/bip32");
-    HDKey = bip32.HDKey;
-  }
-  return HDKey;
-}
-
 export class HDWallet {
   private root: any;
+  private mnemonic: string;
 
-  private constructor(private mnemonic: string, root: any) {
+  private constructor(mnemonic: string, root: any) {
+    this.mnemonic = mnemonic;
     this.root = root;
   }
 
   /**
-   * Factory method to create HDWallet instance
+   * Create HDWallet instance from mnemonic
    */
   static async fromMnemonic(mnemonic: string): Promise<HDWallet> {
     if (!bip39.validateMnemonic(mnemonic)) {
@@ -32,17 +26,16 @@ export class HDWallet {
     }
 
     const seed = bip39.mnemonicToSeedSync(mnemonic);
-    const HDKeyModule = await loadHDKey();
-    const root = HDKeyModule.fromMasterSeed(seed);
+    const root = bip32.fromSeed(seed);
 
     return new HDWallet(mnemonic, root);
   }
 
   /**
-   * Master wallet (index 0)
+   * Get master wallet (index 0)
    */
   getMasterWallet(provider: ethers.JsonRpcProvider) {
-    const child = this.root.derive(`${DERIVATION_PATH}/0`);
+    const child = this.root.derivePath(`${DERIVATION_PATH}/0`);
     if (!child.privateKey) throw new Error("No private key derived");
 
     const privateKey = hexlify(child.privateKey);
@@ -50,10 +43,10 @@ export class HDWallet {
   }
 
   /**
-   * Child wallet at a specific index
+   * Get a child wallet at a specific index
    */
   getChildWallet(index: number, provider: ethers.JsonRpcProvider) {
-    const child = this.root.derive(`${DERIVATION_PATH}/${index}`);
+    const child = this.root.derivePath(`${DERIVATION_PATH}/${index}`);
     if (!child.privateKey) throw new Error("No private key derived");
 
     const privateKey = hexlify(child.privateKey);
@@ -70,31 +63,7 @@ export class HDWallet {
   /**
    * Sweep funds from a child wallet to master address
    */
-  async sweep(child: any, masterAddress: string) {
-    const balance = await child.wallet.getBalance();
+  async sweep(child: { wallet: ethers.Wallet }, masterAddress: string) {
 
-    if (balance.eq(0)) {
-      return { success: false, message: "Zero balance" };
-    }
-
-    const gasPrice = await child.wallet.provider.getGasPrice();
-    const gasLimit = 21000;
-    const gasCost = gasPrice.mul(gasLimit);
-
-    const value = balance.sub(gasCost);
-    if (value.lte(0)) {
-      return { success: false, message: "Not enough for gas" };
-    }
-
-    const tx = await child.wallet.sendTransaction({
-      to: masterAddress,
-      value,
-      gasLimit,
-      gasPrice,
-    });
-
-    await tx.wait();
-
-    return { success: true, txHash: tx.hash };
   }
-}
+  }
