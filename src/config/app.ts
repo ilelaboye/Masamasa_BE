@@ -69,6 +69,7 @@ export const appConfig = {
   MASTER_MNEMONIC: "glue bicycle alien lamp practice head undo tool peace price wrestle street",
   SOL_MASTER_MNEMONIC: "trouble test waste exercise airport pepper frown umbrella trip erupt teach win",
   TRX_MASTER_MNEMONIC: "gift apology cloth barely pair memory dial when neither decrease expand unusual",
+  ADA_MASTER_MNEMONIC: "wet fat great food armor legal stage blame distance twist fiber style distance yard wheel cliff ladder announce food mandate unfair glide hope struggle",
   EVM_RPC_URL: "https://bsc-dataseed.binance.org/",
   SOL_RPC_URL: "https://api.mainnet-beta.solana.com",
   TRX_API_KEY: "d12ff04b-0531-4af7-8135-42ea27952387",
