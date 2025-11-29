@@ -16,6 +16,8 @@ import { HDWallet } from "./hd-wallet";
 import { TronHDWallet } from "./tron-hd-wallet";
 import { SolHDWallet } from "./sol-hd-wallet";
 import { getAssociatedTokenAddress, getAccount } from "@solana/spl-token";
+import { Bip32PrivateKey } from "@emurgo/cardano-serialization-lib-nodejs";
+import { CardanoHDWallet } from "./ada-hd-wallet";
 
 const TronWeb = require("tronweb");
 
@@ -38,7 +40,7 @@ export class Web3Service {
   private hdSol: SolHDWallet;
   private hdTRX: TronHDWallet;
   private tronWeb: any;
-
+  private hdADA: CardanoHDWallet;
   constructor(
     @InjectRepository(Wallet)
     private readonly walletRepository: Repository<Wallet>
@@ -53,6 +55,7 @@ export class Web3Service {
     this.hdSol = new SolHDWallet(appConfig.SOL_MASTER_MNEMONIC);
     this.hdTRX = new TronHDWallet(appConfig.TRX_MASTER_MNEMONIC);
     this.tronWeb = this.hdTRX.getTronWebInstance();
+    this.hdADA = new CardanoHDWallet(appConfig.ADA_MASTER_MNEMONIC);
   }
 
   // -----------------------------
@@ -94,6 +97,20 @@ export class Web3Service {
       const existWalletETH = await this.walletRepository.findOne({ where: { wallet_address: childWallet.address } });
       const existWalletSOL = await this.walletRepository.findOne({ where: { wallet_address: solChildWallet } });
       const existWalletTRX = await this.walletRepository.findOne({ where: { wallet_address: tronChildWallet } });
+      const cardanoChild = this.hdADA.generateAddress(userId, true);
+      const existWalletADA = await this.walletRepository.findOne({
+        where: { wallet_address: cardanoChild }
+      });
+
+      if (!existWalletADA) {
+        const ada = this.walletRepository.create({
+          user: req.user,
+          network: "CARDANO",
+          currency: "ADA",
+          wallet_address: cardanoChild
+        });
+        await this.walletRepository.save(ada);
+      }
 
       if (!existWalletETH) {
         const base = this.walletRepository.create({
@@ -128,7 +145,8 @@ export class Web3Service {
       return {
         eth: childWallet.address,
         sol: solChildWallet,
-        trx: tronChildWallet
+        trx: tronChildWallet,
+        ada: cardanoChild
       };
     } catch (err: any) {
       console.error(err);
