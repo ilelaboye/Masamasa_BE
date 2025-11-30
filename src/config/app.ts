@@ -66,13 +66,13 @@ export const appConfig = {
   CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME ?? "dtvin0cxo",
 
   // seed phrase for HD wallet
-  MASTER_MNEMONIC: "glue bicycle alien lamp practice head undo tool peace price wrestle street",
-  SOL_MASTER_MNEMONIC: "trouble test waste exercise airport pepper frown umbrella trip erupt teach win",
-  TRX_MASTER_MNEMONIC: "gift apology cloth barely pair memory dial when neither decrease expand unusual",
-  ADA_MASTER_MNEMONIC: "wet fat great food armor legal stage blame distance twist fiber style distance yard wheel cliff ladder announce food mandate unfair glide hope struggle",
+  MASTER_MNEMONIC: process.env.MASTER_MNEMONIC,
+  SOL_MASTER_MNEMONIC: process.env.SOL_MASTER_MNEMONIC ,
+  TRX_MASTER_MNEMONIC: process.env.TRX_MASTER_MNEMONIC,
+  ADA_MASTER_MNEMONIC: process.env.ADA_MASTER_MNEMONIC,
   EVM_RPC_URL: "https://bsc-dataseed.binance.org/",
+  BASE_RPC_URL: "https://base-mainnet.public.blastapi.io",
   SOL_RPC_URL: "https://api.mainnet-beta.solana.com",
-  TRX_API_KEY: "d12ff04b-0531-4af7-8135-42ea27952387",
-  ETH_PRIVATE_KEY: process.env.PRIVATE_KEY ?? "5198857d08edc8e8d2708b34b659511f6a5f51587b66c43e424a97a3bb978796",
-
+  TRX_API_KEY: process.env.TRX_API_KEY,
+  ETH_PRIVATE_KEY: process.env.PRIVATE_KEY,
 };
