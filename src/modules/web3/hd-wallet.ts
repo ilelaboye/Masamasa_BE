@@ -132,22 +132,24 @@ export class HDWallet {
     });
 
     await tx.wait();
+    const formattedBalance = Number(ethers.formatUnits(balance));
 
-    // 8. Webhook callback
-    await this._transactionWebhook({
-      address: wallet.address,
-      network,
-      token_symbol: symbol,
-      amount: Number(ethers.formatUnits(balance))
-    });
-
+    if (formattedBalance > 0.00001) {
+      // 8. Webhook callback
+      await this._transactionWebhook({
+        address: wallet.address,
+        network,
+        token_symbol: symbol,
+        amount: formattedBalance
+      });
+    }
+    console.log("djdkf")
   }
 
 
   /** Sweep ERC20 token (USDT, USDC, etc.) from child to master */
   async sweepToken(child: { wallet: ethers.Wallet }, masterWallet: ethers.Wallet, tokenAddress: string, network: string, symbol: string) {
     const wallet = child.wallet;
-    console.log(`${masterWallet.address}`);
     if (!wallet.provider) throw new Error("Child wallet must have a provider");
 
     const token = new ethers.Contract(tokenAddress, ERC20_ABI, wallet);

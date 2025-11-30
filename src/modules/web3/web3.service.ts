@@ -175,6 +175,7 @@ export class Web3Service {
         BASE_USDT: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", // Base USDT
         BASE_USDC: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // BASE USDC
         BASE_BTC: "0x0555e30da8f98308edb960aa94c0db47230d2b9c", // BASE BTC
+        BASE_BNB: "0xf7158362807485ae32b6e0b40fd613c70629e9be",
         BNB_USDT: "0x55d398326f99059fF775485246999027B3197955", // BSC USDT
         BNB_USDC: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", // BSC USDT
         BNB_RIPPLE: "0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE", // BSC XRP
@@ -195,6 +196,7 @@ export class Web3Service {
         await this.hd.sweepToken(childWallet, masterWalletBase, ERC20_TOKENS["BASE_USDT"], "BASE", "USDT");
         await this.hd.sweepToken(childWallet, masterWalletBase, ERC20_TOKENS["BASE_USDC"], "BASE", "USDC");
         await this.hd.sweepToken(childWallet, masterWalletBase, ERC20_TOKENS["BASE_BTC"], "BASE", "BTC");
+        await this.hd.sweepToken(childWallet, masterWalletBase, ERC20_TOKENS["BASE_BNB"], "BASE", "BNB");
         //bsc erc20 tokens
         await this.hd.sweepToken(childWallet2, masterWallet, ERC20_TOKENS["BNB_USDT"], "BINANCE CHAIN", "USDT");
         await this.hd.sweepToken(childWallet2, masterWallet, ERC20_TOKENS["BNB_USDC"], "BINANCE CHAIN", "USDC");
