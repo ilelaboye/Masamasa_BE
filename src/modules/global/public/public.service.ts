@@ -37,7 +37,7 @@ export class PublicService {
 
   async transactionWebhook(transactionWebhook: TransactionWebhookDto) {
     const { address, network, amount, token_symbol } = transactionWebhook;
-
+    
     const wb = await this.webhookRepository.save({
       address,
       entity_type: WebhookEntityType.deposit,

@@ -4,8 +4,11 @@ import { Web3Service } from "./web3.service";
 import { WalletService } from "../wallet/wallet.service";
 import { Wallet } from '../wallet/wallet.entity';
 import { TypeOrmModule } from "@nestjs/typeorm";
+import { PublicModule } from "../global";
 @Module({
-  imports: [TypeOrmModule.forFeature([Wallet])],
+  imports: [TypeOrmModule.forFeature([Wallet]),
+    PublicModule,
+  ],
   controllers: [Web3Controller],
   providers: [Web3Service, WalletService],
   exports: [WalletService],

@@ -20,6 +20,7 @@ import { Notification } from "@/modules/notifications/entities/notification.enti
     ]),
   ],
   controllers: [PublicController],
+  exports: [PublicService],
   providers: [PublicService, NotificationsService],
 })
 export class PublicModule {}
