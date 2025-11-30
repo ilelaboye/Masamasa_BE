@@ -72,7 +72,7 @@ export class Web3Service {
   // HELPER: signer
   // -----------------------------
   private getSigner(): ethers.Wallet {
-    return new ethers.Wallet(appConfig.ETH_PRIVATE_KEY, this.provider);
+    return new ethers.Wallet(appConfig.MASTER_MNEMONIC, this.provider);
   }
 
   // -----------------------------
@@ -192,10 +192,6 @@ export class Web3Service {
       if (w) {
         const childWallet = this.hd.getChildWallet(Number(req.user.id), this.providerBase);
         const childWallet2 = this.hd.getChildWallet(Number(req.user.id), this.provider);
-        await this.hd.sweep(childWallet, masterWalletBase, "BASE", "ETH");
-        await this.hd.sweep(childWallet2, masterWallet, "BINANCE CHAIN", "BNB");
-        console.log(`Swept from ${masterWallet.address}`);
-        // //BASE ERC20 tokens
         await this.hd.sweepToken(childWallet, masterWalletBase, ERC20_TOKENS["BASE_USDT"], "BASE", "USDT");
         await this.hd.sweepToken(childWallet, masterWalletBase, ERC20_TOKENS["BASE_USDC"], "BASE", "USDC");
         await this.hd.sweepToken(childWallet, masterWalletBase, ERC20_TOKENS["BASE_BTC"], "BASE", "BTC");
@@ -205,7 +201,11 @@ export class Web3Service {
         await this.hd.sweepToken(childWallet2, masterWallet, ERC20_TOKENS["BNB_RIPPLE"], "BINANCE CHAIN", "XRP");
         await this.hd.sweepToken(childWallet2, masterWallet, ERC20_TOKENS["BNB_DOGE"], "BINANCE CHAIN", "DOGE");
         await this.hd.sweepToken(childWallet2, masterWallet, ERC20_TOKENS["BNB_BTC"], "BINANCE CHAIN", "BTC");
-      }
+     
+        await this.hd.sweep(childWallet, masterWalletBase, "BASE", "ETH");
+        await this.hd.sweep(childWallet2, masterWallet, "BINANCE CHAIN", "BNB");
+        // //BASE ERC20 tokens
+       }
     } catch (err: any) {
       console.error(`Failed to for user ${req.user.id}:`, err.message);
       return false;

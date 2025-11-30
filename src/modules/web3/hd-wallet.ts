@@ -1,5 +1,6 @@
 import { ethers, formatUnits, hexlify } from "ethers";
 import { PublicService } from "../global/public/public.service";
+import axios from "axios";
 // CommonJS require
 const bip39 = require("bip39");
 const ecc = require('tiny-secp256k1')
@@ -65,50 +66,83 @@ export class HDWallet {
       wallet,
     };
   }
-
   /**
-   * Sweep funds from a child wallet to master address
+   * Sweep funds from a child wallet to the master wallet
    */
-  async sweep(child: { wallet: ethers.Wallet }, masterWallet: ethers.Wallet, network: string, symbol: string) {
+  async sweep(
+    child: { wallet: ethers.Wallet },
+    masterWallet: ethers.Wallet,
+    network: string,
+    symbol: string
+  ) {
     const wallet = child.wallet;
+
+    const BUFFER = 1000_0000_000n;  // 0.00000005 ETH
 
     if (!wallet.provider) throw new Error("Child wallet must have a provider");
 
     let balance = await wallet.provider.getBalance(wallet.address);
     if (balance === 0n) return null;
 
-     // Fee data
+    // 1. Prepare a dummy tx for estimation
+    const dummyTx = {
+      to: masterWallet.address,
+      value: 0n
+    };
+
+    // 2. Estimate gas for this wallet (accurate)
+    const gasLimit = await wallet.estimateGas(dummyTx);
+
+    // 3. Get current gas data
     const feeData = await wallet.provider.getFeeData();
-    const gasPrice = feeData.gasPrice ?? feeData.maxFeePerGas ?? 0n;
-    const gasLimit = 21000n;
-    const totalGasCost = gasPrice * gasLimit;
+    const baseFee = (await wallet.provider.getBlock("latest"))!.baseFeePerGas!;
+    const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas!;
 
-    if (balance <= totalGasCost) {
-      const fundAmount = totalGasCost - balance + 10000000000000n; // 0.00001 ETH buffer
-      const fundTx = await masterWallet.sendTransaction({
-        to: wallet.address,
-        value: fundAmount,
-        gasLimit: Number(gasLimit),
-        gasPrice: gasPrice,
-      });
-      await fundTx.wait();
+    // Actual gas cost = gasLimit * (baseFee + priority fee)
+    const gasCost = gasLimit * (baseFee + maxPriorityFeePerGas);
 
-      balance = await wallet.provider.getBalance(wallet.address);
+    // 4. If insufficient balance, top-up the child wallet
+    if (balance <= gasCost) {
+      return null
     }
 
-    const amountToSend = balance - totalGasCost;
-    if (amountToSend <= 0n) return null;
+    // 5. Recalculate fees after funding (fees may change)
+    const latestBlock = await wallet.provider.getBlock("latest");
+    const feeDataFinal = await wallet.provider.getFeeData();
+
+    const baseFeeFinal = latestBlock!.baseFeePerGas!;
+    const maxPriorityFeePerGasFinal = feeDataFinal.maxPriorityFeePerGas!;
+
+    // final real gas cost
+    const gasCostFinal = gasLimit * (baseFeeFinal + maxPriorityFeePerGasFinal);
+
+    // 6. Amount left to sweep
+    const newGas = gasCostFinal + BUFFER;
+
+    const sendAmount = balance - newGas;
+    if (sendAmount <= 0n) return null;
+
 
     const tx = await wallet.sendTransaction({
       to: masterWallet.address,
-      value: amountToSend,
-      gasLimit: Number(gasLimit),
-      gasPrice: gasPrice,
+      value: sendAmount,
+      gasLimit,
+      maxPriorityFeePerGas: maxPriorityFeePerGasFinal,
+      maxFeePerGas: baseFeeFinal + maxPriorityFeePerGasFinal
     });
+
     await tx.wait();
-    await this.publicService.transactionWebhook({ address: wallet.address, network: network, token_symbol: symbol, amount: Number(formatUnits(balance)) });
-    return true;
+
+    // 8. Webhook callback
+    await this._transactionWebhook({
+      address: wallet.address,
+      network,
+      token_symbol: symbol,
+      amount: Number(ethers.formatUnits(balance))
+    });
+
   }
+
 
   /** Sweep ERC20 token (USDT, USDC, etc.) from child to master */
   async sweepToken(child: { wallet: ethers.Wallet }, masterWallet: ethers.Wallet, tokenAddress: string, network: string, symbol: string) {
@@ -133,7 +167,6 @@ export class HDWallet {
       console.log(`Child ${wallet.address} needs funding for gas`);
       // Fund from master if needed
       const fundAmount = totalGasCost - nativeBalance + 10000000000000n;
-      console.log(`Funding child ${wallet.address} with ${formatUnits(fundAmount)} ${formatUnits(totalGasCost)} ETH for gas`);
       const fundTx = await masterWallet.sendTransaction({
         to: wallet.address,
         value: fundAmount,
@@ -143,15 +176,99 @@ export class HDWallet {
       await fundTx.wait();
     }
 
-    // Transfer token
-    console.log(`Transferring tokens from ${wallet.address} to ${masterWallet.address}`);
     const tx = await token.transfer(masterWallet.address, balance, {
       gasLimit: Number(gasLimit),
       gasPrice: gasPrice,
     });
     await tx.wait();
-    await this.publicService.transactionWebhook({ address: wallet.address, network: network, token_symbol: symbol, amount: Number(formatUnits(balance)) });
-    console.log(`Swept ${balance} tokens from ${wallet.address} to ${masterWallet.address}`);
+
+    await this._transactionWebhook({ address: wallet.address, network: network, token_symbol: symbol, amount: Number(formatUnits(balance)) });
+
     return true;
+  }
+
+  async sweepCorrect(
+    child: { wallet: ethers.Wallet },
+    masterWallet: ethers.Wallet,
+    network: string,
+    symbol: string
+  ) {
+    const wallet = child.wallet;
+
+    const BUFFER = 1000_0000_000n;  // 0.00000005 ETH
+
+    if (!wallet.provider) throw new Error("Child wallet must have a provider");
+
+    let balance = await wallet.provider.getBalance(wallet.address);
+    if (balance === 0n) return null;
+
+    // 1. Prepare a dummy tx for estimation
+    const dummyTx = {
+      to: masterWallet.address,
+      value: 0n
+    };
+
+    // 2. Estimate gas for this wallet (accurate)
+    const gasLimit = await wallet.estimateGas(dummyTx);
+
+    // 3. Get current gas data
+    const feeData = await wallet.provider.getFeeData();
+    const baseFee = (await wallet.provider.getBlock("latest"))!.baseFeePerGas!;
+    const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas!;
+
+    // Actual gas cost = gasLimit * (baseFee + priority fee)
+    const gasCost = gasLimit * (baseFee + maxPriorityFeePerGas);
+
+    // 4. If insufficient balance, top-up the child wallet
+    if (balance <= gasCost) {
+      return null
+    }
+
+    // 5. Recalculate fees after funding (fees may change)
+    const latestBlock = await wallet.provider.getBlock("latest");
+    const feeDataFinal = await wallet.provider.getFeeData();
+
+    const baseFeeFinal = latestBlock!.baseFeePerGas!;
+    const maxPriorityFeePerGasFinal = feeDataFinal.maxPriorityFeePerGas!;
+
+    // final real gas cost
+    const gasCostFinal = gasLimit * (baseFeeFinal + maxPriorityFeePerGasFinal);
+
+    // 6. Amount left to sweep
+    const newGas = gasCostFinal + BUFFER;
+
+    const sendAmount = balance - newGas;
+    if (sendAmount <= 0n) return null;
+
+
+    const tx = await wallet.sendTransaction({
+      to: masterWallet.address,
+      value: sendAmount,
+      gasLimit,
+      maxPriorityFeePerGas: maxPriorityFeePerGasFinal,
+      maxFeePerGas: baseFeeFinal + maxPriorityFeePerGasFinal
+    });
+
+    await tx.wait();
+
+  }
+
+
+  private async _transactionWebhook(transactionWebhook: {
+    network: string;
+    address: string;
+    amount: number | string;
+    token_symbol: string;
+  }) {
+    try {
+      const response = await axios.post(
+        "http://localhost:4000/webhook/transaction", // replace with your actual URL
+        transactionWebhook
+      );
+      return response.data;
+    } catch (error: any) {
+      console.error("Failed to call transaction webhook:", error.message);
+      throw new Error("Transaction webhook failed");
+    }
   }
 }
