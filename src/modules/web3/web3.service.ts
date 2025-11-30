@@ -16,6 +16,8 @@ import { HDWallet } from "./hd-wallet";
 import { TronHDWallet } from "./tron-hd-wallet";
 import { SolHDWallet } from "./sol-hd-wallet";
 import { getAssociatedTokenAddress, getAccount } from "@solana/spl-token";
+import { Bip32PrivateKey } from "@emurgo/cardano-serialization-lib-nodejs";
+import { CardanoHDWallet } from "./ada-hd-wallet";
 
 const TronWeb = require("tronweb");
 
@@ -34,17 +36,18 @@ const walletManagerAbi = [
 export class Web3Service {
   private hd!: HDWallet;
   private provider: ethers.JsonRpcProvider;
+  private providerBase: ethers.JsonRpcProvider;
   private conn: Connection;
   private hdSol: SolHDWallet;
   private hdTRX: TronHDWallet;
   private tronWeb: any;
-
+  private hdADA: CardanoHDWallet;
   constructor(
     @InjectRepository(Wallet)
     private readonly walletRepository: Repository<Wallet>
   ) {
     this.provider = new ethers.JsonRpcProvider(appConfig.EVM_RPC_URL);
-
+    this.providerBase = new ethers.JsonRpcProvider(appConfig.BASE_RPC_URL);
     if (!appConfig.MASTER_MNEMONIC) {
       throw new Error("MASTER_MNEMONIC is missing in .env");
     }
@@ -53,6 +56,7 @@ export class Web3Service {
     this.hdSol = new SolHDWallet(appConfig.SOL_MASTER_MNEMONIC);
     this.hdTRX = new TronHDWallet(appConfig.TRX_MASTER_MNEMONIC);
     this.tronWeb = this.hdTRX.getTronWebInstance();
+    this.hdADA = new CardanoHDWallet(appConfig.ADA_MASTER_MNEMONIC);
   }
 
   // -----------------------------
@@ -94,6 +98,20 @@ export class Web3Service {
       const existWalletETH = await this.walletRepository.findOne({ where: { wallet_address: childWallet.address } });
       const existWalletSOL = await this.walletRepository.findOne({ where: { wallet_address: solChildWallet } });
       const existWalletTRX = await this.walletRepository.findOne({ where: { wallet_address: tronChildWallet } });
+      const cardanoChild = this.hdADA.generateAddress(userId, true);
+      const existWalletADA = await this.walletRepository.findOne({
+        where: { wallet_address: cardanoChild }
+      });
+
+      if (!existWalletADA) {
+        const ada = this.walletRepository.create({
+          user: req.user,
+          network: "CARDANO",
+          currency: "ADA",
+          wallet_address: cardanoChild
+        });
+        await this.walletRepository.save(ada);
+      }
 
       if (!existWalletETH) {
         const base = this.walletRepository.create({
@@ -128,12 +146,73 @@ export class Web3Service {
       return {
         eth: childWallet.address,
         sol: solChildWallet,
-        trx: tronChildWallet
+        trx: tronChildWallet,
+        ada: cardanoChild
       };
     } catch (err: any) {
       console.error(err);
       throw new BadRequestException("Wallet creation failed");
     }
+  }
+
+  //----------------------------
+  //SWEEP
+  // -----------------------------
+
+  // -----------------------------
+  // SWEEP ALL CHILD WALLETS
+  // -----------------------------
+  async sweepWallets(req) {
+    await this.initHDWallet();
+    const masterWalletBase = this.hd.getMasterWallet(this.providerBase);
+    const masterWallet = this.hd.getMasterWallet(this.provider);
+    // Fetch the user's wallet
+    const w = await this.walletRepository.findOne({ where: { user: req.user.id } });
+    if (!w) return false;
+
+    try {
+      const ERC20_TOKENS: Record<string, string> = {
+        BASE_USDT: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", // Base USDT
+        BASE_USDC: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // BASE USDC
+        BASE_BTC: "0x0555e30da8f98308edb960aa94c0db47230d2b9c", // BASE BTC
+        BNB_USDT: "0x55d398326f99059fF775485246999027B3197955", // BSC USDT
+        BNB_USDC: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", // BSC USDT
+        BNB_RIPPLE: "0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE", // BSC XRP
+        BNB_DOGE: "0xbA2aE424d960c26247Dd6c32edC70B295c744C43", // BSC DOGE
+        BNB_BTC: "0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c", // BSC BTC
+        SOL_USDT: "Es9vMFrzaCERn8X3jPbU9Uq5o1T2yD8KK3FWrHQXgk2",
+        SOL_USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        TRON_USDT: "TXLAQ63Xg1NAzckPwKHvzw7CSEmLMEqcdj"
+        // Add Base USDT/USDC addresses here if needed
+      };
+
+      // -----------------------------
+      // BASE and BSC
+      // -----------------------------
+      if (w) {
+        const childWallet = this.hd.getChildWallet(Number(req.user.id), this.providerBase);
+        const childWallet2 = this.hd.getChildWallet(Number(req.user.id), this.provider);
+        await this.hd.sweep(childWallet, masterWalletBase, "BASE", "ETH");
+        await this.hd.sweep(childWallet2, masterWallet, "BINANCE CHAIN", "BNB");
+        console.log(`Swept from ${masterWallet.address}`);
+        // //BASE ERC20 tokens
+        await this.hd.sweepToken(childWallet, masterWalletBase, ERC20_TOKENS["BASE_USDT"], "BASE", "USDT");
+        await this.hd.sweepToken(childWallet, masterWalletBase, ERC20_TOKENS["BASE_USDC"], "BASE", "USDC");
+        await this.hd.sweepToken(childWallet, masterWalletBase, ERC20_TOKENS["BASE_BTC"], "BASE", "BTC");
+        //bsc erc20 tokens
+        await this.hd.sweepToken(childWallet2, masterWallet, ERC20_TOKENS["BNB_USDT"], "BINANCE CHAIN", "USDT");
+        await this.hd.sweepToken(childWallet2, masterWallet, ERC20_TOKENS["BNB_USDC"], "BINANCE CHAIN", "USDC");
+        await this.hd.sweepToken(childWallet2, masterWallet, ERC20_TOKENS["BNB_RIPPLE"], "BINANCE CHAIN", "XRP");
+        await this.hd.sweepToken(childWallet2, masterWallet, ERC20_TOKENS["BNB_DOGE"], "BINANCE CHAIN", "DOGE");
+        await this.hd.sweepToken(childWallet2, masterWallet, ERC20_TOKENS["BNB_BTC"], "BINANCE CHAIN", "BTC");
+      }
+    } catch (err: any) {
+      console.error(`Failed to for user ${req.user.id}:`, err.message);
+      return false;
+    }
+
+    console.log("Sweep completed for user", req.user.id);
+    return true;
   }
 
   // -----------------------------
