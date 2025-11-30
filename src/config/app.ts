@@ -73,6 +73,5 @@ export const appConfig = {
   EVM_RPC_URL: "https://bsc-dataseed.binance.org/",
   BASE_RPC_URL: "https://base-mainnet.public.blastapi.io",
   SOL_RPC_URL: "https://api.mainnet-beta.solana.com",
-  TRX_API_KEY: process.env.TRX_API_KEY ?? "",
-  ETH_PRIVATE_KEY: process.env.PRIVATE_KEY?? "",
+  TRX_API_KEY: process.env.TRX_API_KEY ?? ""
 };
