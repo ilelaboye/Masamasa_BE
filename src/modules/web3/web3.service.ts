@@ -72,7 +72,7 @@ export class Web3Service {
   // HELPER: signer
   // -----------------------------
   private getSigner(): ethers.Wallet {
-    return new ethers.Wallet(appConfig.ETH_PRIVATE_KEY, this.provider);
+    return new ethers.Wallet(appConfig.MASTER_MNEMONIC, this.provider);
   }
 
   // -----------------------------
