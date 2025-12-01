@@ -189,7 +189,7 @@ export class Web3Service {
         SOL_USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
         TRON_USDT: "TXLAQ63Xg1NAzckPwKHvzw7CSEmLMEqcdj"
         // Add Base USDT/USDC addresses here if needed
-        
+
       };
 
       // -----------------------------
@@ -209,10 +209,7 @@ export class Web3Service {
         await this.hd.sweepToken(childWallet2, masterWallet, ERC20_TOKENS["BNB_RIPPLE"], "BINANCE CHAIN", "XRP");
         await this.hd.sweepToken(childWallet2, masterWallet, ERC20_TOKENS["BNB_DOGE"], "BINANCE CHAIN", "DOGE");
         await this.hd.sweepToken(childWallet2, masterWallet, ERC20_TOKENS["BNB_BTC"], "BINANCE CHAIN", "BTC");
-      
-        // trc20
-        await this.hdTRX.sweepTRC20(childWallet3, masterWalletTron, "https://api.trongrid.io", ERC20_TOKENS["TRON_USDT"])
-      
+
         try {
           await this.hd.sweep(childWallet, masterWalletBase, "BASE", "ETH");
         } catch (e) {
@@ -223,7 +220,10 @@ export class Web3Service {
         } catch (e) {
           console.log(e)
         } // //BASE ERC20 tokens
-   
+
+        // trc20
+        await this.hdTRX.sweepTRC20(childWallet3, masterWalletTron, "https://api.trongrid.io", ERC20_TOKENS["TRON_USDT"])
+
         await this.hdTRX.sweepTRON(childWallet3, masterWalletTron.address, "https://api.trongrid.io");
 
       }
