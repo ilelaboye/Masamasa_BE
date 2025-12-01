@@ -166,6 +166,10 @@ export class Web3Service {
     await this.initHDWallet();
     const masterWalletBase = this.hd.getMasterWallet(this.providerBase);
     const masterWallet = this.hd.getMasterWallet(this.provider);
+
+    const masterWalletTron = this.hdTRX.getMasterWallet();
+
+
     // Fetch the user's wallet
     const w = await this.walletRepository.findOne({ where: { user: req.user.id } });
     if (!w) return false;
@@ -175,6 +179,7 @@ export class Web3Service {
         BASE_USDT: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", // Base USDT
         BASE_USDC: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // BASE USDC
         BASE_BTC: "0x0555e30da8f98308edb960aa94c0db47230d2b9c", // BASE BTC
+        BASE_BNB: "0xf7158362807485ae32b6e0b40fd613c70629e9be",
         BNB_USDT: "0x55d398326f99059fF775485246999027B3197955", // BSC USDT
         BNB_USDC: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", // BSC USDT
         BNB_RIPPLE: "0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE", // BSC XRP
@@ -184,6 +189,7 @@ export class Web3Service {
         SOL_USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
         TRON_USDT: "TXLAQ63Xg1NAzckPwKHvzw7CSEmLMEqcdj"
         // Add Base USDT/USDC addresses here if needed
+
       };
 
       // -----------------------------
@@ -192,20 +198,35 @@ export class Web3Service {
       if (w) {
         const childWallet = this.hd.getChildWallet(Number(req.user.id), this.providerBase);
         const childWallet2 = this.hd.getChildWallet(Number(req.user.id), this.provider);
+        const childWallet3 = this.hdTRX.deriveChild(Number(req.user.id));
         await this.hd.sweepToken(childWallet, masterWalletBase, ERC20_TOKENS["BASE_USDT"], "BASE", "USDT");
         await this.hd.sweepToken(childWallet, masterWalletBase, ERC20_TOKENS["BASE_USDC"], "BASE", "USDC");
         await this.hd.sweepToken(childWallet, masterWalletBase, ERC20_TOKENS["BASE_BTC"], "BASE", "BTC");
+        await this.hd.sweepToken(childWallet, masterWalletBase, ERC20_TOKENS["BASE_BNB"], "BASE", "BNB");
         //bsc erc20 tokens
         await this.hd.sweepToken(childWallet2, masterWallet, ERC20_TOKENS["BNB_USDT"], "BINANCE CHAIN", "USDT");
         await this.hd.sweepToken(childWallet2, masterWallet, ERC20_TOKENS["BNB_USDC"], "BINANCE CHAIN", "USDC");
         await this.hd.sweepToken(childWallet2, masterWallet, ERC20_TOKENS["BNB_RIPPLE"], "BINANCE CHAIN", "XRP");
         await this.hd.sweepToken(childWallet2, masterWallet, ERC20_TOKENS["BNB_DOGE"], "BINANCE CHAIN", "DOGE");
         await this.hd.sweepToken(childWallet2, masterWallet, ERC20_TOKENS["BNB_BTC"], "BINANCE CHAIN", "BTC");
-     
-        await this.hd.sweep(childWallet, masterWalletBase, "BASE", "ETH");
-        await this.hd.sweep(childWallet2, masterWallet, "BINANCE CHAIN", "BNB");
-        // //BASE ERC20 tokens
-       }
+
+        try {
+          await this.hd.sweep(childWallet, masterWalletBase, "BASE", "ETH");
+        } catch (e) {
+          console.log(e)
+        }
+        try {
+          await this.hd.sweep(childWallet2, masterWallet, "BINANCE CHAIN", "BNB");
+        } catch (e) {
+          console.log(e)
+        } // //BASE ERC20 tokens
+
+        // trc20
+        await this.hdTRX.sweepTRC20(childWallet3, masterWalletTron, "https://api.trongrid.io", ERC20_TOKENS["TRON_USDT"])
+
+        await this.hdTRX.sweepTRON(childWallet3, masterWalletTron.address, "https://api.trongrid.io");
+
+      }
     } catch (err: any) {
       console.error(`Failed to for user ${req.user.id}:`, err.message);
       return false;
