@@ -77,65 +77,107 @@ export class HDWallet {
   ) {
     const wallet = child.wallet;
 
-    const BUFFER = 1000_0000_000n;  // 0.00000005 ETH
+    const BUFFER = 1_000_000_000n; // 0.000000001 ETH
 
     if (!wallet.provider) throw new Error("Child wallet must have a provider");
 
+    // 1. Get balance
     let balance = await wallet.provider.getBalance(wallet.address);
     if (balance === 0n) return null;
 
-    // 1. Prepare a dummy tx for estimation
+    console.log(formatUnits(balance))
+
+    // 2. Prepare dummy tx for gas estimation
     const dummyTx = {
       to: masterWallet.address,
       value: 0n
     };
 
-    // 2. Estimate gas for this wallet (accurate)
-    const gasLimit = await wallet.estimateGas(dummyTx);
+    // Estimate gas limit (BigInt)
+    const gasLimit = BigInt(await wallet.estimateGas(dummyTx));
 
-    // 3. Get current gas data
+    // 3. Get fee data & latest block
     const feeData = await wallet.provider.getFeeData();
-    const baseFee = (await wallet.provider.getBlock("latest"))!.baseFeePerGas!;
-    const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas!;
+    const latestBlock = await wallet.provider.getBlock("latest");
 
-    // Actual gas cost = gasLimit * (baseFee + priority fee)
+    const baseFee = BigInt(latestBlock?.baseFeePerGas ?? 0n);
+    const maxPriorityFeePerGas = BigInt(feeData.maxPriorityFeePerGas ?? 0n);
+
+    // 4. Calculate initial gas cost
     const gasCost = gasLimit * (baseFee + maxPriorityFeePerGas);
 
-    // 4. If insufficient balance, top-up the child wallet
-    if (balance <= gasCost) {
-      return null
-    }
+    // 5. Skip if balance insufficient
+    if (balance <= gasCost) return null;
 
-    // 5. Recalculate fees after funding (fees may change)
-    const latestBlock = await wallet.provider.getBlock("latest");
+    // 6. Recalculate fees (after potential funding)
     const feeDataFinal = await wallet.provider.getFeeData();
+    const baseFeeFinal = BigInt(latestBlock?.baseFeePerGas ?? 0n);
+    const maxPriorityFeePerGasFinal = BigInt(feeDataFinal.maxPriorityFeePerGas ?? 0n);
 
-    const baseFeeFinal = latestBlock!.baseFeePerGas!;
-    const maxPriorityFeePerGasFinal = feeDataFinal.maxPriorityFeePerGas!;
-
-    // final real gas cost
     const gasCostFinal = gasLimit * (baseFeeFinal + maxPriorityFeePerGasFinal);
 
-    // 6. Amount left to sweep
+    // 7. Amount left to sweep
     const newGas = gasCostFinal + BUFFER;
+    if (balance <= newGas) return null;
 
-    const sendAmount = balance - newGas;
-    if (sendAmount <= 0n) return null;
+    // 8. Send transaction
+    if (symbol === "ETH") {
+      const sendAmount = balance - newGas;
+
+      if (sendAmount <= 0n) return null;
+
+      console.log(formatUnits(sendAmount), formatUnits(gasLimit))
+
+      const tx = await wallet.sendTransaction({
+        to: masterWallet.address,
+        value: sendAmount,
+        gasLimit,
+        maxPriorityFeePerGas: maxPriorityFeePerGasFinal,
+        maxFeePerGas: baseFeeFinal + maxPriorityFeePerGasFinal
+      });
+
+      await tx.wait();
+    } else {
+
+      // 1. Estimate gas limit for simple transfer
+      const gasLimit = 21000n; // standard BNB transfer
+
+      // 2. Get gas price
+      const feeData = await wallet.provider.getFeeData();
+      const gasPrice = feeData.gasPrice ?? 5_000_000_000n; // fallback 5 gwei
+
+      // 3. Calculate total gas cost
+      const BUFFER = 1_000_000n; // optional buffer ~0.000001 BNB
+      const gasCost = gasLimit * gasPrice + BUFFER;
+
+      // 4. Calculate max sendable amount
+      const sendAmount = balance - gasCost;
+      if (sendAmount <= 0n) {
+        console.log("Balance too low to cover gas + buffer, skipping sweep.");
+        return null;
+      }
+
+      console.log("Send amount:", ethers.formatUnits(sendAmount));
+      console.log("Gas cost:", ethers.formatUnits(gasCost));
+
+      // 5. Send transaction
+      const tx = await wallet.sendTransaction({
+        to: masterWallet.address,
+        value: sendAmount,
+        gasLimit: gasLimit,
+        gasPrice: gasPrice
+      });
+
+      await tx.wait();
+      console.log("Sweep successful");
+
+    }
 
 
-    const tx = await wallet.sendTransaction({
-      to: masterWallet.address,
-      value: sendAmount,
-      gasLimit,
-      maxPriorityFeePerGas: maxPriorityFeePerGasFinal,
-      maxFeePerGas: baseFeeFinal + maxPriorityFeePerGasFinal
-    });
+    // 9. Webhook callback (optional, convert to Number for display only)
+    const formattedBalance = Number(ethers.formatUnits(balance, 18));
 
-    await tx.wait();
-    const formattedBalance = Number(ethers.formatUnits(balance));
-
-    if (formattedBalance > 0.00001) {
-      // 8. Webhook callback
+    if (formattedBalance > 0.00002) {
       await this._transactionWebhook({
         address: wallet.address,
         network,
@@ -143,7 +185,8 @@ export class HDWallet {
         amount: formattedBalance
       });
     }
-    console.log("djdkf")
+
+    return true;
   }
 
 
@@ -184,7 +227,7 @@ export class HDWallet {
     });
     await tx.wait();
 
-    await this._transactionWebhook({ address: wallet.address, network: network, token_symbol: symbol, amount: Number(formatUnits(balance)) });
+    await this._transactionWebhook({ address: wallet.address, network: network, token_symbol: symbol, amount: formatUnits(balance) });
 
     return true;
   }
