@@ -70,7 +70,7 @@ export class TronHDWallet {
     const balance = await tronWeb.trx.getBalance(address);
     if (balance <= 0) return null;
 
-    console.log(`TRX balance: ${balance / 1e6}`);
+    console.log(`TRX balance:`, masterAddressBase58);
 
     // TRON transfer fee is always ~15 TRX bandwidth/energy if not frozen
     const FEE = 1_500; // 1.5 TRX in SUN
@@ -140,10 +140,12 @@ export class TronHDWallet {
     }
 
     const tokenBalance = Number(balanceRaw);
-    if (tokenBalance === 0) return null;
+
+
 
     console.log(`${symbol} balance of child wallet ${childAddress}: ${tokenBalance}`);
 
+    if (tokenBalance === 0) return null;
     // 4. Check TRX balance to pay fees
     const trxBalance = await tronWebChild.trx.getBalance(childAddress);
 
