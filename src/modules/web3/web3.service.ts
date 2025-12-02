@@ -18,6 +18,8 @@ import { SolHDWallet } from "./sol-hd-wallet";
 import { getAssociatedTokenAddress, getAccount } from "@solana/spl-token";
 import { Bip32PrivateKey } from "@emurgo/cardano-serialization-lib-nodejs";
 import { CardanoHDWallet } from "./ada-hd-wallet";
+import base58 from "bs58";
+import { sweepSPLToken } from "./Sol";
 
 const TronWeb = require("tronweb");
 
@@ -168,6 +170,7 @@ export class Web3Service {
     const masterWallet = this.hd.getMasterWallet(this.provider);
 
     const masterWalletTron = this.hdTRX.getMasterWallet();
+    const masterWalletSOL = this.hdSol.getMasterKeypair().publicKey.toBase58();
 
 
     // Fetch the user's wallet
@@ -185,9 +188,9 @@ export class Web3Service {
         BNB_RIPPLE: "0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE", // BSC XRP
         BNB_DOGE: "0xbA2aE424d960c26247Dd6c32edC70B295c744C43", // BSC DOGE
         BNB_BTC: "0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c", // BSC BTC
-        SOL_USDT: "Es9vMFrzaCERn8X3jPbU9Uq5o1T2yD8KK3FWrHQXgk2",
+        SOL_USDT: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
         SOL_USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-        TRON_USDT: "TXLAQ63Xg1NAzckPwKHvzw7CSEmLMEqcdj"
+        TRON_USDT: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
         // Add Base USDT/USDC addresses here if needed
 
       };
@@ -199,6 +202,8 @@ export class Web3Service {
         const childWallet = this.hd.getChildWallet(Number(req.user.id), this.providerBase);
         const childWallet2 = this.hd.getChildWallet(Number(req.user.id), this.provider);
         const childWallet3 = this.hdTRX.deriveChild(Number(req.user.id));
+        const childWallet4 = this.hdSol.deriveKeypair(Number(req.user.id));
+
         await this.hd.sweepToken(childWallet, masterWalletBase, ERC20_TOKENS["BASE_USDT"], "BASE", "USDT");
         await this.hd.sweepToken(childWallet, masterWalletBase, ERC20_TOKENS["BASE_USDC"], "BASE", "USDC");
         await this.hd.sweepToken(childWallet, masterWalletBase, ERC20_TOKENS["BASE_BTC"], "BASE", "BTC");
@@ -220,11 +225,38 @@ export class Web3Service {
         } catch (e) {
           console.log(e)
         } // //BASE ERC20 tokens
+        const childKeySol = Buffer.from(childWallet4.secretKey).toString("hex");
+
+
+
+        await sweepSPLToken(
+          childWallet4.secretKey,
+          this.hdSol.getMasterKeypair(),
+          ERC20_TOKENS["SOL_USDT"],
+          this.conn,
+          "USDT"
+        );
+        await sweepSPLToken(
+          childWallet4.secretKey,
+          this.hdSol.getMasterKeypair(),
+          ERC20_TOKENS["SOL_USDC"],
+          this.conn,
+          "USDC"
+        );
+        await this.hdSol.sweepSOL(
+          { address: childWallet4.publicKey.toBase58(), privateKey: childKeySol },
+          masterWalletSOL,
+          this.conn,
+          req.user.id
+        );
 
         // trc20
         await this.hdTRX.sweepTRC20(childWallet3, masterWalletTron, "https://api.trongrid.io", ERC20_TOKENS["TRON_USDT"])
 
         await this.hdTRX.sweepTRON(childWallet3, masterWalletTron.address, "https://api.trongrid.io");
+
+        // ada
+        const txHash = await this.hdADA.sweepADA(req.user.id, this.hdADA.generateAddress(0), appConfig.BLOCK_API_KEY ?? "", true);
 
       }
     } catch (err: any) {

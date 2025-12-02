@@ -197,6 +197,7 @@ export class HDWallet {
 
     const token = new ethers.Contract(tokenAddress, ERC20_ABI, wallet);
     const balance: bigint = await token.balanceOf(wallet.address);
+     console.log(formatUnits(balance))
     if (balance === 0n) {
       return null;
     }
