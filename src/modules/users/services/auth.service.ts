@@ -201,13 +201,15 @@ export class AuthService extends BaseService {
         throw new BadRequestException("User with this email already exist.");
       }
 
-      const existingPhone = await this.userRepository.exists({
-        where: [{ email }, { phone }],
-      });
-      if (existingPhone) {
-        throw new BadRequestException(
-          "User with this phone number already exist."
-        );
+      if (phone && phone.length > 0) {
+        const existingPhone = await this.userRepository.exists({
+          where: [{ email }, { phone }],
+        });
+        if (existingPhone) {
+          throw new BadRequestException(
+            "User with this phone number already exist."
+          );
+        }
       }
 
       const rememberToken = generateRandomNumberString(6);
@@ -215,7 +217,7 @@ export class AuthService extends BaseService {
         first_name: first_name.toLowerCase(),
         last_name: last_name.toLowerCase(),
         email: email.toLowerCase(),
-        phone: phone.toLowerCase(),
+        phone: phone ? phone.toLowerCase() : null,
         country: country.toLowerCase(),
         remember_token: rememberToken,
         password: hashResourceSync(createAccountDto.password),
