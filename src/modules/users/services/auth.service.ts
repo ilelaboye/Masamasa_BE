@@ -220,10 +220,11 @@ export class AuthService extends BaseService {
         email: email.toLowerCase(),
         phone: phone ? phone.toLowerCase() : null,
         country: country.toLowerCase(),
-        remember_token: rememberToken,
+        remember_token: google_id ? null : rememberToken,
         password: hashResourceSync(createAccountDto.password),
         status: Status.active,
         google_id: google_id,
+        email_verified_at: google_id ? new Date() : null,
       });
 
       await queryRunner.commitTransaction();
@@ -236,13 +237,7 @@ export class AuthService extends BaseService {
         country: user.country,
       };
 
-      if (google_id) {
-        await queryRunner.manager.update(
-          User,
-          { id: user.id },
-          { email_verified_at: new Date(), remember_token: null }
-        );
-      } else {
+      if (!google_id) {
         sendMailJetWithTemplate(
           {
             to: {

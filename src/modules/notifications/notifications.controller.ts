@@ -14,7 +14,7 @@ export class NotificationsController {
 
   @Get()
   async findAll(@Req() req: UserRequest) {
-    return await this.notificationsService.findAll(req.user.id);
+    return await this.notificationsService.findAll(req);
   }
 
   @Get(":id")

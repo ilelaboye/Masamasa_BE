@@ -18,7 +18,7 @@ import {
   UploadImageDto,
   WithdrawalDto,
 } from "../dto";
-import { hashResourceSync, verifyHash } from "@/core/utils";
+import { getRequestQuery, hashResourceSync, verifyHash } from "@/core/utils";
 import { TransactionService } from "@/modules/transactions/transactions.service";
 import {
   TransactionEntityType,
@@ -26,9 +26,10 @@ import {
   TransactionStatusType,
 } from "@/modules/transactions/transactions.entity";
 import { Transfer } from "@/modules/transfers/transfers.entity";
-import { generateMasamasaRef } from "@/core/helpers";
+import { generateMasamasaRef, paginate } from "@/core/helpers";
 import { BVNVerificationDto } from "@/modules/global/bank-verification/dto/bvn-verification.dto";
 import { BankVerificationService } from "@/modules/global/bank-verification/bank-verification.service";
+import { Notification } from "@/modules/notifications/entities/notification.entity";
 
 @Injectable()
 export class UsersService extends BaseService {
@@ -37,6 +38,8 @@ export class UsersService extends BaseService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(Transfer)
     private readonly transferRepository: Repository<Transfer>,
+    @InjectRepository(Notification)
+    private readonly notificationRepository: Repository<Notification>,
     private readonly transactionService: TransactionService,
     private readonly bankVerificationService: BankVerificationService
   ) {

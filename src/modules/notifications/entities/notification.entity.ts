@@ -36,4 +36,7 @@ export class Notification {
   @ManyToOne(() => User, (relationship) => relationship.notifications)
   @JoinColumn({ name: "user_id" })
   user: User;
+
+  @Column()
+  user_id: number;
 }

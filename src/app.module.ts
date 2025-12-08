@@ -23,7 +23,8 @@ import {
   AdministratorModule,
   ExchangeRateModule,
   PurchasesModule,
-  Web3Module
+  Web3Module,
+  NotificationsModule,
 } from "./modules";
 import { ConfigModuleSchema } from "./validations";
 
@@ -71,6 +72,7 @@ import { ConfigModuleSchema } from "./validations";
     ExchangeRateModule,
     PurchasesModule,
     Web3Module,
+    NotificationsModule,
   ],
   providers: [JwtService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

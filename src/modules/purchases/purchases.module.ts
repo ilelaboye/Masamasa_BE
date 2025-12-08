@@ -9,6 +9,7 @@ import { User } from "../users/entities/user.entity";
 import { Transfer } from "../transfers/transfers.entity";
 import { BankVerificationService } from "../global/bank-verification/bank-verification.service";
 import { BankVerification } from "../global/bank-verification/entities/bank-verification.entity";
+import { Notification } from "../notifications/entities/notification.entity";
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { BankVerification } from "../global/bank-verification/entities/bank-veri
       User,
       Transfer,
       BankVerification,
+      Notification,
     ]),
   ],
   controllers: [PurchaseController],
