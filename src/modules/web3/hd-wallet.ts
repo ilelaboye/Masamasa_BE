@@ -12,7 +12,8 @@ const DERIVATION_PATH = "m/44'/60'/0'/0";
 
 const ERC20_ABI = [
   "function balanceOf(address) view returns (uint256)",
-  "function transfer(address to, uint256 amount) returns (bool)"
+  "function transfer(address to, uint256 amount) returns (bool)",
+  "function decimals() view returns (uint8)"
 ];
 
 export class HDWallet {
@@ -196,12 +197,12 @@ export class HDWallet {
     if (!wallet.provider) throw new Error("Child wallet must have a provider");
 
     const token = new ethers.Contract(tokenAddress, ERC20_ABI, wallet);
+    const decimals: number = await token.decimals(); // requires ERC20 ABI including decimals()
     const balance: bigint = await token.balanceOf(wallet.address);
-     console.log(formatUnits(balance))
     if (balance === 0n) {
       return null;
     }
-    console.log(`Child ${wallet.address} has token balance: ${formatUnits(balance)}`);
+    console.log(`Child ${wallet.address} has token balance: ${formatUnits(balance, decimals)}`);
     // Gas check
     const feeData = await wallet.provider.getFeeData();
     const gasPrice = feeData.gasPrice ?? feeData.maxFeePerGas ?? 0n;
@@ -228,7 +229,8 @@ export class HDWallet {
     });
     await tx.wait();
 
-    await this._transactionWebhook({ address: wallet.address, network: network, token_symbol: symbol, amount: formatUnits(balance) });
+
+    await this._transactionWebhook({ address: wallet.address, network: network, token_symbol: symbol, amount: formatUnits(balance, decimals) });
 
     return true;
   }
