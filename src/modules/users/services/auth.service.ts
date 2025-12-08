@@ -193,6 +193,7 @@ export class AuthService extends BaseService {
       const { email, first_name, last_name, phone, country, google_id } =
         createAccountDto;
 
+      console.log("phone", phone);
       const existingUser = await this.userRepository.exists({
         where: [{ email }],
       });

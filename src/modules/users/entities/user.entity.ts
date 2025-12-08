@@ -77,7 +77,7 @@ export class User {
   @Column({ select: false, nullable: true })
   pin?: string;
 
-  @Column({ nullable: true })
+  @Column({ type: "varchar", nullable: true })
   phone?: string | null;
 
   @Column({ nullable: true })
