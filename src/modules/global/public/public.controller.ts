@@ -76,11 +76,6 @@ export class PublicController {
     return await this.publicService.getPrices();
   }
 
-  @Get("test-mail")
-  async testMail() {
-    return await this.publicService.testMail();
-  }
-
   @Get("price")
   async price() {
     return await this.publicService.getPrice("ADA");
