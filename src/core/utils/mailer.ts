@@ -5,6 +5,7 @@ import fs from "fs";
 import * as mime from "mime-types";
 import { Client } from "node-mailjet";
 import path from "path";
+import { axiosClient } from "./axiosClient";
 
 const mailjet = new Client({
   apiKey: appConfig.MAILJET_APIKEY_PUBLIC,
@@ -126,4 +127,35 @@ export async function sendMailJetWithTemplate(
     .catch((err) => {
       Logger.error(err, "MAILJET ERROR");
     });
+}
+
+export async function sendZohoMailWithTemplate(
+  {
+    to,
+    from = { name: appConfig.ZOHO_FROM_NAME, email: appConfig.ZOHO_FROM },
+  }: MailerOptions,
+  mailData: MailDataType
+) {
+  const response = await axiosClient(
+    `https://api.zeptomail.com/v1.1/email/template`,
+    {
+      method: "POST",
+      body: {
+        template_key: mailData.templateId,
+        from: { address: from.email, name: from.name },
+        to: [
+          {
+            email_address: {
+              address: to.email,
+              name: to.name,
+            },
+          },
+        ],
+        merge_info: mailData.variables,
+      },
+      headers: {
+        authorization: `Zoho-enczapikey ${appConfig.ZOHO_MAIL_CLIENT_ID}`,
+      },
+    }
+  );
 }

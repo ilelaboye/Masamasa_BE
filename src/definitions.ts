@@ -86,7 +86,7 @@ export interface MailDataType {
   subject: string;
   attachments?: string[];
   html?: string;
-  templateId?: number;
+  templateId?: number | string;
   variables?: object;
 }
 

@@ -1,5 +1,9 @@
 import { appConfig } from "@/config";
-import { _THROTTLE_TTL_, MAILJETTemplates } from "@/constants";
+import {
+  _THROTTLE_TTL_,
+  MAILJETTemplates,
+  ZohoMailTemplates,
+} from "@/constants";
 import {
   capitalizeString,
   generateAlphaNumericString,
@@ -10,6 +14,7 @@ import {
   hashResource,
   hashResourceSync,
   sendMailJetWithTemplate,
+  sendZohoMailWithTemplate,
   verifyHash,
 } from "@/core/utils";
 import { type UserRequest } from "@/definitions";
@@ -238,7 +243,7 @@ export class AuthService extends BaseService {
       };
 
       if (!google_id) {
-        sendMailJetWithTemplate(
+        sendZohoMailWithTemplate(
           {
             to: {
               name: `${capitalizeString(user.first_name)} ${capitalizeString(user.last_name)}`,
@@ -247,13 +252,29 @@ export class AuthService extends BaseService {
           },
           {
             subject: "Verification Code",
-            templateId: MAILJETTemplates.verify_email,
+            templateId: ZohoMailTemplates.verify_email,
             variables: {
               firstName: capitalizeString(user.first_name),
               token: rememberToken,
             },
           }
         );
+        // sendMailJetWithTemplate(
+        //   {
+        //     to: {
+        //       name: `${capitalizeString(user.first_name)} ${capitalizeString(user.last_name)}`,
+        //       email,
+        //     },
+        //   },
+        //   {
+        //     subject: "Verification Code",
+        //     templateId: MAILJETTemplates.verify_email,
+        //     variables: {
+        //       firstName: capitalizeString(user.first_name),
+        //       token: rememberToken,
+        //     },
+        //   }
+        // );
       }
 
       const data = {
@@ -277,15 +298,15 @@ export class AuthService extends BaseService {
       );
 
     //Check if sent less than 5mins ago
-    if (await this.cacheService.get(`${user.email}_forgot_password`))
-      throw new BadRequestException(
-        "Please wait for about 5 minutes to request for another code"
-      );
+    // if (await this.cacheService.get(`${user.email}_forgot_password`))
+    //   throw new BadRequestException(
+    //     "Please wait for about 5 minutes to request for another code"
+    //   );
 
     const remember_token = generateRandomNumberString(6);
     this.userRepository.update({ email }, { remember_token });
 
-    sendMailJetWithTemplate(
+    sendZohoMailWithTemplate(
       {
         to: {
           name: `${capitalizeString(user.first_name)} ${capitalizeString(user.last_name)}`,
@@ -294,13 +315,30 @@ export class AuthService extends BaseService {
       },
       {
         subject: "Forgot Password",
-        templateId: MAILJETTemplates.verify_email,
+        templateId: ZohoMailTemplates.forgot_password,
         variables: {
           firstName: capitalizeString(user.first_name),
           token: remember_token,
         },
       }
     );
+
+    // sendMailJetWithTemplate(
+    //   {
+    //     to: {
+    //       name: `${capitalizeString(user.first_name)} ${capitalizeString(user.last_name)}`,
+    //       email,
+    //     },
+    //   },
+    //   {
+    //     subject: "Forgot Password",
+    //     templateId: MAILJETTemplates.verify_email,
+    //     variables: {
+    //       firstName: capitalizeString(user.first_name),
+    //       token: remember_token,
+    //     },
+    //   }
+    // );
 
     //Save in redis
     this.cacheService.set(

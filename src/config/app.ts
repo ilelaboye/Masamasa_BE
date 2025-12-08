@@ -30,6 +30,11 @@ export const appConfig = {
   MAILJET_APIKEY_PUBLIC: process.env.MAILJET_APIKEY_PUBLIC || "",
   MAILJET_APIKEY_PRIVATE: process.env.MAILJET_APIKEY_PRIVATE || "",
 
+  ZOHO_MAIL_CLIENT_ID: process.env.ZOHO_MAIL_CLIENT_ID,
+  ZOHO_MAIL_AGENT_ID: process.env.ZOHO_MAIL_AGENT_ID,
+  ZOHO_FROM: process.env.ZOHO_FROM || "",
+  ZOHO_FROM_NAME: process.env.ZOHO_FROM_NAME || "",
+
   CLOUDINARYNAME: process.env.CLOUDINARYNAME,
   CLOUDINARYAPIKEY: process.env.CLOUDINARYAPIKEY,
   CLOUDINARYAPISECRET: process.env.CLOUDINARYAPISECRET,
@@ -76,5 +81,5 @@ export const appConfig = {
   TRX_API_KEY: process.env.TRX_API_KEY ?? "",
   ETH_PRIVATE_KEY: process.env.PRIVATE_KEY ?? "",
   //BLOCK
-  BLOCK_API_KEY:process.env.BLOCK_API_KEY
+  BLOCK_API_KEY: process.env.BLOCK_API_KEY,
 };

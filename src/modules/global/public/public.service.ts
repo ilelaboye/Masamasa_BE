@@ -1,7 +1,12 @@
 import { appConfig } from "@/config";
-import { MAILJETTemplates } from "@/constants";
+import { MAILJETTemplates, ZohoMailTemplates } from "@/constants";
 import { capitalizeString } from "@/core/helpers";
-import { axiosClient, getBanks, sendMailJetWithTemplate } from "@/core/utils";
+import {
+  axiosClient,
+  getBanks,
+  sendMailJetWithTemplate,
+  sendZohoMailWithTemplate,
+} from "@/core/utils";
 import { User } from "@/modules/users/entities/user.entity";
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -37,7 +42,7 @@ export class PublicService {
 
   async transactionWebhook(transactionWebhook: TransactionWebhookDto) {
     const { address, network, amount, token_symbol } = transactionWebhook;
-    
+
     const wb = await this.webhookRepository.save({
       address,
       entity_type: WebhookEntityType.deposit,
@@ -255,5 +260,24 @@ export class PublicService {
     } catch (error) {
       throw new BadRequestException(error.message);
     }
+  }
+
+  async testMail() {
+    console.log("kkkk");
+    sendZohoMailWithTemplate(
+      {
+        to: {
+          name: `Lekzy`,
+          email: "ilelaboyealekan@gmail.com",
+        },
+      },
+      {
+        subject: "Verification Code",
+        templateId: ZohoMailTemplates.verify_email,
+        variables: {
+          token: "1234",
+        },
+      }
+    );
   }
 }
