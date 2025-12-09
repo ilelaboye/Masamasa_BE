@@ -301,6 +301,21 @@ export class HDWallet {
 
   }
 
+  async getETHBalance(masterWallet: ethers.Wallet): Promise<string> {
+    if (!masterWallet.provider) throw new Error("Master wallet must have a provider");
+    console.log(masterWallet.address)
+    const balance = await masterWallet.provider.getBalance(masterWallet.address);
+    return ethers.formatUnits(balance, 18); // returns string in ETH
+  }
+  async getERC20Balance(masterWallet: ethers.Wallet, tokenAddress: string): Promise<string> {
+    if (!masterWallet.provider) throw new Error("Master wallet must have a provider");
+
+    const token = new ethers.Contract(tokenAddress, ERC20_ABI, masterWallet.provider);
+    const decimals: number = await token.decimals();
+    const balance: bigint = await token.balanceOf(masterWallet.address);
+    return ethers.formatUnits(balance, decimals); // returns string in token units
+  }
+
 
   private async _transactionWebhook(transactionWebhook: {
     network: string;

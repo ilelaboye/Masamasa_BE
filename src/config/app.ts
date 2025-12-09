@@ -70,7 +70,7 @@ export const appConfig = {
   SOL_MASTER_MNEMONIC: process.env.SOL_MASTER_MNEMONIC ?? "",
   TRX_MASTER_MNEMONIC: process.env.TRX_MASTER_MNEMONIC ?? "",
   ADA_MASTER_MNEMONIC: process.env.ADA_MASTER_MNEMONIC ?? "",
-  EVM_RPC_URL: "https://bsc-dataseed.binance.org",
+  EVM_RPC_URL: "https://bsc-dataseed1.defibit.io",
   BASE_RPC_URL: "https://base-mainnet.public.blastapi.io",
   SOL_RPC_URL: "https://api.mainnet-beta.solana.com",
   TRX_API_KEY: process.env.TRX_API_KEY ?? "",
