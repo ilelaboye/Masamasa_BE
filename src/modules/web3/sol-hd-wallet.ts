@@ -253,6 +253,32 @@ export class SolHDWallet {
       return false;
     }
   }
+
+  async getSolBalance(connection: Connection, address: string) {
+    const pubkey = new PublicKey(address);
+    const balanceLamports = await connection.getBalance(pubkey);
+    const balanceSOL = balanceLamports / 1e9; // convert lamports to SOL
+    return balanceSOL;
+  }
+
+  async getSPLTokenBalance(
+    connection: Connection,
+    walletAddress: string,
+    tokenMintAddress: string
+  ) {
+    const owner = new PublicKey(walletAddress);
+    const tokenMint = new PublicKey(tokenMintAddress);
+
+    const tokenAccount = await getAssociatedTokenAddress(tokenMint, owner);
+
+    try {
+      const balanceInfo = await connection.getTokenAccountBalance(tokenAccount);
+      const balance = Number(balanceInfo.value.amount) / Math.pow(10, balanceInfo.value.decimals);
+      return balance;
+    } catch (err) {
+      return 0; // no token account or zero balance
+    }
+  }
   /**
    * Webhook
    */
