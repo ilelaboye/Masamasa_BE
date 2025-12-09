@@ -389,20 +389,9 @@ export class Web3Service {
       const solUSDC = await this.hdSol.getSPLTokenBalance(this.conn, masterWalletSOL, ERC20_TOKENS["SOL_USDC"])
 
 
-      // const masterTRX = this.hdTRX.getMasterWallet().address;
-      // const trxBalance = (await this.tronWeb.trx.getBalance(masterTRX)) / 1e6;
-      // const trxUSDTBalance = await this.getTokenBalanceTRX("TXLAQ63Xg1NAzckPwKHvzw7CSEmLMEqcdj");
-
-      // const masterSOL = this.hdSol.getMasterKeypair().publicKey;
-      // const solBalance = (await this.conn.getBalance(masterSOL)) / LAMPORTS_PER_SOL;
-      // const solUSDCBalance = await this.getTokenBalanceSOL(
-      //   new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"),
-      //   masterSOL
-      // );
-      // const solUSDTBalance = await this.getTokenBalanceSOL(
-      //   new PublicKey("Es9vMFrzaCERn8X3jPbU9Uq5o1T2yD8KK3FWrHQXgk2"),
-      //   masterSOL
-      // );
+    // const masterTRX = this.hdTRX.getMasterWallet().address;
+    //   const trxBalance = (await this.tronWeb.trx.getBalance(masterTRX)) / 1e6;
+    //   const trxUSDTBalance = await this.getTokenBalanceTRX(ERC20_TOKENS["TRON_USDT"]);
 
       return {
         base: {
@@ -424,9 +413,8 @@ export class Web3Service {
           SOL: solBalance,
           USDT: solUSDT,
           USDC: solUSDC
-        }
-        // TRX: trxBalance,
-        // TRX_USDT: trxUSDTBalance,
+        },
+        TRX: {TRX:0.51, USDT:1}
         // SOL: solBalance,
         // SOL_USDC: solUSDCBalance,
         // SOL_USDT: solUSDTBalance
