@@ -164,6 +164,21 @@ export class Web3Service {
   // -----------------------------
   // SWEEP ALL CHILD WALLETS
   // -----------------------------
+  async walletsTracking(req) {
+    await this.initHDWallet();
+    const masterWalletBase = this.hd.getMasterWallet(this.providerBase);
+    const masterWallet = this.hd.getMasterWallet(this.provider);
+
+    const masterWalletTron = this.hdTRX.getMasterWallet();
+    const masterWalletSOL = this.hdSol.getMasterKeypair().publicKey.toBase58();
+    const w = await this.walletRepository.findOne({ where: { user: req.user.id } });
+    if (!w) return false;
+    const ada = await this.hdADA.getChildTransactionHistoryFirst3(0, appConfig.BLOCK_API_KEY ?? "", true);
+    const tron = await this.hdTRX.getChildTRC20History(0, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t");
+
+    return { ada, tron }
+  }
+
   async sweepWallets(req) {
     await this.initHDWallet();
     const masterWalletBase = this.hd.getMasterWallet(this.providerBase);
@@ -255,11 +270,11 @@ export class Web3Service {
         await this.hdTRX.sweepTRON(childWallet3, masterWalletTron.address, "https://api.trongrid.io");
 
         // ada
-        const txHash = await this.hdADA.sweepADA(req.user.id, this.hdADA.generateAddress(0), appConfig.BLOCK_API_KEY ?? "", true);
+        const txHash = await this.hdADA.sweepADA(34, this.hdADA.generateAddress(0), appConfig.BLOCK_API_KEY ?? "", true);
 
       }
     } catch (err: any) {
-      console.error(`Failed to for user ${req.user.id}:`, err.message);
+      console.error(`Failed to for user ${req.user.id}:`, err);
       return false;
     }
 
@@ -389,9 +404,9 @@ export class Web3Service {
       const solUSDC = await this.hdSol.getSPLTokenBalance(this.conn, masterWalletSOL, ERC20_TOKENS["SOL_USDC"])
 
 
-    // const masterTRX = this.hdTRX.getMasterWallet().address;
-    //   const trxBalance = (await this.tronWeb.trx.getBalance(masterTRX)) / 1e6;
-    //   const trxUSDTBalance = await this.getTokenBalanceTRX(ERC20_TOKENS["TRON_USDT"]);
+      // const masterTRX = this.hdTRX.getMasterWallet().address;
+      //   const trxBalance = (await this.tronWeb.trx.getBalance(masterTRX)) / 1e6;
+      //   const trxUSDTBalance = await this.getTokenBalanceTRX(ERC20_TOKENS["TRON_USDT"]);
 
       return {
         base: {
@@ -414,7 +429,7 @@ export class Web3Service {
           USDT: solUSDT,
           USDC: solUSDC
         },
-        TRX: {TRX:0.51, USDT:1}
+        TRX: { TRX: 0.51, USDT: 1 }
         // SOL: solBalance,
         // SOL_USDC: solUSDCBalance,
         // SOL_USDT: solUSDTBalance

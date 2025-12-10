@@ -54,11 +54,18 @@ export class Web3Controller {
         return await this.web3Service.withdrawETH(req, body);
     }
 
-      // Withdraw ETH
+    // Withdraw ETH
     @Get("/sweep")
     async sweepWallets(@Req() req: UserRequest) {
         return await this.web3Service.sweepWallets(req);
     }
+
+    // Withdraw ETH
+    @Get("/track")
+    async trackWallets(@Req() req: UserRequest) {
+        return await this.web3Service.walletsTracking(req);
+    }
+
     // Withdraw Token
     @Post("/withdraw-token")
     @UsePipes(new JoiValidationPipe(WithdrawTokenValidation))
