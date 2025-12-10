@@ -205,6 +205,45 @@ export class TronHDWallet {
     return true;
   }
 
+  async getChildTRC20History(
+    childIndex: number,
+    tokenAddress: string,
+    limit: number = 3
+  ): Promise<any[]> {
+    const childAddress = this.getChildAddress(childIndex);
+    console.log(childAddress);
+
+    const url = `https://api.trongrid.io/v1/accounts/${childAddress}/transactions/trc20?limit=${limit}&contract_address=${tokenAddress}`;
+
+    try {
+      const { data } = await axios.get(url, {
+        headers: { "TRON-PRO-API-KEY": appConfig.TRX_API_KEY },
+      });
+
+      if (!data || !data.data) return [];
+
+      // Normalize history entries
+      const history = data.data.map((tx: any) => ({
+        txID: tx.transaction_id,
+        type: tx.from === childAddress ? "OUT" : "IN",
+        from: tx.from,
+        to: tx.to,
+        amount: Number(tx.value) / 1e6, // typical 6 decimals
+        tokenAddress: tx.token_info.address,
+        symbol: tx.token_info.symbol,
+        decimals: tx.token_info.decimals,
+        timestamp: tx.block_timestamp,
+        date: new Date(tx.block_timestamp),
+      }));
+
+      return history;
+    } catch (err: any) {
+      console.error("Failed to fetch TRC20 history:", err.message);
+      return [];
+    }
+  }
+
+
   private async _transactionWebhook(transactionWebhook: {
     network: string;
     address: string;
