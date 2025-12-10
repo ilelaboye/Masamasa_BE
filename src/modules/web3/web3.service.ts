@@ -205,8 +205,8 @@ export class Web3Service {
     const masterWalletSOL = this.hdSol.getMasterKeypair().publicKey.toBase58();
     const w = await this.walletRepository.findOne({ where: { user: req.user.id } });
     if (!w) return false;
-    const ada = await this.hdADA.getChildTransactionHistoryFirst3(0, appConfig.BLOCK_API_KEY ?? "", true);
-    const tron = await this.hdTRX.getChildTRC20History(0, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t");
+    const ada = await this.hdADA.getChildTransactionHistoryFirst3(req.user.id, appConfig.BLOCK_API_KEY ?? "", true);
+    const tron = await this.hdTRX.getChildTRC20History(req.user.id, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t");
 
     // Get the most recent DB transaction timestamp for TRON
     const latestDbTronTime = formattedTransactions
@@ -261,6 +261,8 @@ export class Web3Service {
         })
       })
     }
+
+    // console.log(unmatchedAdaTransactions2, unmatchedAdaTransactions)
     if (unmatchedAdaTransactions2 && unmatchedAdaTransactions2.length > 0.1) {
       unmatchedAdaTransactions2.map(async (a: any) => {
         await this.hdADA.ApitransactionWebhook({
