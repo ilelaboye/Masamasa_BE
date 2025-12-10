@@ -5,12 +5,14 @@ import { WalletService } from "../wallet/wallet.service";
 import { Wallet } from '../wallet/wallet.entity';
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { PublicModule } from "../global";
+import { TransactionService } from "../transactions/transactions.service";
+import { Transactions } from "../transactions/transactions.entity";
 @Module({
-  imports: [TypeOrmModule.forFeature([Wallet]),
+  imports: [TypeOrmModule.forFeature([Wallet, Transactions]),
     PublicModule,
   ],
   controllers: [Web3Controller],
-  providers: [Web3Service, WalletService],
-  exports: [WalletService],
+  providers: [Web3Service, WalletService, TransactionService],
+  exports: [WalletService, TransactionService],
 })
 export class Web3Module { }
