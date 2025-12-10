@@ -194,88 +194,83 @@ export class Web3Service {
       network: tx.network,
       token_symbol: tx.metadata?.token_symbol,
       amount: tx.metadata?.amount,
+      created_at: tx.created_at
     }));
     const formattedTransactions2 = transactionsADA.map(tx => ({
       network: tx.network,
       token_symbol: tx.metadata?.token_symbol,
       amount: tx.metadata?.amount,
+      created_at: tx.created_at
     }));
 
     const masterWalletTron = this.hdTRX.getMasterWallet();
     const masterWalletSOL = this.hdSol.getMasterKeypair().publicKey.toBase58();
     const w = await this.walletRepository.findOne({ where: { user: req.user.id } });
-    if (!w) return false;
-    const ada = await this.hdADA.getChildTransactionHistoryFirst3(0, appConfig.BLOCK_API_KEY ?? "", true);
-    const tron = await this.hdTRX.getChildTRC20History(0, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t");
 
-    // Get the most recent DB transaction timestamp for TRON
-    const latestDbTronTime = formattedTransactions
-      .filter(tx => tx.network === "Tron")
-      .reduce((latest, tx:any) => {
+    if (!w) return false;
+    const tronChildWallet = this.hdTRX.getChildAddress(req.user.id);
+    const cardanoChild = this.hdADA.generateAddress(req.user.id, true);
+
+    try {
+      const tron = await this.hdTRX.getChildTRC20History(0, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t");
+
+      // Get the most recent DB transaction timestamp for TRON
+      const latestDbTronTime = formattedTransactions.reduce((latest, tx: any) => {
         const txTime = new Date(tx.metadata?.timestamp || tx.created_at).getTime();
         return txTime > latest ? txTime : latest;
       }, 0);
 
-    // Filter unmatched TRON transactions
-    const unmatchedTronTransactions = tron.filter(onChainTx => {
-      const onChainTime = new Date(onChainTx.date).getTime();
-      return (
-        !formattedTransactions.some(
-          dbTx =>
-            Number(dbTx.amount) === Number(onChainTx.amount)
-        ) && onChainTime > latestDbTronTime // only after latest DB tx
-      );
-    });
+      // Filter unmatched TRON transactions
+      const unmatchedTronTransactions = tron.filter(onChainTx => {
+        const onChainTime = new Date(onChainTx.date).getTime();
+        return (
+          onChainTime > latestDbTronTime // only after latest DB tx
+        );
+      });
+      if (unmatchedTronTransactions && unmatchedTronTransactions.length > 0.1) {
+        unmatchedTronTransactions.map(async (a: any) => {
+          await this.hdADA.ApitransactionWebhook({
+            network: "Tron",
+            address: tronChildWallet,
+            amount: a.amount,
+            token_symbol: a.symbol
+          })
+        })
+      }
 
-    // Get the most recent DB transaction timestamp for ADA
-    const latestDbAdaTime = formattedTransactions2
-      .filter((tx: any) => tx.network === "Cardano")
-      .reduce((latest, tx2: any) => {
+    } catch {
+
+    }
+    try {
+      const ada = await this.hdADA.getChildTransactionHistoryFirst3(0, appConfig.BLOCK_API_KEY ?? "", true);
+
+      // Get the most recent DB transaction timestamp for ADA
+      const latestDbAdaTime = formattedTransactions2.reduce((latest, tx2: any) => {
         const txTime = new Date(tx2.metadata?.timestamp || tx2.created_at).getTime();
         return txTime > latest ? txTime : latest;
       }, 0);
+      const unmatchedAdaTransactions2 = ada.filter((onChainTx: any) => {
+        const onChainTime = new Date(onChainTx.timestamp).getTime();
+        return (
+          onChainTime > latestDbAdaTime
+        );
+      });
 
-    // Filter unmatched ADA transactions
-    const unmatchedAdaTransactions2 = ada.filter((onChainTx: any) => {
-      const onChainTime = new Date(onChainTx.date).getTime();
-      return (
-        !formattedTransactions2.some(
-          dbTx =>
-            Number(dbTx.amount) === Number(onChainTx.amount)
-        ) && onChainTime > latestDbAdaTime
-      );
-    });
-
-    
-
-    const tronChildWallet = this.hdTRX.getChildAddress(req.user.id);
-    const cardanoChild = this.hdADA.generateAddress(req.user.id, true);
-
-    if (unmatchedTronTransactions && unmatchedTronTransactions.length > 0.1) {
-      unmatchedTronTransactions.map(async (a: any) => {
-        await this.hdADA.ApitransactionWebhook({
-          network: "Tron",
-          address: tronChildWallet,
-          amount: a.amount,
-          token_symbol: a.symbol
+      if (unmatchedAdaTransactions2 && unmatchedAdaTransactions2.length > 0.1) {
+        unmatchedAdaTransactions2.map(async (a: any) => {
+          await this.hdADA.ApitransactionWebhook({
+            network: "Cardano",
+            address: cardanoChild,
+            amount: a.amount,
+            token_symbol: "ADA"
+          })
         })
-      })
-    }
-    if (unmatchedAdaTransactions2 && unmatchedAdaTransactions2.length > 0.1) {
-      unmatchedAdaTransactions2.map(async (a: any) => {
-        await this.hdADA.ApitransactionWebhook({
-          network: "Cardano",
-          address: cardanoChild,
-          amount: a.amount,
-          token_symbol: "ADA"
-        })
-      })
-    }
+      }
 
+    } catch {
 
-
-
-    return { ada, tron }
+    }// Filter unmatched ADA transactions
+    return { transactions:true}
   }
 
   async sweepWallets(req) {
