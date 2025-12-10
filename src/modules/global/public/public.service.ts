@@ -38,7 +38,7 @@ export class PublicService {
     private readonly webhookRepository: Repository<Webhook>,
     private readonly exchangeRateService: ExchangeRateService,
     private readonly notificationsService: NotificationsService
-  ) {}
+  ) { }
 
   async transactionWebhook(transactionWebhook: TransactionWebhookDto) {
     const { address, network, amount, token_symbol } = transactionWebhook;
@@ -148,15 +148,40 @@ export class PublicService {
     // }
 
     try {
-      const responses = await axios.get(
-        `https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,binancecoin,solana,tether,usd-coin,cardano,doge,ripple&vs_currencies=usd`
+      const response = await axios.get(
+        'https://api.coingecko.com/api/v3/coins/markets',
+        {
+          params: {
+            vs_currency: 'usd',
+            ids: 'bitcoin,ethereum,binancecoin,solana,tether,usd-coin,cardano,doge,ripple',
+            order: 'market_cap_desc',
+            per_page: 100,
+            page: 1,
+            price_change_percentage: '24h'
+          }
+        }
       );
 
-      return responses;
+      // Transform response into your desired format
+      const data = {};
+      response.data.forEach(coin => {
+        data[coin.id] = {
+          usd: coin.current_price,
+          change_24h: coin.price_change_percentage_24h,
+          direction: coin.price_change_percentage_24h >= 0 ? 'up' : 'down'
+        };
+      });
+
+      return {
+        success: true,
+        data
+      };
+
     } catch (error) {
       console.log(error);
       throw new BadRequestException("Failed to fetch prices");
     }
+
   }
 
   async getPaystackBanks() {
