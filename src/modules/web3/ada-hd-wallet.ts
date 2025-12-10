@@ -152,7 +152,6 @@ export class CardanoHDWallet {
     if (allAssets) outputValue.set_multiasset(allAssets);
 
     const masterAddr = Address.from_bech32(masterAddressBech32);
-    console.log(utxos[0].amount);
 
     txBuilder.add_output(TransactionOutput.new(masterAddr, outputValue));
 
@@ -170,7 +169,6 @@ export class CardanoHDWallet {
     if (!balanced) throw new Error("Failed to balance transaction");
 
     const fee = txBuilder.get_fee_if_set()!;
-    console.log(`Fee: ${fee.to_str()} lovelace`);
 
     // Build body
     const txBody = txBuilder.build();
@@ -364,6 +362,24 @@ export class CardanoHDWallet {
     } catch (error: any) {
       console.error("Error fetching ADA transaction history:", error.message);
       throw new Error("Failed to fetch Cardano child transaction history");
+    }
+  }
+
+   async ApitransactionWebhook(transactionWebhook: {
+    network: string;
+    address: string;
+    amount: number | string;
+    token_symbol: string;
+  }) {
+    console.log(transactionWebhook)
+    try {
+      const response = await axios.post(
+        "https://api-masamasa.usemorney.com/webhook/transaction", // replace with your actual URL
+        transactionWebhook
+      );
+      return response.data;
+    } catch (error: any) {
+      console.error("Failed to call transaction webhook:", error.message);
     }
   }
 

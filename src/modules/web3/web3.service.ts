@@ -20,6 +20,7 @@ import { Bip32PrivateKey } from "@emurgo/cardano-serialization-lib-nodejs";
 import { CardanoHDWallet } from "./ada-hd-wallet";
 import base58 from "bs58";
 import { sweepSPLToken } from "./Sol";
+import { Transactions } from "../transactions/transactions.entity";
 
 const TronWeb = require("tronweb");
 
@@ -46,7 +47,10 @@ export class Web3Service {
   private hdADA: CardanoHDWallet;
   constructor(
     @InjectRepository(Wallet)
-    private readonly walletRepository: Repository<Wallet>
+    private readonly walletRepository: Repository<Wallet>,
+
+    @InjectRepository(Transactions)
+    private readonly transactionRepository: Repository<Transactions>,
   ) {
     this.provider = new ethers.JsonRpcProvider(appConfig.EVM_RPC_URL);
     this.providerBase = new ethers.JsonRpcProvider(appConfig.BASE_RPC_URL);
@@ -168,6 +172,34 @@ export class Web3Service {
     await this.initHDWallet();
     const masterWalletBase = this.hd.getMasterWallet(this.providerBase);
     const masterWallet = this.hd.getMasterWallet(this.provider);
+    const transactionsTron = await this.transactionRepository
+      .createQueryBuilder("transactions")
+      .where("transactions.user_id = :user_id AND transactions.network = :network", {
+        user_id: req.user.id,
+        network: "Tron",
+      })
+      .orderBy("transactions.created_at", "DESC")
+      .getMany(); // fetch results
+
+    const transactionsADA = await this.transactionRepository
+      .createQueryBuilder("transactions")
+      .where("transactions.user_id = :user_id AND transactions.network = :network", {
+        user_id: req.user.id,
+        network: "Cardano", // fixed typo "Cadano" → "Cardano"
+      })
+      .orderBy("transactions.created_at", "DESC")
+      .getMany(); // fetch results
+
+    const formattedTransactions = transactionsTron.map(tx => ({
+      network: tx.network,
+      token_symbol: tx.metadata?.token_symbol,
+      amount: tx.metadata?.amount,
+    }));
+    const formattedTransactions2 = transactionsADA.map(tx => ({
+      network: tx.network,
+      token_symbol: tx.metadata?.token_symbol,
+      amount: tx.metadata?.amount,
+    }));
 
     const masterWalletTron = this.hdTRX.getMasterWallet();
     const masterWalletSOL = this.hdSol.getMasterKeypair().publicKey.toBase58();
@@ -175,6 +207,73 @@ export class Web3Service {
     if (!w) return false;
     const ada = await this.hdADA.getChildTransactionHistoryFirst3(0, appConfig.BLOCK_API_KEY ?? "", true);
     const tron = await this.hdTRX.getChildTRC20History(0, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t");
+
+    // Get the most recent DB transaction timestamp for TRON
+    const latestDbTronTime = formattedTransactions
+      .filter(tx => tx.network === "Tron")
+      .reduce((latest, tx:any) => {
+        const txTime = new Date(tx.metadata?.timestamp || tx.created_at).getTime();
+        return txTime > latest ? txTime : latest;
+      }, 0);
+
+    // Filter unmatched TRON transactions
+    const unmatchedTronTransactions = tron.filter(onChainTx => {
+      const onChainTime = new Date(onChainTx.date).getTime();
+      return (
+        !formattedTransactions.some(
+          dbTx =>
+            Number(dbTx.amount) === Number(onChainTx.amount)
+        ) && onChainTime > latestDbTronTime // only after latest DB tx
+      );
+    });
+
+    // Get the most recent DB transaction timestamp for ADA
+    const latestDbAdaTime = formattedTransactions2
+      .filter((tx: any) => tx.network === "Cardano")
+      .reduce((latest, tx2: any) => {
+        const txTime = new Date(tx2.metadata?.timestamp || tx2.created_at).getTime();
+        return txTime > latest ? txTime : latest;
+      }, 0);
+
+    // Filter unmatched ADA transactions
+    const unmatchedAdaTransactions2 = ada.filter((onChainTx: any) => {
+      const onChainTime = new Date(onChainTx.date).getTime();
+      return (
+        !formattedTransactions2.some(
+          dbTx =>
+            Number(dbTx.amount) === Number(onChainTx.amount)
+        ) && onChainTime > latestDbAdaTime
+      );
+    });
+
+    
+
+    const tronChildWallet = this.hdTRX.getChildAddress(req.user.id);
+    const cardanoChild = this.hdADA.generateAddress(req.user.id, true);
+
+    if (unmatchedTronTransactions && unmatchedTronTransactions.length > 0.1) {
+      unmatchedTronTransactions.map(async (a: any) => {
+        await this.hdADA.ApitransactionWebhook({
+          network: "Tron",
+          address: tronChildWallet,
+          amount: a.amount,
+          token_symbol: a.symbol
+        })
+      })
+    }
+    if (unmatchedAdaTransactions2 && unmatchedAdaTransactions2.length > 0.1) {
+      unmatchedAdaTransactions2.map(async (a: any) => {
+        await this.hdADA.ApitransactionWebhook({
+          network: "Cardano",
+          address: cardanoChild,
+          amount: a.amount,
+          token_symbol: "ADA"
+        })
+      })
+    }
+
+
+
 
     return { ada, tron }
   }
