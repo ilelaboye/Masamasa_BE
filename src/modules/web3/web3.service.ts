@@ -212,7 +212,7 @@ export class Web3Service {
     const cardanoChild = this.hdADA.generateAddress(req.user.id, true);
 
     try {
-      const tron = await this.hdTRX.getChildTRC20History(0, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t");
+      const tron = await this.hdTRX.getChildTRC20History(req.user.id, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t");
 
       // Get the most recent DB transaction timestamp for TRON
       const latestDbTronTime = formattedTransactions.reduce((latest, tx: any) => {
@@ -238,11 +238,11 @@ export class Web3Service {
         })
       }
 
-    } catch {
-
+    } catch (err) {
+      console.log(err)
     }
     try {
-      const ada = await this.hdADA.getChildTransactionHistoryFirst3(0, appConfig.BLOCK_API_KEY ?? "", true);
+      const ada = await this.hdADA.getChildTransactionHistoryFirst3(req.user.id, appConfig.BLOCK_API_KEY ?? "", true);
 
       // Get the most recent DB transaction timestamp for ADA
       const latestDbAdaTime = formattedTransactions2.reduce((latest, tx2: any) => {
@@ -267,10 +267,10 @@ export class Web3Service {
         })
       }
 
-    } catch {
-
+    } catch (err) {
+      console.log(err)
     }// Filter unmatched ADA transactions
-    return { transactions:true}
+    return { transactions: true }
   }
 
   async sweepWallets(req) {
