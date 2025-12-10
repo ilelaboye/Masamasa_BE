@@ -55,7 +55,7 @@ export class AuthController {
         message: "Authentication failed, please try again",
       });
     }
-    const cookieData = { token, user: extractUserForCookie(user) };
+    const cookieData = { token: null, user: extractUserForCookie(user) };
     res.cookie(_AUTH_COOKIE_NAME_, encryptData(cookieData), CookieOptions);
 
     return {
