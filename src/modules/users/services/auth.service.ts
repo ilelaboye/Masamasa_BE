@@ -63,7 +63,7 @@ export class AuthService extends BaseService {
         .addSelect("user.password")
         .addSelect("user.pin")
         .where("user.email = :email", {
-          email: loginStaffDto.email.toLocaleLowerCase(),
+          email: loginStaffDto.email.toLowerCase(),
         })
         .andWhere("user.google_id = :google_id", {
           google_id: loginStaffDto.google_id,
@@ -77,9 +77,10 @@ export class AuthService extends BaseService {
       .addSelect("user.pin")
       .addSelect("user.google_id")
       .where("user.email = :email", {
-        email: loginStaffDto.email.toLocaleLowerCase(),
+        email: loginStaffDto.email.toLowerCase(),
       })
       .getOne();
+    console.log("fetch", fetch);
 
     if (!fetch) {
       throw new NotAcceptableException(
