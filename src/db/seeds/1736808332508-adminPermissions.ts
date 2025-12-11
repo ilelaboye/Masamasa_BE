@@ -10,10 +10,22 @@ export class AdminPermissions1736808332508 implements Seeder {
     const admin = dataSource.getRepository(Administrator);
     const newAdmin = admin.create([
       {
-        first_name: "Lekan",
-        last_name: "Ilelaboye",
-        email: "ilelaboyealekan@gmail.com",
-        password: hashResourceSync("Password@123"),
+        first_name: "Loveth",
+        last_name: "Adetunji",
+        email: "loveth@masamasa.ng",
+        password: hashResourceSync("lovetha@123"),
+      },
+      {
+        first_name: "Seyi",
+        last_name: "Olugbeko",
+        email: "seyi@masamasa.ng",
+        password: hashResourceSync("seyio@123"),
+      },
+      {
+        first_name: "Pelumi",
+        last_name: "Ayandoye",
+        email: "pelumi@masamasa.ng",
+        password: hashResourceSync("pelumia@123"),
       },
     ]);
     await admin.save(newAdmin);
