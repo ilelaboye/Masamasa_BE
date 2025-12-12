@@ -78,7 +78,7 @@ export class AdministratorService {
       createExchangeRateDto.rate
     );
 
-    var msg = `${req.admin.first_name} ${req.admin.last_name} changed exchange rate to ${createExchangeRateDto.rate}`;
+    var msg = `${req.admin.first_name} ${req.admin.last_name} changed ${createExchangeRateDto.currency} exchange rate to ${createExchangeRateDto.rate}`;
     this.createAdminLog(null, req.admin, AdminLogEntities.EXCHANGE_RATE, msg);
     return save;
   }
