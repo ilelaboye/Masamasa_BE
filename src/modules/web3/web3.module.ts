@@ -13,6 +13,6 @@ import { Transactions } from "../transactions/transactions.entity";
   ],
   controllers: [Web3Controller],
   providers: [Web3Service, WalletService, TransactionService],
-  exports: [WalletService, TransactionService],
+  exports: [WalletService, TransactionService, Web3Service],
 })
 export class Web3Module { }

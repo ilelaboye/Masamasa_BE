@@ -26,7 +26,6 @@ import {
 
 import {
     CreateWalletDto,
-    WithdrawEthDto,
     WithdrawTokenDto,
     TokenBalanceDto,
 } from "./web3.dto";
@@ -48,13 +47,6 @@ export class Web3Controller {
     }
 
     // Withdraw ETH
-    @Post("/withdraw-eth")
-    @UsePipes(new JoiValidationPipe(WithdrawEthValidation))
-    async withdrawEth(@Req() req: UserRequest, @Body() body: WithdrawEthDto) {
-        return await this.web3Service.withdrawETH(req, body);
-    }
-
-    // Withdraw ETH
     @Get("/sweep")
     async sweepWallets(@Req() req: UserRequest) {
         return await this.web3Service.sweepWallets(req);
@@ -66,18 +58,9 @@ export class Web3Controller {
         return await this.web3Service.walletsTracking(req);
     }
 
-    // Withdraw Token
-    @Post("/withdraw-token")
-    @UsePipes(new JoiValidationPipe(WithdrawTokenValidation))
-    async withdrawToken(@Req() req: UserRequest, @Body() body: WithdrawTokenDto) {
-        return await this.web3Service.withdrawToken(body);
-    }
 
-    // Get all balances
-    @Get("/balances")
-    async getAllBalances() {
-        return await this.web3Service.getAllBalances();
-    }
+
+
 
     // Upload image
     @Post("/image")
