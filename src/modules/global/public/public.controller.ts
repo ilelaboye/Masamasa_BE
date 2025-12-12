@@ -45,11 +45,11 @@ export class PublicController {
   // }
 
   // move this out of here
-  @UsePipes(new JoiValidationPipe(CreateWalletValidation))
-  @Post("wallet/create")
-  async create(@Body() createWalletDto: CreateWalletDto) {
-    return await this.publicService.saveWalletAddress(createWalletDto);
-  }
+  // @UsePipes(new JoiValidationPipe(CreateWalletValidation))
+  // @Post("wallet/create")
+  // async create(@Body() createWalletDto: CreateWalletDto) {
+  //   return await this.publicService.saveWalletAddress(createWalletDto);
+  // }
 
   @Post("webhook/transaction")
   async transaction(@Body() transactionWebhookDto: TransactionWebhookDto) {

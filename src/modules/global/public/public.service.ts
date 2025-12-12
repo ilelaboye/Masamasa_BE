@@ -38,7 +38,7 @@ export class PublicService {
     private readonly webhookRepository: Repository<Webhook>,
     private readonly exchangeRateService: ExchangeRateService,
     private readonly notificationsService: NotificationsService
-  ) { }
+  ) {}
 
   async transactionWebhook(transactionWebhook: TransactionWebhookDto) {
     const { address, network, amount, token_symbol } = transactionWebhook;
@@ -149,39 +149,37 @@ export class PublicService {
 
     try {
       const response = await axios.get(
-        'https://api.coingecko.com/api/v3/coins/markets',
+        "https://api.coingecko.com/api/v3/coins/markets",
         {
           params: {
-            vs_currency: 'usd',
-            ids: 'bitcoin,ethereum,binancecoin,solana,tether,usd-coin,cardano,doge,ripple',
-            order: 'market_cap_desc',
+            vs_currency: "usd",
+            ids: "bitcoin,ethereum,binancecoin,solana,tether,usd-coin,cardano,doge,ripple",
+            order: "market_cap_desc",
             per_page: 100,
             page: 1,
-            price_change_percentage: '24h'
-          }
+            price_change_percentage: "24h",
+          },
         }
       );
 
       // Transform response into your desired format
       const data = {};
-      response.data.forEach(coin => {
+      response.data.forEach((coin) => {
         data[coin.id] = {
           usd: coin.current_price,
           change_24h: coin.price_change_percentage_24h,
-          direction: coin.price_change_percentage_24h >= 0 ? 'up' : 'down'
+          direction: coin.price_change_percentage_24h >= 0 ? "up" : "down",
         };
       });
 
       return {
         success: true,
-        data
+        data,
       };
-
     } catch (error) {
       console.log(error);
       throw new BadRequestException("Failed to fetch prices");
     }
-
   }
 
   async getPaystackBanks() {
@@ -203,43 +201,43 @@ export class PublicService {
     // }
   }
 
-  async saveWalletAddress(createWalletDto: CreateWalletDto) {
-    console.log(
-      "called saveWalletAddress",
-      createWalletDto.user_id,
-      createWalletDto.network,
-      createWalletDto.wallet_address
-    );
-    const existing = await this.walletRepository.exists({
-      where: { wallet_address: createWalletDto.wallet_address },
-    });
-    if (existing) {
-      throw new BadRequestException("Wallet address already exist");
-    }
+  // async saveWalletAddress(createWalletDto: CreateWalletDto) {
+  //   console.log(
+  //     "called saveWalletAddress",
+  //     createWalletDto.user_id,
+  //     createWalletDto.network,
+  //     createWalletDto.wallet_address
+  //   );
+  //   const existing = await this.walletRepository.exists({
+  //     where: { wallet_address: createWalletDto.wallet_address },
+  //   });
+  //   if (existing) {
+  //     throw new BadRequestException("Wallet address already exist");
+  //   }
 
-    const user = await this.userRepository.exists({
-      where: { id: createWalletDto.user_id },
-    });
-    if (!user) {
-      throw new BadRequestException("User not found");
-    }
-    const user_wall = await this.walletRepository.exists({
-      where: { user_id: createWalletDto.user_id },
-    });
-    if (user_wall) {
-      throw new BadRequestException(
-        "Wallet has already been created for this user"
-      );
-    }
-    const wallet = this.walletRepository.create({
-      user: { id: createWalletDto.user_id },
-      network: createWalletDto.network,
-      currency: createWalletDto.currency,
-      wallet_address: createWalletDto.wallet_address,
-    });
-    console.log("done", wallet);
-    return await this.walletRepository.save(wallet);
-  }
+  //   const user = await this.userRepository.exists({
+  //     where: { id: createWalletDto.user_id },
+  //   });
+  //   if (!user) {
+  //     throw new BadRequestException("User not found");
+  //   }
+  //   const user_wall = await this.walletRepository.exists({
+  //     where: { user_id: createWalletDto.user_id },
+  //   });
+  //   if (user_wall) {
+  //     throw new BadRequestException(
+  //       "Wallet has already been created for this user"
+  //     );
+  //   }
+  //   const wallet = this.walletRepository.create({
+  //     user: { id: createWalletDto.user_id },
+  //     network: createWalletDto.network,
+  //     currency: createWalletDto.currency,
+  //     wallet_address: createWalletDto.wallet_address,
+  //   });
+  //   console.log("done", wallet);
+  //   return await this.walletRepository.save(wallet);
+  // }
 
   async verifyAccountNumber(
     bankAccountVerificationDto: BankAccountVerificationDto

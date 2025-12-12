@@ -62,7 +62,9 @@ export class AuthService extends BaseService {
         .createQueryBuilder("user")
         .addSelect("user.password")
         .addSelect("user.pin")
-        .where("user.email = :email", { email: loginStaffDto.email })
+        .where("user.email = :email", {
+          email: loginStaffDto.email.toLowerCase(),
+        })
         .andWhere("user.google_id = :google_id", {
           google_id: loginStaffDto.google_id,
         })
@@ -74,8 +76,11 @@ export class AuthService extends BaseService {
       .addSelect("user.password")
       .addSelect("user.pin")
       .addSelect("user.google_id")
-      .where("user.email = :email", { email: loginStaffDto.email })
+      .where("user.email = :email", {
+        email: loginStaffDto.email.toLowerCase(),
+      })
       .getOne();
+    console.log("fetch", fetch);
 
     if (!fetch) {
       throw new NotAcceptableException(
@@ -171,8 +176,11 @@ export class AuthService extends BaseService {
     return { message: "Verification successful." };
   }
 
-  async resendVerificationToken(email: string) {
-    const user = await this.userRepository.findOne({ where: { email } });
+  async resendVerificationToken(emailData: string) {
+    var email = emailData.toLowerCase();
+    const user = await this.userRepository.findOne({
+      where: { email },
+    });
     if (!user) {
       throw new BadRequestException("User with this email does not exist.");
     }
@@ -195,12 +203,20 @@ export class AuthService extends BaseService {
 
     await queryRunner.startTransaction();
     try {
-      const { email, first_name, last_name, phone, country, google_id } =
-        createAccountDto;
+      const {
+        email: emailData,
+        first_name,
+        last_name,
+        phone,
+        country,
+        google_id,
+      } = createAccountDto;
+
+      var email = emailData.toLowerCase();
 
       console.log("phone", phone);
       const existingUser = await this.userRepository.exists({
-        where: [{ email }],
+        where: [{ email: email }],
       });
 
       if (existingUser) {
@@ -209,7 +225,7 @@ export class AuthService extends BaseService {
 
       if (phone && phone.length > 0) {
         const existingPhone = await this.userRepository.exists({
-          where: [{ email }, { phone }],
+          where: [{ email: email }, { phone }],
         });
         if (existingPhone) {
           throw new BadRequestException(
