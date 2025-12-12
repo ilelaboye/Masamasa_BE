@@ -316,6 +316,74 @@ export class HDWallet {
     return ethers.formatUnits(balance, decimals); // returns string in token units
   }
 
+  /**
+   * Withdraw funds from master wallet to any address
+   * Supports both native tokens (ETH/BNB) and ERC20 tokens
+   */
+  async withdrawFromMaster(
+    provider: ethers.JsonRpcProvider,
+    toAddress: string,
+    amount: string,
+    tokenAddress?: string,
+    network: string = "BASE",
+    symbol: string = "ETH"
+  ): Promise<string> {
+    const masterWallet = this.getMasterWallet(provider);
+
+    if (!masterWallet.provider) throw new Error("Master wallet must have a provider");
+
+    // Withdraw ERC20 Token
+    if (tokenAddress) {
+      const token = new ethers.Contract(tokenAddress, ERC20_ABI, masterWallet);
+      const decimals: number = await token.decimals();
+      const amountInWei = ethers.parseUnits(amount, decimals);
+
+      // Check balance
+      const balance: bigint = await token.balanceOf(masterWallet.address);
+      if (balance < amountInWei) {
+        throw new Error(`Insufficient ${symbol} balance. Available: ${ethers.formatUnits(balance, decimals)}`);
+      }
+
+      // Send token transfer
+      const tx = await token.transfer(toAddress, amountInWei);
+      await tx.wait();
+
+      console.log(`Withdrew ${amount} ${symbol} to ${toAddress}. Tx: ${tx.hash}`);
+      return tx.hash;
+    }
+
+    // Withdraw Native Token (ETH/BNB)
+    const amountInWei = ethers.parseEther(amount);
+    const balance = await masterWallet.provider.getBalance(masterWallet.address);
+
+    if (balance < amountInWei) {
+      throw new Error(`Insufficient ${symbol} balance. Available: ${ethers.formatEther(balance)}`);
+    }
+
+    // Estimate gas
+    const feeData = await masterWallet.provider.getFeeData();
+    const gasPrice = feeData.gasPrice ?? 5_000_000_000n;
+    const gasLimit = 21000n;
+    const gasCost = gasLimit * gasPrice;
+
+    // Ensure enough for gas
+    if (balance < amountInWei + gasCost) {
+      throw new Error(`Insufficient balance to cover amount + gas. Available: ${ethers.formatEther(balance)}`);
+    }
+
+    // Send transaction
+    const tx = await masterWallet.sendTransaction({
+      to: toAddress,
+      value: amountInWei,
+      gasLimit: gasLimit,
+      gasPrice: gasPrice,
+    });
+
+    await tx.wait();
+    console.log(`Withdrew ${amount} ${symbol} to ${toAddress}. Tx: ${tx.hash}`);
+    return tx.hash;
+  }
+
 
   private async _transactionWebhook(transactionWebhook: {
     network: string;

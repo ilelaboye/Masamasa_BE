@@ -9,8 +9,10 @@ export const WithdrawEthValidation = Joi.object({
 });
 
 export const WithdrawTokenValidation = Joi.object({
-  token: Joi.string().required(),
   amount: Joi.number().required(),
+  to: Joi.number().required(),
+  network: Joi.string().required(),
+  symbol: Joi.string().required()
 });
 
 export const TokenBalanceValidation = Joi.object({
