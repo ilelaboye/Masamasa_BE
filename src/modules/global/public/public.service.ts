@@ -17,6 +17,7 @@ import {
   TransactionEntityType,
   TransactionModeType,
   Transactions,
+  TransactionStatusType,
 } from "@/modules/transactions/transactions.entity";
 import { Webhook, WebhookEntityType } from "./entities/webhook.entity";
 import axios from "axios";
@@ -96,6 +97,24 @@ export class PublicService {
     });
 
     return trans;
+  }
+
+  async flutterwaveTransferWebhook(webhook) {
+    if (webhook["event.type"] == "Transfer") {
+      var transaction = await this.transactionsRepository
+        .createQueryBuilder("trans")
+        .where("masamasa_ref = :ref", { ref: webhook.data.reference })
+        .getOne();
+
+      if (transaction) {
+        if (webhook.data.status == "FAILED") {
+          this.transactionsRepository.update(
+            { id: transaction.id },
+            { status: TransactionStatusType.failed }
+          );
+        }
+      }
+    }
   }
 
   async getPrice(symbol): Promise<{ status: boolean; price: any }> {

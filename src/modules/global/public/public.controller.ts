@@ -54,6 +54,7 @@ export class PublicController {
   @Post("webhook/flutterwave/transfer")
   async flutterwaveTransferWebhook(@Body() webhook) {
     console.log("FLUTTERWAVE TRANSFER WEBHOOK", webhook);
+    return await this.publicService.flutterwaveTransferWebhook(webhook);
   }
 
   @Post("webhook/transaction")
