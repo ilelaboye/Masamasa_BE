@@ -51,6 +51,11 @@ export class PublicController {
   //   return await this.publicService.saveWalletAddress(createWalletDto);
   // }
 
+  @Post("webhook/flutterwave/transfer")
+  async flutterwaveTransferWebhook(@Body() webhook) {
+    console.log("FLUTTERWAVE TRANSFER WEBHOOK", webhook);
+  }
+
   @Post("webhook/transaction")
   async transaction(@Body() transactionWebhookDto: TransactionWebhookDto) {
     return await this.publicService.transactionWebhook(transactionWebhookDto);
