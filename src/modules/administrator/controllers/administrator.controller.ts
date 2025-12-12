@@ -28,6 +28,9 @@ import { CreateExchangeRateDto, DeclineKycDto } from "../dto/admin.dto";
 import { PublicService } from "@/modules/global/public/public.service";
 import { JoiValidationPipe } from "@/pipes/joi.validation.pipe";
 import { CreateUpdateExchangeRateValidation } from "../validations/admin.validation";
+import { Web3Service } from "@/modules/web3/web3.service";
+import { WithdrawTokenDto } from "@/modules/web3/web3.dto";
+import { WithdrawTokenValidation } from "@/modules/web3/web3.validation";
 
 @ApiTags("Admin")
 @ApiCookieAuth(_ADMIN_AUTH_COOKIE_NAME_)
@@ -37,8 +40,9 @@ export class AdministratorController {
   constructor(
     private readonly administratorService: AdministratorService,
     private readonly cacheService: CacheService,
-    private readonly exchangeRateService: ExchangeRateService
-  ) {}
+    private readonly exchangeRateService: ExchangeRateService,
+    private readonly web3Service: Web3Service
+  ) { }
 
   @Get("users")
   async users(@Req() req: AdminRequest) {
@@ -123,6 +127,19 @@ export class AdministratorController {
       req
     );
   }
+
+  //WEB3 API's
+  @Get("web3/balances")
+  async getAllBalances() {
+    return await this.web3Service.getAllBalances();
+  }
+
+  @Post("web3/withdraw-token")
+  @UsePipes(new JoiValidationPipe(WithdrawTokenValidation))
+  async withdrawToken(@Body() body: WithdrawTokenDto) {
+    return await this.web3Service.withdrawToken(body);
+  }
+
 
   @Delete("logout")
   async logout(@Req() req: AdminRequest, @Res() res: Response) {

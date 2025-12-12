@@ -4,15 +4,12 @@ export class CreateWalletDto {
   id: string;
 }
 
-export class WithdrawEthDto {
-  amount:number; 
-  to:number;
-}
 
 export class WithdrawTokenDto {
- tokenAddress: string;
   amount: ethers.BigNumberish;
-  to: string
+  to: string;
+  network: string;
+  symbol: string;
 }
 
 export class TokenBalanceDto {

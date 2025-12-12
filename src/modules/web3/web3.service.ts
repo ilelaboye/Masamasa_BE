@@ -2,7 +2,7 @@ import { Injectable, BadRequestException } from "@nestjs/common";
 import { ethers, formatUnits } from "ethers";
 import axios from "axios";
 import { appConfig } from "@/config";
-import { WithdrawEthDto, WithdrawTokenDto } from "./web3.dto";
+import { WithdrawTokenDto } from "./web3.dto";
 import {
   Connection,
   LAMPORTS_PER_SOL,
@@ -376,37 +376,68 @@ export class Web3Service {
     return true;
   }
 
-  // -----------------------------
-  // WITHDRAW ETH
-  // -----------------------------
-  async withdrawETH(req, payload: WithdrawEthDto) {
-    try {
-      const signer = this.getSigner();
-      const walletManager = this.getContract("", signer);
-
-      const tx = await walletManager.withdrawContractETH(payload.amount, payload.to);
-      await tx.wait();
-
-      return tx.hash;
-    } catch (err: any) {
-      throw new BadRequestException(err.message || "Insufficient funds for withdrawal");
-    }
-  }
-
-  // -----------------------------
-  // WITHDRAW TOKEN
-  // -----------------------------
   async withdrawToken(payload: WithdrawTokenDto) {
     try {
-      const signer = this.getSigner();
-      const walletManager = this.getContract("appConfig", signer);
+      await this.initHDWallet();
+      const ERC20_TOKENS: Record<string, string> = {
+        BASE_USDT: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", // Base USDT
+        BASE_USDC: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // BASE USDC
+        BASE_BTC: "0x0555e30da8f98308edb960aa94c0db47230d2b9c", // BASE BTC
+        BASE_BNB: "0xf7158362807485ae32b6e0b40fd613c70629e9be",
+        BNB_USDT: "0x55d398326f99059fF775485246999027B3197955", // BSC USDT
+        BNB_USDC: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", // BSC USDC
+        BNB_RIPPLE: "0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE", // BSC XRP
+        BNB_DOGE: "0xbA2aE424d960c26247Dd6c32edC70B295c744C43", // BSC DOGE
+        BNB_BTC: "0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c", // BSC BTC
+        SOL_USDT: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+        SOL_USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        TRON_USDT: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
+      };
 
-      const tx = await walletManager.withdrawContractToken(payload.tokenAddress, payload.amount, payload.to);
-      await tx.wait();
+      // Determine which provider to use based on network
+      let provider: ethers.JsonRpcProvider;
+      const network = payload.network?.toUpperCase() || "BASE";
+      const symbol = payload.symbol?.toUpperCase() || "";
 
-      return tx.hash;
+      if (network === "BASE") {
+        provider = this.providerBase;
+      } else if (network === "BINANCE" || network === "BSC" || network === "BNB") {
+        provider = this.provider;
+      } else {
+        provider = this.providerBase; // default to Base
+      }
+
+      // Determine token address based on network and symbol
+      let tokenAddress: string | undefined;
+
+      // Check if it's a native token withdrawal (ETH or BNB)
+      if (symbol === "ETH" || symbol === "BNB") {
+        tokenAddress = undefined; // Native token
+      } else {
+        // Build the key for ERC20 token lookup
+        const tokenKey = `${network}_${symbol}`;
+        tokenAddress = ERC20_TOKENS[tokenKey];
+
+        if (!tokenAddress) {
+          throw new BadRequestException(
+            `Token ${symbol} not supported on ${network} network. Available tokens: ${Object.keys(ERC20_TOKENS).filter(k => k.startsWith(network)).map(k => k.split('_')[1]).join(', ')}`
+          );
+        }
+      }
+
+      // Use the new withdrawFromMaster method
+      const txHash = await this.hd.withdrawFromMaster(
+        provider,
+        payload.to,
+        payload.amount.toString(),
+        tokenAddress,
+        network,
+        symbol
+      );
+
+      return { success: true, txHash };
     } catch (err: any) {
-      throw new BadRequestException(err.message || "Insufficient funds for withdrawal");
+      throw new BadRequestException(err.message || "Withdrawal failed");
     }
   }
 
