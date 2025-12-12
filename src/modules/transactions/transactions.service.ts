@@ -26,6 +26,7 @@ export class TransactionService {
       this.transactionRepository
         .createQueryBuilder("transactions")
         .where("user_id = :user_id", { user_id: req.user.id })
+        .andWhere("status = :status", { status: TransactionStatusType.success })
         .orderBy("transactions.created_at", "DESC");
 
     if (date_from) {

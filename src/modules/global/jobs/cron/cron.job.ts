@@ -64,7 +64,7 @@ export class CronJob {
           ref: trans.masamasa_ref,
           narration: "Transfer from Masamasa",
         });
-        console.log("resp", resp);
+        console.log("resp from transfer", resp);
         if (resp.status) {
           await this.transactionsRepository.update(
             { id: trans.id },
