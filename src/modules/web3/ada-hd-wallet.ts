@@ -208,7 +208,7 @@ export class CardanoHDWallet {
     mainnet = true
   ): Promise<{
     address: string;
-    lovelace: bigint;
+    lovelace: number; 
     assets: Record<string, Record<string, bigint>>;
   }> {
     const network = mainnet ? "mainnet" : "preprod";
@@ -243,7 +243,7 @@ export class CardanoHDWallet {
 
     return {
       address,
-      lovelace: totalLovelace,
+       lovelace: Number(totalLovelace) / 1_000_000,
       assets,
     };
   }

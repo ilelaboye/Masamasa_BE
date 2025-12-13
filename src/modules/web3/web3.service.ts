@@ -532,6 +532,7 @@ export class Web3Service {
       // const masterTRX = this.hdTRX.getMasterWallet().address;
       //   const trxBalance = (await this.tronWeb.trx.getBalance(masterTRX)) / 1e6;
       //   const trxUSDTBalance = await this.getTokenBalanceTRX(ERC20_TOKENS["TRON_USDT"]);
+      const cardanoChild = await this.hdADA.getChildBalance(0, appConfig.BLOCK_API_KEY ?? "", true);
 
       return {
         base: {
@@ -554,7 +555,10 @@ export class Web3Service {
           USDT: solUSDT,
           USDC: solUSDC
         },
-        TRX: { TRX: 0.51, USDT: 1 }
+        TRX: { TRX: 0.51, USDT: 1 },
+        ADA: {
+          ADA:cardanoChild.lovelace+2
+        }
         // SOL: solBalance,
         // SOL_USDC: solUSDCBalance,
         // SOL_USDT: solUSDTBalance
