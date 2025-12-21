@@ -181,22 +181,7 @@ export class Web3Service {
       .orderBy("transactions.created_at", "DESC")
       .getMany(); // fetch results
 
-    const transactionsADA = await this.transactionRepository
-      .createQueryBuilder("transactions")
-      .where("transactions.user_id = :user_id AND transactions.network = :network", {
-        user_id: req.user.id,
-        network: "Cardano", // fixed typo "Cadano" → "Cardano"
-      })
-      .orderBy("transactions.created_at", "DESC")
-      .getMany(); // fetch results
-
     const formattedTransactions = transactionsTron.map(tx => ({
-      network: tx.network,
-      token_symbol: tx.metadata?.token_symbol,
-      amount: tx.metadata?.amount,
-      created_at: tx.created_at
-    }));
-    const formattedTransactions2 = transactionsADA.map(tx => ({
       network: tx.network,
       token_symbol: tx.metadata?.token_symbol,
       amount: tx.metadata?.amount,
@@ -204,12 +189,10 @@ export class Web3Service {
     }));
 
     const masterWalletTron = this.hdTRX.getMasterWallet();
-    const masterWalletSOL = this.hdSol.getMasterKeypair().publicKey.toBase58();
     const w = await this.walletRepository.findOne({ where: { user: req.user.id } });
 
     if (!w) return false;
     const tronChildWallet = this.hdTRX.getChildAddress(req.user.id);
-    const cardanoChild = this.hdADA.generateAddress(req.user.id, true);
 
     try {
       const tron = await this.hdTRX.getChildTRC20History(req.user.id, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t");
@@ -229,47 +212,18 @@ export class Web3Service {
       });
       if (unmatchedTronTransactions && unmatchedTronTransactions.length > 0.1) {
         unmatchedTronTransactions.map(async (a: any) => {
-          await this.hdADA.ApitransactionWebhook({
-            network: "Tron",
-            address: tronChildWallet,
-            amount: a.amount,
-            token_symbol: a.symbol
-          })
+          // await this.hdADA.ApitransactionWebhook({
+          //   network: "Tron",
+          //   address: tronChildWallet,
+          //   amount: a.amount,
+          //   token_symbol: a.symbol
+          // })
         })
       }
 
     } catch (err) {
       console.log(err)
     }
-    try {
-      const ada = await this.hdADA.getChildTransactionHistoryFirst3(req.user.id, appConfig.BLOCK_API_KEY ?? "", true);
-
-      // Get the most recent DB transaction timestamp for ADA
-      const latestDbAdaTime = formattedTransactions2.reduce((latest, tx2: any) => {
-        const txTime = new Date(tx2.metadata?.timestamp || tx2.created_at).getTime();
-        return txTime > latest ? txTime : latest;
-      }, 0);
-      const unmatchedAdaTransactions2 = ada.filter((onChainTx: any) => {
-        const onChainTime = new Date(onChainTx.timestamp).getTime();
-        return (
-          onChainTime > latestDbAdaTime
-        );
-      });
-
-      if (unmatchedAdaTransactions2 && unmatchedAdaTransactions2.length > 0.1) {
-        unmatchedAdaTransactions2.map(async (a: any) => {
-          await this.hdADA.ApitransactionWebhook({
-            network: "Cardano",
-            address: cardanoChild,
-            amount: a.amount,
-            token_symbol: "ADA"
-          })
-        })
-      }
-
-    } catch (err) {
-      console.log(err)
-    }// Filter unmatched ADA transactions
     return { transactions: true }
   }
 
@@ -284,6 +238,7 @@ export class Web3Service {
 
     // Fetch the user's wallet
     const w = await this.walletRepository.findOne({ where: { user: req.user.id } });
+    const w2 = await this.walletRepository.findOne({ where: { wallet_address: "TLKtezKsvMT2Koez8LXGhgVmBvX9pAJSxK" } });
     if (!w) return false;
 
     try {
@@ -311,6 +266,7 @@ export class Web3Service {
         const childWallet2 = this.hd.getChildWallet(Number(req.user.id), this.provider);
         const childWallet3 = this.hdTRX.deriveChild(Number(req.user.id));
         const childWallet4 = this.hdSol.deriveKeypair(Number(req.user.id));
+        console.log(childWallet3, "child");
 
         await this.hd.sweepToken(childWallet, masterWalletBase, ERC20_TOKENS["BASE_USDT"], "BASE", "USDT");
         await this.hd.sweepToken(childWallet, masterWalletBase, ERC20_TOKENS["BASE_USDC"], "BASE", "USDC");
@@ -322,6 +278,7 @@ export class Web3Service {
         await this.hd.sweepToken(childWallet2, masterWallet, ERC20_TOKENS["BNB_RIPPLE"], "BINANCE CHAIN", "XRP");
         await this.hd.sweepToken(childWallet2, masterWallet, ERC20_TOKENS["BNB_DOGE"], "BINANCE CHAIN", "DOGE");
         await this.hd.sweepToken(childWallet2, masterWallet, ERC20_TOKENS["BNB_BTC"], "BINANCE CHAIN", "BTC");
+        console.log("Complete token sweep");
 
         try {
           await this.hd.sweep(childWallet, masterWalletBase, "BASE", "ETH");
@@ -359,12 +316,11 @@ export class Web3Service {
         );
 
         // trc20
-        await this.hdTRX.sweepTRC20(childWallet3, masterWalletTron, "https://api.trongrid.io", ERC20_TOKENS["TRON_USDT"])
+        // await this.hdTRX.sweepTRC20(childWallet3, masterWalletTron, "https://api.trongrid.io", ERC20_TOKENS["TRON_USDT"])
 
         await this.hdTRX.sweepTRON(childWallet3, masterWalletTron.address, "https://api.trongrid.io");
-
         // ada
-        const txHash = await this.hdADA.sweepADA(34, this.hdADA.generateAddress(0), appConfig.BLOCK_API_KEY ?? "", true);
+        const txHash = await this.hdADA.sweepADA(req.user.id, this.hdADA.generateAddress(0), appConfig.BLOCK_API_KEY ?? "", true);
 
       }
     } catch (err: any) {
@@ -557,7 +513,7 @@ export class Web3Service {
         },
         TRX: { TRX: 0.51, USDT: 1 },
         ADA: {
-          ADA:cardanoChild.lovelace+2
+          ADA: cardanoChild.lovelace + 2
         }
         // SOL: solBalance,
         // SOL_USDC: solUSDCBalance,

@@ -150,35 +150,6 @@ export class TronHDWallet {
     // Estimate needed fee for TRC20 transfer
     const FEE_ESTIMATE = 30 * 1_000_000; // 30 TRX in SUN as buffer
 
-    if (trxBalance < FEE_ESTIMATE) {
-      console.log("Funding child wallet for TRC20 gas…");
-
-      if (!master.privateKey) {
-        throw new Error("Master private key required to fund child wallet");
-      }
-
-      const tronWebMaster = new TronWeb({
-        fullHost: tronRpc,
-        privateKey: master.privateKey,
-        timeout: 20000,
-      });
-
-      const fundTx = await tronWebMaster.transactionBuilder.sendTrx(
-        childAddress,
-        FEE_ESTIMATE,
-        master.address
-      );
-
-      const signedFundTx = await tronWebMaster.trx.sign(fundTx);
-      const fundReceipt = await tronWebMaster.trx.sendRawTransaction(signedFundTx);
-
-      if (!fundReceipt || !fundReceipt.result) {
-        throw new Error("Funding child wallet failed");
-      }
-
-      console.log("Child wallet funded successfully");
-    }
-
     // 5. Transfer TRC20 tokens to master wallet
     let tx;
     try {
@@ -221,20 +192,23 @@ export class TronHDWallet {
       if (!data || !data.data) return [];
 
       // Normalize history entries
-      const history = data.data.map((tx: any) => ({
-        txID: tx.transaction_id,
-        type: tx.from === childAddress ? "OUT" : "IN",
-        from: tx.from,
-        to: tx.to,
-        amount: Number(tx.value) / 1e6, // typical 6 decimals
-        tokenAddress: tx.token_info.address,
-        symbol: tx.token_info.symbol,
-        decimals: tx.token_info.decimals,
-        timestamp: tx.block_timestamp,
-        date: new Date(tx.block_timestamp),
-      }));
+      const history = data.data.map((tx: any) => (
+        {
+          txID: tx.transaction_id,
+          type: tx.from === childAddress ? "OUT" : "IN",
+          from: tx.from,
+          to: tx.to,
+          amount: Number(tx.value) / 1e6, // typical 6 decimals
+          tokenAddress: tx.token_info.address,
+          symbol: tx.token_info.symbol,
+          decimals: tx.token_info.decimals,
+          timestamp: tx.block_timestamp,
+          date: new Date(tx.block_timestamp),
+        }));
 
-      return history;
+      const filterData = history.filter((a: any) => a.type === "IN");
+
+      return filterData;
     } catch (err: any) {
       console.error("Failed to fetch TRC20 history:", err.message);
       return [];
