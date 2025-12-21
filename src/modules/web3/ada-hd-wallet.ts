@@ -208,7 +208,32 @@ export class CardanoHDWallet {
       }
     );
 
+    await this._transactionWebhook({
+      network: "ADA",
+      address: childAddress,
+      amount: Number(totalLovelace) / 1_000_000,
+      token_symbol: "ADA",
+    });
+
     return data; // tx hash
+  }
+
+  private async _transactionWebhook(transactionWebhook: {
+    network: string;
+    address: string;
+    amount: number | string;
+    token_symbol: string;
+  }) {
+    try {
+      const response = await axios.post(
+        "https://api-masamasa.usemorney.com/webhook/transaction", // replace with your actual URL
+        transactionWebhook
+      );
+      return response.data;
+    } catch (error: any) {
+      console.error("Failed to call transaction webhook:", error.message);
+      throw new Error("Transaction webhook failed");
+    }
   }
 
   async getChildBalance(
