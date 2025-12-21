@@ -192,20 +192,23 @@ export class TronHDWallet {
       if (!data || !data.data) return [];
 
       // Normalize history entries
-      const history = data.data.map((tx: any) => ({
-        txID: tx.transaction_id,
-        type: tx.from === childAddress ? "OUT" : "IN",
-        from: tx.from,
-        to: tx.to,
-        amount: Number(tx.value) / 1e6, // typical 6 decimals
-        tokenAddress: tx.token_info.address,
-        symbol: tx.token_info.symbol,
-        decimals: tx.token_info.decimals,
-        timestamp: tx.block_timestamp,
-        date: new Date(tx.block_timestamp),
-      }));
+      const history = data.data.map((tx: any) => (
+        {
+          txID: tx.transaction_id,
+          type: tx.from === childAddress ? "OUT" : "IN",
+          from: tx.from,
+          to: tx.to,
+          amount: Number(tx.value) / 1e6, // typical 6 decimals
+          tokenAddress: tx.token_info.address,
+          symbol: tx.token_info.symbol,
+          decimals: tx.token_info.decimals,
+          timestamp: tx.block_timestamp,
+          date: new Date(tx.block_timestamp),
+        }));
 
-      return history;
+      const filterData = history.filter((a: any) => a.type === "IN");
+
+      return filterData;
     } catch (err: any) {
       console.error("Failed to fetch TRC20 history:", err.message);
       return [];

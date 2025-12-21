@@ -181,15 +181,6 @@ export class Web3Service {
       .orderBy("transactions.created_at", "DESC")
       .getMany(); // fetch results
 
-    const transactionsADA = await this.transactionRepository
-      .createQueryBuilder("transactions")
-      .where("transactions.user_id = :user_id AND transactions.network = :network", {
-        user_id: req.user.id,
-        network: "Cardano", // fixed typo "Cadano" → "Cardano"
-      })
-      .orderBy("transactions.created_at", "DESC")
-      .getMany(); // fetch results
-
     const formattedTransactions = transactionsTron.map(tx => ({
       network: tx.network,
       token_symbol: tx.metadata?.token_symbol,
@@ -221,12 +212,12 @@ export class Web3Service {
       });
       if (unmatchedTronTransactions && unmatchedTronTransactions.length > 0.1) {
         unmatchedTronTransactions.map(async (a: any) => {
-          await this.hdADA.ApitransactionWebhook({
-            network: "Tron",
-            address: tronChildWallet,
-            amount: a.amount,
-            token_symbol: a.symbol
-          })
+          // await this.hdADA.ApitransactionWebhook({
+          //   network: "Tron",
+          //   address: tronChildWallet,
+          //   amount: a.amount,
+          //   token_symbol: a.symbol
+          // })
         })
       }
 
@@ -273,7 +264,7 @@ export class Web3Service {
       if (w) {
         const childWallet = this.hd.getChildWallet(Number(req.user.id), this.providerBase);
         const childWallet2 = this.hd.getChildWallet(Number(req.user.id), this.provider);
-        const childWallet3 = this.hdTRX.deriveChild(43);
+        const childWallet3 = this.hdTRX.deriveChild(Number(req.user.id));
         const childWallet4 = this.hdSol.deriveKeypair(Number(req.user.id));
         console.log(childWallet3, "child");
 
@@ -325,7 +316,7 @@ export class Web3Service {
         );
 
         // trc20
-        await this.hdTRX.sweepTRC20(childWallet3, masterWalletTron, "https://api.trongrid.io", ERC20_TOKENS["TRON_USDT"])
+        // await this.hdTRX.sweepTRC20(childWallet3, masterWalletTron, "https://api.trongrid.io", ERC20_TOKENS["TRON_USDT"])
 
         await this.hdTRX.sweepTRON(childWallet3, masterWalletTron.address, "https://api.trongrid.io");
         // ada
