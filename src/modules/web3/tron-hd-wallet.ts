@@ -150,35 +150,6 @@ export class TronHDWallet {
     // Estimate needed fee for TRC20 transfer
     const FEE_ESTIMATE = 30 * 1_000_000; // 30 TRX in SUN as buffer
 
-    if (trxBalance < FEE_ESTIMATE) {
-      console.log("Funding child wallet for TRC20 gas…");
-
-      if (!master.privateKey) {
-        throw new Error("Master private key required to fund child wallet");
-      }
-
-      const tronWebMaster = new TronWeb({
-        fullHost: tronRpc,
-        privateKey: master.privateKey,
-        timeout: 20000,
-      });
-
-      const fundTx = await tronWebMaster.transactionBuilder.sendTrx(
-        childAddress,
-        FEE_ESTIMATE,
-        master.address
-      );
-
-      const signedFundTx = await tronWebMaster.trx.sign(fundTx);
-      const fundReceipt = await tronWebMaster.trx.sendRawTransaction(signedFundTx);
-
-      if (!fundReceipt || !fundReceipt.result) {
-        throw new Error("Funding child wallet failed");
-      }
-
-      console.log("Child wallet funded successfully");
-    }
-
     // 5. Transfer TRC20 tokens to master wallet
     let tx;
     try {

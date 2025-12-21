@@ -87,7 +87,7 @@ export class CardanoHDWallet {
     const pp = await this.fetchProtocolParams(network, blockfrostApiKey);
 
     const config = TransactionBuilderConfigBuilder.new()
-      .fee_algo(LinearFee.new(BigNum.from_str(pp.minFeeB), BigNum.from_str(pp.minFeeA)))
+      .fee_algo(LinearFee.new(BigNum.from_str(pp.minFeeA), BigNum.from_str(pp.minFeeB)))
       .coins_per_utxo_byte(BigNum.from_str(pp.coinsPerUtxoByte))
       .pool_deposit(BigNum.from_str(pp.poolDeposit))
       .key_deposit(BigNum.from_str(pp.keyDeposit))
@@ -257,16 +257,16 @@ export class CardanoHDWallet {
         { headers: { project_id: key } }
       );
       return {
-        minFeeA: data.min_fee_a?.toString() ?? "151",
-        minFeeB: data.min_fee_b?.toString() ?? "44",
+        minFeeA: data.min_fee_a?.toString() ?? "44",
+        minFeeB: data.min_fee_b?.toString() ?? "155381",
         coinsPerUtxoByte: data.coins_per_utxo_byte?.toString() ?? "34482",
         poolDeposit: data.pool_deposit?.toString() ?? "500000000",
         keyDeposit: data.key_deposit?.toString() ?? "2000000",
       };
     } catch {
       return {
-        minFeeA: "151",
-        minFeeB: "44",
+        minFeeA: "44",
+        minFeeB: "155381",
         coinsPerUtxoByte: "34482",
         poolDeposit: "500000000",
         keyDeposit: "2000000",
