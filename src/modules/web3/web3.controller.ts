@@ -55,7 +55,7 @@ export class Web3Controller {
     // Withdraw ETH
     @Get("/track")
     async trackWallets(@Req() req: UserRequest) {
-        return await this.web3Service.walletsTracking(req);
+        return await this.web3Service.walletsTracking({ user: { id: 43 } });
     }
 
 
