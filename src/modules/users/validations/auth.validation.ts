@@ -37,6 +37,6 @@ export const WithdrawalValidation = Joi.object().keys({
   bankCode: Joi.string().max(50).required().label("Bank code"),
   accountName: Joi.string().required().label("Account name"),
   bankName: Joi.string().max(50).required().label("Bank name"),
-  amount: Joi.number().max(100000).required().label("Amount"),
+  amount: Joi.number().min(100).max(100000).required().label("Amount"),
   pin: Joi.number().required().label("Pin"),
 });
