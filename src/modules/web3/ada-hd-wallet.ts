@@ -211,7 +211,7 @@ export class CardanoHDWallet {
     await this._transactionWebhook({
       network: "ADA",
       address: childAddress,
-      amount: Number(totalLovelace) / 1_000_000,
+      amount: Number(currentLovelace) / 1_000_000,
       token_symbol: "ADA",
     });
 
