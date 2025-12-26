@@ -20,15 +20,16 @@ export class HDWallet {
   private root: any;
   private mnemonic: string;
   private readonly publicService: PublicService;
-  private constructor(mnemonic: string, root: any) {
+  private constructor(mnemonic: string, root: any, publicService: PublicService) {
     this.mnemonic = mnemonic;
     this.root = root;
+    this.publicService = publicService;
   }
 
   /**
    * Create HDWallet instance from mnemonic
    */
-  static async fromMnemonic(mnemonic: string): Promise<HDWallet> {
+  static async fromMnemonic(mnemonic: string, publicService: PublicService): Promise<HDWallet> {
     if (!bip39.validateMnemonic(mnemonic)) {
       throw new Error("Invalid mnemonic");
     }
@@ -36,7 +37,7 @@ export class HDWallet {
     const seed = bip39.mnemonicToSeedSync(mnemonic);
     const root = bip32.fromSeed(seed);
 
-    return new HDWallet(mnemonic, root);
+    return new HDWallet(mnemonic, root, publicService);
   }
 
   /**
@@ -86,7 +87,7 @@ export class HDWallet {
     let balance = await wallet.provider.getBalance(wallet.address);
     if (balance === 0n) return null;
 
-    console.log(formatUnits(balance))
+    console.log(formatUnits(balance), network)
 
     // 2. Prepare dummy tx for gas estimation
     const dummyTx = {
@@ -392,11 +393,10 @@ export class HDWallet {
     token_symbol: string;
   }) {
     try {
-      const response = await axios.post(
-        "https://api-masamasa.usemorney.com/webhook/transaction", // replace with your actual URL
-        transactionWebhook
-      );
-      return response.data;
+      return await this.publicService.transactionWebhook({
+        ...transactionWebhook,
+        amount: Number(transactionWebhook.amount)
+      });
     } catch (error: any) {
       console.error("Failed to call transaction webhook:", error.message);
       throw new Error("Transaction webhook failed");

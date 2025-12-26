@@ -18,9 +18,11 @@ import { SolHDWallet } from "./sol-hd-wallet";
 import { getAssociatedTokenAddress, getAccount } from "@solana/spl-token";
 import { Bip32PrivateKey } from "@emurgo/cardano-serialization-lib-nodejs";
 import { CardanoHDWallet } from "./ada-hd-wallet";
+import { BtcHDWallet } from "./btc-hd-wallet";
 import base58 from "bs58";
 import { sweepSPLToken } from "./Sol";
 import { Transactions } from "../transactions/transactions.entity";
+import { PublicService } from "../global/public/public.service";
 
 const TronWeb = require("tronweb");
 
@@ -40,29 +42,35 @@ export class Web3Service {
   private hd!: HDWallet;
   private provider: ethers.JsonRpcProvider;
   private providerBase: ethers.JsonRpcProvider;
+  private providerETH: ethers.JsonRpcProvider;
   private conn: Connection;
   private hdSol: SolHDWallet;
   private hdTRX: TronHDWallet;
   private tronWeb: any;
   private hdADA: CardanoHDWallet;
+  private hdBTC: BtcHDWallet;
   constructor(
     @InjectRepository(Wallet)
     private readonly walletRepository: Repository<Wallet>,
 
     @InjectRepository(Transactions)
     private readonly transactionRepository: Repository<Transactions>,
+
+    private readonly publicService: PublicService,
   ) {
     this.provider = new ethers.JsonRpcProvider(appConfig.EVM_RPC_URL);
     this.providerBase = new ethers.JsonRpcProvider(appConfig.BASE_RPC_URL);
+    this.providerETH = new ethers.JsonRpcProvider(appConfig.ETH_RPC_URL);
     if (!appConfig.MASTER_MNEMONIC) {
       throw new Error("MASTER_MNEMONIC is missing in .env");
     }
 
     this.conn = new Connection(appConfig.SOL_RPC_URL, "confirmed");
-    this.hdSol = new SolHDWallet(appConfig.SOL_MASTER_MNEMONIC);
-    this.hdTRX = new TronHDWallet(appConfig.TRX_MASTER_MNEMONIC);
+    this.hdSol = new SolHDWallet(appConfig.SOL_MASTER_MNEMONIC, this.publicService);
+    this.hdTRX = new TronHDWallet(appConfig.TRX_MASTER_MNEMONIC, "https://api.trongrid.io", this.publicService);
     this.tronWeb = this.hdTRX.getTronWebInstance();
-    this.hdADA = new CardanoHDWallet(appConfig.ADA_MASTER_MNEMONIC);
+    this.hdADA = new CardanoHDWallet(appConfig.ADA_MASTER_MNEMONIC, this.publicService);
+    this.hdBTC = new BtcHDWallet(appConfig.BTC_MASTER_MNEMONIC, false, this.publicService);
   }
 
   // -----------------------------
@@ -70,7 +78,7 @@ export class Web3Service {
   // -----------------------------
   private async initHDWallet() {
     if (!this.hd) {
-      this.hd = await HDWallet.fromMnemonic(appConfig.MASTER_MNEMONIC);
+      this.hd = await HDWallet.fromMnemonic(appConfig.MASTER_MNEMONIC, this.publicService);
     }
   }
 
@@ -108,6 +116,20 @@ export class Web3Service {
       const existWalletADA = await this.walletRepository.findOne({
         where: { wallet_address: cardanoChild }
       });
+      const btcChild = this.hdBTC.generateAddress(Number(userId));
+      const existWalletBTC = await this.walletRepository.findOne({
+        where: { wallet_address: btcChild }
+      });
+
+      if (!existWalletBTC) {
+        const btc = this.walletRepository.create({
+          user: req.user,
+          network: "BITCOIN",
+          currency: "BTC",
+          wallet_address: btcChild
+        });
+        await this.walletRepository.save(btc);
+      }
 
       if (!existWalletADA) {
         const ada = this.walletRepository.create({
@@ -153,7 +175,8 @@ export class Web3Service {
         eth: childWallet.address,
         sol: solChildWallet,
         trx: tronChildWallet,
-        ada: cardanoChild
+        ada: cardanoChild,
+        btc: btcChild
       };
     } catch (err: any) {
       console.error(err);
@@ -231,6 +254,7 @@ export class Web3Service {
   async sweepWallets(req) {
     await this.initHDWallet();
     const masterWalletBase = this.hd.getMasterWallet(this.providerBase);
+    const masterWalletETH = this.hd.getMasterWallet(this.providerETH);
     const masterWallet = this.hd.getMasterWallet(this.provider);
 
     const masterWalletTron = this.hdTRX.getMasterWallet();
@@ -267,8 +291,9 @@ export class Web3Service {
         const childWallet2 = this.hd.getChildWallet(Number(req.user.id), this.provider);
         const childWallet3 = this.hdTRX.deriveChild(Number(req.user.id));
         const childWallet4 = this.hdSol.deriveKeypair(Number(req.user.id));
-        console.log(childWallet3, "child");
+        const childWallet5 = this.hd.getChildWallet(Number(req.user.id), this.providerETH);
 
+        //BASE
         await this.hd.sweepToken(childWallet, masterWalletBase, ERC20_TOKENS["BASE_USDT"], "BASE", "USDT");
         await this.hd.sweepToken(childWallet, masterWalletBase, ERC20_TOKENS["BASE_USDC"], "BASE", "USDC");
         await this.hd.sweepToken(childWallet, masterWalletBase, ERC20_TOKENS["BASE_BTC"], "BASE", "BTC");
@@ -282,15 +307,24 @@ export class Web3Service {
         console.log("Complete token sweep");
 
         try {
+          //BASE
           await this.hd.sweep(childWallet, masterWalletBase, "BASE", "ETH");
         } catch (e) {
           console.log(e)
         }
         try {
+          //BSC
           await this.hd.sweep(childWallet2, masterWallet, "BINANCE CHAIN", "BNB");
         } catch (e) {
           console.log(e)
-        } // //BASE ERC20 tokens
+        }
+        try {
+          //ETH
+          await this.hd.sweep(childWallet5, masterWalletETH, "ETHEREUM", "ETH");
+        } catch (e) {
+          console.log(e)
+        }
+        // //BASE ERC20 tokens
         const childKeySol = Buffer.from(childWallet4.secretKey).toString("hex");
 
 
@@ -323,6 +357,9 @@ export class Web3Service {
         // ada
         const txHash = await this.hdADA.sweepADA(req.user.id, this.hdADA.generateAddress(0), appConfig.BLOCK_API_KEY ?? "", true);
 
+        // btc
+        await this.hdBTC.sweepBTC(req.user.id, this.hdBTC.generateAddress(0));
+
       }
     } catch (err: any) {
       console.error(`Failed to for user ${req.user.id}:`, err);
@@ -352,10 +389,45 @@ export class Web3Service {
       };
 
       // Determine which provider to use based on network
-      let provider: ethers.JsonRpcProvider;
       const network = payload.network?.toUpperCase() || "BASE";
       const symbol = payload.symbol?.toUpperCase() || "";
+      const amount = Number(payload.amount);
 
+      if (network === "BITCOIN" || network === "BTC") {
+        const txHash = await this.hdBTC.withdrawBTC(this.hdBTC.generateAddress(0), payload.to, amount);
+        return { success: true, txHash };
+      }
+
+      if (network === "CARDANO" || network === "ADA") {
+        const txHash = await this.hdADA.withdrawADA(payload.to, amount, appConfig.BLOCK_API_KEY ?? "", true);
+        return { success: true, txHash };
+      }
+
+      if (network === "SOLANA" || network === "SOL") {
+        let txHash: string;
+        if (symbol === "SOL") {
+          txHash = await this.hdSol.withdrawSOL(payload.to, amount, this.conn);
+        } else {
+          const tokenMint = ERC20_TOKENS[`SOL_${symbol}`];
+          if (!tokenMint) throw new Error(`Unsupported SOL token: ${symbol}`);
+          txHash = await this.hdSol.withdrawSPLToken(payload.to, amount, tokenMint, this.conn);
+        }
+        return { success: true, txHash };
+      }
+
+      if (network === "TRON" || network === "TRX") {
+        let txHash: string;
+        if (symbol === "TRX") {
+          txHash = await this.hdTRX.withdrawTRX(payload.to, amount);
+        } else {
+          const tokenAddress = ERC20_TOKENS[`TRON_${symbol}`];
+          if (!tokenAddress) throw new Error(`Unsupported TRON token: ${symbol}`);
+          txHash = await this.hdTRX.withdrawTRC20(payload.to, amount, tokenAddress);
+        }
+        return { success: true, txHash };
+      }
+
+      let provider: ethers.JsonRpcProvider;
       if (network === "BASE") {
         provider = this.providerBase;
       } else if (network === "BINANCE" || network === "BSC" || network === "BNB") {
@@ -419,9 +491,14 @@ export class Web3Service {
   private async getTokenBalanceTRX(tokenAddress: string): Promise<number> {
     if (!tokenAddress) return 0;
     const master = this.hdTRX.getMasterWallet().address;
-    const contract = await this.tronWeb.contract().at(tokenAddress);
-    const balance = await contract.balanceOf(master).call();
-    return Number(balance) / 1e6;
+    try {
+      const contract = await this.tronWeb.contract().at(tokenAddress);
+      const balance = await contract.balanceOf(master).call();
+      return Number(balance) / 1e6;
+    } catch (err) {
+      console.error(`Failed to fetch TRX token balance for ${tokenAddress}:`, err.message || err);
+      return 0;
+    }
   }
 
   private async getTokenBalanceSOL(tokenMint: PublicKey, owner: PublicKey): Promise<number> {
@@ -459,12 +536,14 @@ export class Web3Service {
 
     try {
       const masterWalletBase = this.hd.getMasterWallet(this.providerBase);
+      const masterWalletETH = this.hd.getMasterWallet(this.providerETH);
       const masterWallet = this.hd.getMasterWallet(this.provider);
 
       const masterWalletTron = this.hdTRX.getMasterWallet();
       const masterWalletSOL = this.hdSol.getMasterKeypair().publicKey.toBase58();
 
       const baseBalance = await this.hd.getETHBalance(masterWalletBase)
+      const ethBalance = await this.hd.getETHBalance(masterWalletETH)
       const bnbBalance = await this.hd.getETHBalance(masterWallet)
       const solBalance = await this.hdSol.getSolBalance(this.conn, masterWalletSOL)
 
@@ -486,12 +565,23 @@ export class Web3Service {
       const solUSDC = await this.hdSol.getSPLTokenBalance(this.conn, masterWalletSOL, ERC20_TOKENS["SOL_USDC"])
 
 
-      // const masterTRX = this.hdTRX.getMasterWallet().address;
-      //   const trxBalance = (await this.tronWeb.trx.getBalance(masterTRX)) / 1e6;
-      //   const trxUSDTBalance = await this.getTokenBalanceTRX(ERC20_TOKENS["TRON_USDT"]);
+      let trxBalance = 0;
+      let trxUSDTBalance = 0;
+      try {
+        const masterTRX = this.hdTRX.getMasterWallet().address;
+        trxBalance = (await this.tronWeb.trx.getBalance(masterTRX)) / 1e6;
+        trxUSDTBalance = await this.getTokenBalanceTRX(ERC20_TOKENS["TRON_USDT"]);
+      } catch (err) {
+        console.error("TRX balance fetch error:", err.message || err);
+      }
+
       const cardanoChild = await this.hdADA.getChildBalance(0, appConfig.BLOCK_API_KEY ?? "", true);
+      const btcBalance = await this.hdBTC.getBalance(this.hdBTC.generateAddress(0));
 
       return {
+        ethereum: {
+          ETH: ethBalance
+        },
         base: {
           ETH: baseBalance,
           USDT: baseUSDT,
@@ -512,13 +602,13 @@ export class Web3Service {
           USDT: solUSDT,
           USDC: solUSDC
         },
-        TRX: { TRX: 0.51, USDT: 1 },
+        TRX: { TRX: trxBalance, USDT: trxUSDTBalance },
         ADA: {
-          ADA: cardanoChild.lovelace + 2
+          ADA: cardanoChild.lovelace
+        },
+        BTC: {
+          BTC: btcBalance
         }
-        // SOL: solBalance,
-        // SOL_USDC: solUSDCBalance,
-        // SOL_USDT: solUSDTBalance
       };
     } catch (err: any) {
       console.log(err)
