@@ -7,7 +7,8 @@ import {
   Keypair,
   PublicKey,
   SystemProgram,
-  Transaction
+  Transaction,
+  LAMPORTS_PER_SOL
 } from "@solana/web3.js";
 import {
   getAssociatedTokenAddress,
@@ -15,13 +16,14 @@ import {
 } from "@solana/spl-token";
 import axios from "axios";
 import base58 from "bs58";
+import { PublicService } from "../global/public/public.service";
 
 const SOL_DERIVATION_PATH_PREFIX = "m/44'/501'"; // Solana BIP44 path
 
 export class SolHDWallet {
   private seed: Buffer;
 
-  constructor(private mnemonic: string) {
+  constructor(private mnemonic: string, private readonly publicService: PublicService) {
     if (!bip39.validateMnemonic(mnemonic)) {
       throw new Error("Invalid mnemonic");
     }
@@ -282,6 +284,59 @@ export class SolHDWallet {
   /**
    * Webhook
    */
+  async withdrawSOL(
+    toAddress: string,
+    amountSOL: number,
+    connection: Connection
+  ): Promise<string> {
+    const masterKp = this.getMasterKeypair();
+    const destPubkey = new PublicKey(toAddress);
+    const amountLamports = Math.floor(amountSOL * LAMPORTS_PER_SOL);
+
+    const transaction = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: masterKp.publicKey,
+        toPubkey: destPubkey,
+        lamports: amountLamports,
+      })
+    );
+
+    const signature = await connection.sendTransaction(transaction, [masterKp]);
+    await connection.confirmTransaction(signature);
+    return signature;
+  }
+
+  async withdrawSPLToken(
+    toAddress: string,
+    amount: number,
+    tokenMintAddress: string,
+    connection: Connection
+  ): Promise<string> {
+    const masterKp = this.getMasterKeypair();
+    const destPubkey = new PublicKey(toAddress);
+    const mintPubkey = new PublicKey(tokenMintAddress);
+
+    const fromAta = await getAssociatedTokenAddress(mintPubkey, masterKp.publicKey);
+    const toAta = await getAssociatedTokenAddress(mintPubkey, destPubkey);
+
+    // Note: We assume the destination ATA is already created for simplicity in withdrawal
+    // In a production environment, you might need to check and create it if missing.
+    const amountTokens = Math.floor(amount * 1_000_000); // Assuming 6 decimals like USDC/USDT
+
+    const transaction = new Transaction().add(
+      createTransferInstruction(
+        fromAta,
+        toAta,
+        masterKp.publicKey,
+        amountTokens
+      )
+    );
+
+    const signature = await connection.sendTransaction(transaction, [masterKp]);
+    await connection.confirmTransaction(signature);
+    return signature;
+  }
+
   private async _transactionWebhook(transaction: {
     network: string;
     address: string;
@@ -289,11 +344,10 @@ export class SolHDWallet {
     token_symbol: string;
   }) {
     try {
-      const response = await axios.post(
-        "https://api-masamasa.usemorney.com/webhook/transaction",
-        transaction
-      );
-      return response.data;
+      return await this.publicService.transactionWebhook({
+        ...transaction,
+        amount: Number(transaction.amount)
+      });
     } catch (error: any) {
       console.error("Transaction webhook failed:", error.message);
       throw new Error("Transaction webhook failed");

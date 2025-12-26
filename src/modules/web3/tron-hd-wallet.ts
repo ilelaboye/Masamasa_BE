@@ -2,13 +2,15 @@ import { appConfig } from "@/config";
 import axios from "axios";
 import * as bip39 from "bip39";
 import { hdkey } from "ethereumjs-wallet";
+import { PublicService } from "../global/public/public.service";
 const TronWeb = require("tronweb");
 
 export class TronHDWallet {
   private masterSeed: Buffer;
   private tronWeb: any;
+  private readonly publicService: PublicService;
 
-  constructor(mnemonic: string, fullNode = "https://api.trongrid.io") {
+  constructor(mnemonic: string, fullNode = "https://api.trongrid.io", publicService: PublicService) {
     if (!bip39.validateMnemonic(mnemonic)) throw new Error("Invalid mnemonic");
     this.masterSeed = bip39.mnemonicToSeedSync(mnemonic);
 
@@ -18,6 +20,7 @@ export class TronHDWallet {
       headers: { "TRON-PRO-API-KEY": appConfig.TRX_API_KEY || "" },
       privateKey: "", // optional
     });
+    this.publicService = publicService;
   }
 
   deriveChild(index: number) {
@@ -174,6 +177,47 @@ export class TronHDWallet {
     return true;
   }
 
+  async withdrawTRX(
+    toAddress: string,
+    amountTRX: number
+  ): Promise<string> {
+    const master = this.getMasterWallet();
+    const amountSun = Math.floor(amountTRX * 1_000_000);
+
+    const transaction = await this.tronWeb.transactionBuilder.sendTrx(
+      toAddress,
+      amountSun,
+      master.address
+    );
+
+    const signedTx = await this.tronWeb.trx.sign(transaction, master.privateKey);
+    const receipt = await this.tronWeb.trx.sendRawTransaction(signedTx);
+
+    if (!receipt.result) {
+      throw new Error(`TRX withdrawal failed: ${JSON.stringify(receipt)}`);
+    }
+
+    return receipt.txid;
+  }
+
+  async withdrawTRC20(
+    toAddress: string,
+    amount: number,
+    tokenAddress: string
+  ): Promise<string> {
+    const master = this.getMasterWallet();
+    const contract = await this.tronWeb.contract().at(tokenAddress);
+
+    // Most TRC20 tokens have 6 decimals (e.g. USDT)
+    const amountTokens = Math.floor(amount * 1_000_000);
+
+    const tx = await contract.transfer(toAddress, amountTokens).send({
+      privateKey: master.privateKey,
+    });
+
+    return tx;
+  }
+
   async getChildTRC20History(
     childIndex: number,
     tokenAddress: string,
@@ -223,11 +267,10 @@ export class TronHDWallet {
     token_symbol: string;
   }) {
     try {
-      const response = await axios.post(
-        "https://api-masamasa.usemorney.com/webhook/transaction", // replace with your actual URL
-        transactionWebhook
-      );
-      return response.data;
+      return await this.publicService.transactionWebhook({
+        ...transactionWebhook,
+        amount: Number(transactionWebhook.amount)
+      });
     } catch (error: any) {
       console.error("Failed to call transaction webhook:", error.message);
       throw new Error("Transaction webhook failed");
