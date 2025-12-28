@@ -1,7 +1,7 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { Web3Controller } from './web3.controller';
+import { Test, TestingModule } from "@nestjs/testing";
+import { Web3Controller } from "./web3.controller";
 
-describe('Web3Controller', () => {
+describe("Web3Controller", () => {
   let controller: Web3Controller;
 
   beforeEach(async () => {
@@ -12,7 +12,7 @@ describe('Web3Controller', () => {
     controller = module.get<Web3Controller>(Web3Controller);
   });
 
-  it('should be defined', () => {
+  it("should be defined", () => {
     expect(controller).toBeDefined();
   });
 });

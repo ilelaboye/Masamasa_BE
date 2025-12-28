@@ -18,4 +18,4 @@ import { Web3Module } from "../web3/web3.module";
   controllers: [AdministratorController, AdminAuthController],
   providers: [AdministratorService, AdminAuthService],
 })
-export class AdministratorModule { }
+export class AdministratorModule {}

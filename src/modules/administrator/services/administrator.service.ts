@@ -28,12 +28,12 @@ export class AdministratorService {
     @InjectRepository(Transactions)
     private readonly transactionsRepository: Repository<Transactions>,
     private readonly cacheService: CacheService,
-    private readonly exchangeRateService: ExchangeRateService
+    private readonly exchangeRateService: ExchangeRateService,
   ) {}
 
   async getWithId(id: string) {
     const cachedData = await this.cacheService.get<Administrator | undefined>(
-      `admin:${id}`
+      `admin:${id}`,
     );
     // console.log('fetched from cache', cachedData);
     if (cachedData) return cachedData;
@@ -59,7 +59,7 @@ export class AdministratorService {
 
   async saveExchangeRate(
     createExchangeRateDto: CreateExchangeRateDto,
-    req: AdminRequest
+    req: AdminRequest,
   ) {
     if (
       !createExchangeRateDto.rate ||
@@ -75,10 +75,10 @@ export class AdministratorService {
     const save = await this.exchangeRateService.saveNewRate(
       req.admin.id,
       createExchangeRateDto.currency,
-      createExchangeRateDto.rate
+      createExchangeRateDto.rate,
     );
 
-    var msg = `${req.admin.first_name} ${req.admin.last_name} changed ${createExchangeRateDto.currency} exchange rate to ${createExchangeRateDto.rate}`;
+    const msg = `${req.admin.first_name} ${req.admin.last_name} changed ${createExchangeRateDto.currency} exchange rate to ${createExchangeRateDto.rate}`;
     this.createAdminLog(null, req.admin, AdminLogEntities.EXCHANGE_RATE, msg);
     return save;
   }
@@ -116,13 +116,13 @@ export class AdministratorService {
   }
 
   async getUser(id: number, req: AdminRequest) {
-    let user = await this.userRepository
+    const user = await this.userRepository
       .createQueryBuilder("user")
       .leftJoinAndSelect("user.wallet", "wallet")
       .where("user.id = :id", { id })
       .getOne();
 
-    let wallet_balance = await this.getUserWalletBalance(id);
+    const wallet_balance = await this.getUserWalletBalance(id);
 
     return { user, wallet_balance };
   }
@@ -139,7 +139,7 @@ export class AdministratorService {
         CASE WHEN transaction.mode = :debit AND transaction.status = :success THEN transaction.amount ELSE 0 END
       )
     `,
-        "balance"
+        "balance",
       )
       .where("transaction.user_id = :user_id", { user_id: user_id })
       .setParameters({
@@ -155,12 +155,12 @@ export class AdministratorService {
 
   async getPendingKYC(req: AdminRequest) {
     const { limit, page, skip } = getRequestQuery(req);
-    let queryRunner = this.userRepository
+    const queryRunner = this.userRepository
       .createQueryBuilder("users")
       .where("users.kyc_status = :status", { status: KycStatus.pending });
 
-    var count = await queryRunner.getCount();
-    var kyc = await queryRunner.skip(skip).take(limit).getMany();
+    const count = await queryRunner.getCount();
+    const kyc = await queryRunner.skip(skip).take(limit).getMany();
 
     const metadata = paginate(count, page, limit);
     return { kyc, metadata };
@@ -182,10 +182,10 @@ export class AdministratorService {
 
     const update = await this.userRepository.update(
       { id: user_id },
-      { kyc_status: KycStatus.success }
+      { kyc_status: KycStatus.success },
     );
 
-    var msg = `${req.admin.first_name} ${req.admin.last_name} verified ${user.first_name} ${user.last_name} kyc`;
+    const msg = `${req.admin.first_name} ${req.admin.last_name} verified ${user.first_name} ${user.last_name} kyc`;
     this.createAdminLog(null, req.admin, AdminLogEntities.KYC_STATUS, msg);
 
     return update;
@@ -203,17 +203,17 @@ export class AdministratorService {
 
     const update = await this.userRepository.update(
       { id: user.id },
-      { kyc_status: KycStatus.failed, kyc_error: declineKycDto.reason }
+      { kyc_status: KycStatus.failed, kyc_error: declineKycDto.reason },
     );
 
-    var msg = `${req.admin.first_name} ${req.admin.last_name} declined ${user.first_name} ${user.last_name} kyc because: ${declineKycDto.reason}`;
+    const msg = `${req.admin.first_name} ${req.admin.last_name} declined ${user.first_name} ${user.last_name} kyc because: ${declineKycDto.reason}`;
     this.createAdminLog(null, req.admin, AdminLogEntities.KYC_STATUS, msg);
 
     return update;
   }
 
   async transaction(id: number, req: AdminRequest) {
-    let transaction = this.transactionsRepository
+    const transaction = this.transactionsRepository
       .createQueryBuilder("trans")
       .leftJoinAndSelect("trans.user", "user")
       .where("trans.id = :id", { id })
@@ -232,8 +232,8 @@ export class AdministratorService {
 
     queryRunner = queryRunner.orderBy("trans.created_at", "DESC");
 
-    var count = await queryRunner.getCount();
-    var transactions = await queryRunner.skip(skip).take(limit).getMany();
+    const count = await queryRunner.getCount();
+    const transactions = await queryRunner.skip(skip).take(limit).getMany();
 
     const metadata = paginate(count, page, limit);
     return { transactions, metadata };
@@ -252,7 +252,7 @@ export class AdministratorService {
         {
           startDate: new Date(date_from).toISOString(),
           endDate: new Date().toISOString(),
-        }
+        },
       );
     }
     if (date_to) {
@@ -261,7 +261,7 @@ export class AdministratorService {
         {
           startDate: new Date(1970).toISOString(),
           endDate: endOfDay(new Date(date_to)),
-        }
+        },
       );
     }
     if (date_from && date_to) {
@@ -270,14 +270,14 @@ export class AdministratorService {
         {
           startDate: new Date(date_from).toISOString(),
           endDate: endOfDay(new Date(date_to)),
-        }
+        },
       );
     }
 
     queryRunner = queryRunner.orderBy("trans.created_at", "DESC");
 
-    var count = await queryRunner.getCount();
-    var transactions = await queryRunner.skip(skip).take(limit).getMany();
+    const count = await queryRunner.getCount();
+    const transactions = await queryRunner.skip(skip).take(limit).getMany();
 
     const metadata = paginate(count, page, limit);
     return { transactions, metadata };
@@ -286,7 +286,7 @@ export class AdministratorService {
   async getUsers(req: AdminRequest) {
     const { limit, page, search, skip } = getRequestQuery(req);
     let count = await this.userRepository.count();
-    var users: User[] = [];
+    let users: User[] = [];
     const queryRunner = this.userRepository.createQueryBuilder("users");
 
     if (search) {
@@ -299,7 +299,7 @@ export class AdministratorService {
               last_name: `%${search}%`,
             })
             .orWhere("users.email LIKE :email", { email: `%${search}%` });
-        })
+        }),
       );
     }
     count = await queryRunner.getCount();

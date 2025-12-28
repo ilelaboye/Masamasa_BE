@@ -8,11 +8,12 @@ import {
   PublicKey,
   SystemProgram,
   Transaction,
-  LAMPORTS_PER_SOL
+  LAMPORTS_PER_SOL,
 } from "@solana/web3.js";
+import { appConfig } from "@/config";
 import {
   getAssociatedTokenAddress,
-  createTransferInstruction
+  createTransferInstruction,
 } from "@solana/spl-token";
 import axios from "axios";
 import base58 from "bs58";
@@ -23,7 +24,10 @@ const SOL_DERIVATION_PATH_PREFIX = "m/44'/501'"; // Solana BIP44 path
 export class SolHDWallet {
   private seed: Buffer;
 
-  constructor(private mnemonic: string, private readonly publicService: PublicService) {
+  constructor(
+    private mnemonic: string,
+    private readonly publicService: PublicService,
+  ) {
     if (!bip39.validateMnemonic(mnemonic)) {
       throw new Error("Invalid mnemonic");
     }
@@ -52,7 +56,7 @@ export class SolHDWallet {
     child: { privateKey: string; address: string },
     masterAddress: string,
     connection: Connection,
-    index: number = 0
+    index: number = 0,
   ) {
     // Derive child keypair (your own function)
     const childKeypair = this.deriveKeypair(index);
@@ -62,18 +66,19 @@ export class SolHDWallet {
     if (balance === 0) return false;
 
     // 2. Get latest blockhash
-    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+    const { blockhash, lastValidBlockHeight } =
+      await connection.getLatestBlockhash();
 
     // Build a temporary transaction to calculate fee
     const tempTx = new Transaction({
       recentBlockhash: blockhash,
-      feePayer: childKeypair.publicKey
+      feePayer: childKeypair.publicKey,
     }).add(
       SystemProgram.transfer({
         fromPubkey: childKeypair.publicKey,
         toPubkey: new PublicKey(masterAddress),
-        lamports: balance // temp — will adjust after fee calc
-      })
+        lamports: balance, // temp — will adjust after fee calc
+      }),
     );
 
     // 3. Calculate transaction fee
@@ -89,20 +94,22 @@ export class SolHDWallet {
     const transferable = balance - requiredFee;
 
     if (transferable <= 0) {
-      console.log(`Child wallet cannot afford tx fee. Balance: ${balance}, Fee: ${requiredFee}`);
+      console.log(
+        `Child wallet cannot afford tx fee. Balance: ${balance}, Fee: ${requiredFee}`,
+      );
       return false;
     }
 
     // Rebuild the final transaction
     const tx = new Transaction({
       recentBlockhash: blockhash,
-      feePayer: childKeypair.publicKey
+      feePayer: childKeypair.publicKey,
     }).add(
       SystemProgram.transfer({
         fromPubkey: childKeypair.publicKey,
         toPubkey: new PublicKey(masterAddress),
-        lamports: transferable
-      })
+        lamports: transferable,
+      }),
     );
 
     // 4. Sign & send
@@ -110,7 +117,7 @@ export class SolHDWallet {
     const raw = tx.serialize();
 
     const signature = await connection.sendRawTransaction(raw, {
-      skipPreflight: false
+      skipPreflight: false,
     });
 
     // 5. Confirm TX
@@ -118,13 +125,13 @@ export class SolHDWallet {
       {
         signature,
         blockhash,
-        lastValidBlockHeight
+        lastValidBlockHeight,
       },
-      "confirmed"
+      "confirmed",
     );
 
     console.log(
-      `✅ Swept ${(transferable / 1e9).toFixed(8)} SOL → master wallet. Tx: ${signature}`
+      `✅ Swept ${(transferable / 1e9).toFixed(8)} SOL → master wallet. Tx: ${signature}`,
     );
 
     // Optional webhook
@@ -133,7 +140,7 @@ export class SolHDWallet {
         network: "SOLANA",
         address: childKeypair.publicKey.toBase58(),
         token_symbol: "SOL",
-        amount: transferable / 1e9
+        amount: transferable / 1e9,
       });
     }
 
@@ -144,13 +151,13 @@ export class SolHDWallet {
    * Sweep SPL tokens (USDT, USDC, etc.)
    */
   async sweepSPLToken(
-    child: { privateKey: any; address: string, store: any },
+    child: { privateKey: any; address: string; store: any },
     masterAddress: string,
     tokenAddress: string,
     connection: Connection,
     index: number = 0,
     symbol: string = "USDT",
-    masterKeypairKey: Keypair
+    masterKeypairKey: Keypair,
   ) {
     try {
       // 1️⃣ Construct child keypair from provided privateKey
@@ -161,14 +168,22 @@ export class SolHDWallet {
 
       const childPubkey = childKeypair.publicKey;
 
-      console.log("start")
+      console.log("start");
       // 2️⃣ Get token info
       const tokenMint = new PublicKey(tokenAddress);
-      const childTokenAccount = await getAssociatedTokenAddress(tokenMint, childPubkey);
+      const childTokenAccount = await getAssociatedTokenAddress(
+        tokenMint,
+        childPubkey,
+      );
       const masterPubkey = new PublicKey(masterAddress);
-      const masterTokenAccount = await getAssociatedTokenAddress(tokenMint, masterPubkey);
+      const masterTokenAccount = await getAssociatedTokenAddress(
+        tokenMint,
+        masterPubkey,
+      );
 
-      const tokenInfo = await connection.getTokenAccountBalance(childTokenAccount).catch(() => null);
+      const tokenInfo = await connection
+        .getTokenAccountBalance(childTokenAccount)
+        .catch(() => null);
       if (!tokenInfo || tokenInfo.value.amount === "0") {
         console.log(`No ${symbol} to sweep.`);
         return false;
@@ -179,22 +194,32 @@ export class SolHDWallet {
 
       // 3️⃣ Ensure child has enough SOL for fees
       let balance = await connection.getBalance(childPubkey);
-      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+      const { blockhash, lastValidBlockHeight } =
+        await connection.getLatestBlockhash();
 
       const tempTx = new Transaction({
         recentBlockhash: blockhash,
-        feePayer: childPubkey
+        feePayer: childPubkey,
       }).add(
-        createTransferInstruction(childTokenAccount, masterTokenAccount, childPubkey, tokenAmount)
+        createTransferInstruction(
+          childTokenAccount,
+          masterTokenAccount,
+          childPubkey,
+          tokenAmount,
+        ),
       );
 
-      const feeInfo = await connection.getFeeForMessage(tempTx.compileMessage());
+      const feeInfo = await connection.getFeeForMessage(
+        tempTx.compileMessage(),
+      );
       const requiredFee = feeInfo.value ?? 5000;
 
       if (balance < requiredFee) {
         const missingAmount = requiredFee - balance;
 
-        console.log(`Child missing ${missingAmount} lamports. Funding from master...`);
+        console.log(
+          `Child missing ${missingAmount} lamports. Funding from master...`,
+        );
 
         const masterKeypair = masterKeypairKey;
         const masterPubkey = masterKeypair.publicKey;
@@ -204,49 +229,70 @@ export class SolHDWallet {
 
         const fundTx = new Transaction({
           recentBlockhash: bhMaster,
-          feePayer: masterPubkey
+          feePayer: masterPubkey,
         }).add(
           SystemProgram.transfer({
             fromPubkey: masterPubkey,
             toPubkey: childPubkey,
-            lamports: missingAmount
-          })
+            lamports: missingAmount,
+          }),
         );
 
         fundTx.sign(masterKeypair);
 
-        const fundSig = await connection.sendRawTransaction(fundTx.serialize(), { skipPreflight: false });
-        await connection.confirmTransaction({ signature: fundSig, blockhash: bhMaster, lastValidBlockHeight: lvbhMaster });
+        const fundSig = await connection.sendRawTransaction(
+          fundTx.serialize(),
+          { skipPreflight: false },
+        );
+        await connection.confirmTransaction({
+          signature: fundSig,
+          blockhash: bhMaster,
+          lastValidBlockHeight: lvbhMaster,
+        });
 
         console.log(`Child funded → Tx: ${fundSig}`);
         balance = await connection.getBalance(childPubkey);
       }
 
       // 4️⃣ Build final sweep transaction
-      const { blockhash: bhSweep, lastValidBlockHeight: lvbhSweep } = await connection.getLatestBlockhash();
+      const { blockhash: bhSweep, lastValidBlockHeight: lvbhSweep } =
+        await connection.getLatestBlockhash();
 
       const sweepTx = new Transaction({
         recentBlockhash: bhSweep,
-        feePayer: childPubkey
+        feePayer: childPubkey,
       }).add(
-        createTransferInstruction(childTokenAccount, masterTokenAccount, childPubkey, tokenAmount)
+        createTransferInstruction(
+          childTokenAccount,
+          masterTokenAccount,
+          childPubkey,
+          tokenAmount,
+        ),
       );
 
       sweepTx.sign(childKeypair);
 
-      const sig = await connection.sendRawTransaction(sweepTx.serialize(), { skipPreflight: false });
-      await connection.confirmTransaction({ signature: sig, blockhash: bhSweep, lastValidBlockHeight: lvbhSweep });
+      const sig = await connection.sendRawTransaction(sweepTx.serialize(), {
+        skipPreflight: false,
+      });
+      await connection.confirmTransaction({
+        signature: sig,
+        blockhash: bhSweep,
+        lastValidBlockHeight: lvbhSweep,
+      });
 
-      console.log(`✅ Swept ${symbol}: ${tokenAmount / 10 ** tokenDecimals} → master. Tx: ${sig}`);
+      console.log(
+        `✅ Swept ${symbol}: ${tokenAmount / 10 ** tokenDecimals} → master. Tx: ${sig}`,
+      );
 
-      const balance2 = tokenAmount / 10 ** tokenDecimals
+      const balance2 = tokenAmount / 10 ** tokenDecimals;
       // Optional webhook
       if (balance2 > 0.0001) {
         await this._transactionWebhook({
           network: "SOLANA",
           address: childPubkey.toBase58(),
           token_symbol: symbol,
-          amount: tokenAmount / 10 ** tokenDecimals
+          amount: tokenAmount / 10 ** tokenDecimals,
         });
       }
       return true;
@@ -266,7 +312,7 @@ export class SolHDWallet {
   async getSPLTokenBalance(
     connection: Connection,
     walletAddress: string,
-    tokenMintAddress: string
+    tokenMintAddress: string,
   ) {
     const owner = new PublicKey(walletAddress);
     const tokenMint = new PublicKey(tokenMintAddress);
@@ -275,7 +321,9 @@ export class SolHDWallet {
 
     try {
       const balanceInfo = await connection.getTokenAccountBalance(tokenAccount);
-      const balance = Number(balanceInfo.value.amount) / Math.pow(10, balanceInfo.value.decimals);
+      const balance =
+        Number(balanceInfo.value.amount) /
+        Math.pow(10, balanceInfo.value.decimals);
       return balance;
     } catch (err) {
       return 0; // no token account or zero balance
@@ -287,7 +335,7 @@ export class SolHDWallet {
   async withdrawSOL(
     toAddress: string,
     amountSOL: number,
-    connection: Connection
+    connection: Connection,
   ): Promise<string> {
     const masterKp = this.getMasterKeypair();
     const destPubkey = new PublicKey(toAddress);
@@ -298,7 +346,7 @@ export class SolHDWallet {
         fromPubkey: masterKp.publicKey,
         toPubkey: destPubkey,
         lamports: amountLamports,
-      })
+      }),
     );
 
     const signature = await connection.sendTransaction(transaction, [masterKp]);
@@ -310,13 +358,16 @@ export class SolHDWallet {
     toAddress: string,
     amount: number,
     tokenMintAddress: string,
-    connection: Connection
+    connection: Connection,
   ): Promise<string> {
     const masterKp = this.getMasterKeypair();
     const destPubkey = new PublicKey(toAddress);
     const mintPubkey = new PublicKey(tokenMintAddress);
 
-    const fromAta = await getAssociatedTokenAddress(mintPubkey, masterKp.publicKey);
+    const fromAta = await getAssociatedTokenAddress(
+      mintPubkey,
+      masterKp.publicKey,
+    );
     const toAta = await getAssociatedTokenAddress(mintPubkey, destPubkey);
 
     // Note: We assume the destination ATA is already created for simplicity in withdrawal
@@ -328,13 +379,118 @@ export class SolHDWallet {
         fromAta,
         toAta,
         masterKp.publicKey,
-        amountTokens
-      )
+        amountTokens,
+      ),
     );
 
     const signature = await connection.sendTransaction(transaction, [masterKp]);
     await connection.confirmTransaction(signature);
     return signature;
+  }
+
+  async getChildTransactionHistory(
+    childIndex: number,
+    limit: number = 3,
+  ): Promise<any[]> {
+    const childPubkey = this.deriveKeypair(childIndex).publicKey;
+    const connection = new Connection(appConfig.SOL_RPC_URL, "confirmed");
+
+    try {
+      const signatures = await connection.getSignaturesForAddress(childPubkey, {
+        limit,
+      });
+      if (signatures.length === 0) return [];
+
+      const sigs = signatures.map((s) => s.signature);
+      const txs = await connection.getParsedTransactions(sigs, {
+        maxSupportedTransactionVersion: 0,
+      });
+
+      const results: any[] = [];
+      for (let i = 0; i < txs.length; i++) {
+        const tx = txs[i];
+        const sigInfo = signatures[i];
+
+        if (!tx || !tx.meta) continue;
+
+        const accountIndex = tx.transaction.message.accountKeys.findIndex(
+          (acc) => acc.pubkey.toBase58() === childPubkey.toBase58(),
+        );
+
+        if (accountIndex === -1) continue;
+
+        const preBalance = tx.meta.preBalances[accountIndex];
+        const postBalance = tx.meta.postBalances[accountIndex];
+        const amount = (postBalance - preBalance) / LAMPORTS_PER_SOL;
+
+        if (amount <= 0) continue; // Only want deposits (increase in balance)
+
+        results.push({
+          txID: sigInfo.signature,
+          type: "IN",
+          amount,
+          token_symbol: "SOL",
+          network: "SOLANA",
+          status: "success",
+          timestamp: sigInfo.blockTime ? sigInfo.blockTime * 1000 : Date.now(),
+          date: sigInfo.blockTime
+            ? new Date(sigInfo.blockTime * 1000)
+            : new Date(),
+        });
+      }
+      return results;
+    } catch (err: any) {
+      console.error("Failed to fetch Solana history:", err.message);
+      return [];
+    }
+  }
+
+  async getChildSPLHistory(childIndex: number, tokenAddress: string, limit: number = 3) {
+    const childPubkey = this.deriveKeypair(childIndex).publicKey;
+    const connection = new Connection(appConfig.SOL_RPC_URL, "confirmed");
+    const tokenMint = new PublicKey(tokenAddress);
+
+    try {
+      const childTokenAccount = await getAssociatedTokenAddress(tokenMint, childPubkey);
+
+      const signatures = await connection.getSignaturesForAddress(childTokenAccount, { limit });
+      if (signatures.length === 0) return [];
+
+      const sigs = signatures.map((s) => s.signature);
+      const txs = await connection.getParsedTransactions(sigs);
+
+      const results: any[] = [];
+
+      for (let i = 0; i < txs.length; i++) {
+        const tx = txs[i];
+        const sigInfo = signatures[i];
+        if (!tx || !tx.meta) continue;
+
+        const preBalance = tx.meta.preTokenBalances?.find(b => b.mint === tokenAddress);
+        const postBalance = tx.meta.postTokenBalances?.find(b => b.mint === tokenAddress);
+
+        const preAmount = preBalance ? Number(preBalance.uiTokenAmount.uiAmount) : 0;
+        const postAmount = postBalance ? Number(postBalance.uiTokenAmount.uiAmount) : 0;
+
+        if (preAmount === postAmount) continue; // No change
+
+        results.push({
+          txID: sigInfo.signature,
+          type: postAmount > preAmount ? "IN" : "OUT",
+          amount: Math.abs(postAmount - preAmount),
+          token_symbol: postBalance?.uiTokenAmount.uiAmountString || "SPL",
+          network: "SOLANA",
+          status: tx.meta.err ? "failed" : "success",
+          timestamp: sigInfo.blockTime ? sigInfo.blockTime * 1000 : Date.now(),
+          date: sigInfo.blockTime ? new Date(sigInfo.blockTime * 1000) : new Date(),
+        });
+      }
+
+      return results;
+    } catch (err: any) {
+      console.error("Failed to fetch Solana SPL history:", err.message);
+      return [];
+    }
   }
 
   private async _transactionWebhook(transaction: {
@@ -346,7 +502,7 @@ export class SolHDWallet {
     try {
       return await this.publicService.transactionWebhook({
         ...transaction,
-        amount: Number(transaction.amount)
+        amount: Number(transaction.amount),
       });
     } catch (error: any) {
       console.error("Transaction webhook failed:", error.message);

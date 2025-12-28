@@ -22,7 +22,7 @@ export class CronJob {
     @InjectRepository(PurchaseRequest)
     private readonly purchaseRequestRepository: Repository<PurchaseRequest>,
     private readonly adminService: AdministratorService,
-    private readonly providerService: ProviderService
+    private readonly providerService: ProviderService,
   ) {}
 
   // Handles all notification jobs
@@ -41,7 +41,7 @@ export class CronJob {
 
     for (const trans of transactions) {
       const balance = await this.adminService.getUserWalletBalance(
-        trans.user_id
+        trans.user_id,
       );
       if (balance < trans.amount) {
         await this.transactionsRepository.update(
@@ -52,7 +52,7 @@ export class CronJob {
               error: "Insufficient wallet balance",
               ...trans.metadata,
             },
-          }
+          },
         );
         continue;
       }
@@ -77,7 +77,7 @@ export class CronJob {
                 error: null,
                 initiate_resp: resp.data,
               },
-            }
+            },
           );
         } else {
           await this.transactionsRepository.update(
@@ -88,7 +88,7 @@ export class CronJob {
                 ...trans.metadata,
                 error: resp.message,
               },
-            }
+            },
           );
           console.log("eerrr", resp.data);
         }
@@ -125,7 +125,7 @@ export class CronJob {
                 flutterwave_resp: resp.data,
                 error: null,
               },
-            }
+            },
           );
         } else {
           await this.transactionsRepository.update(
@@ -136,7 +136,7 @@ export class CronJob {
                 error: resp.message,
                 failed_resp: resp.data,
               },
-            }
+            },
           );
           console.log("eerrr", resp.data);
         }
@@ -158,7 +158,7 @@ export class CronJob {
     for (const purchase of purchases) {
       // Logic to verify VTPass transaction
       const verify = await this.providerService.verifyVtpassTransaction(
-        purchase.masamasa_ref
+        purchase.masamasa_ref,
       );
       console.log("verify vtpass", verify);
       if (verify.status) {
@@ -177,7 +177,7 @@ export class CronJob {
                 ...purchase.metadata,
                 provider_response: verify.body,
               },
-            }
+            },
           );
         } else if (
           verify.body.content &&
@@ -192,7 +192,7 @@ export class CronJob {
                 ...purchase.metadata,
                 provider_response: verify.body,
               },
-            }
+            },
           );
         }
       }

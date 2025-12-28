@@ -3,24 +3,28 @@ import { PublicService } from "../global/public/public.service";
 import axios from "axios";
 // CommonJS require
 const bip39 = require("bip39");
-const ecc = require('tiny-secp256k1')
-const { BIP32Factory } = require('bip32')
+const ecc = require("tiny-secp256k1");
+const { BIP32Factory } = require("bip32");
 // You must wrap a tiny-secp256k1 compatible implementation
-const bip32 = BIP32Factory(ecc)
+const bip32 = BIP32Factory(ecc);
 
 const DERIVATION_PATH = "m/44'/60'/0'/0";
 
 const ERC20_ABI = [
   "function balanceOf(address) view returns (uint256)",
   "function transfer(address to, uint256 amount) returns (bool)",
-  "function decimals() view returns (uint8)"
+  "function decimals() view returns (uint8)",
 ];
 
 export class HDWallet {
   private root: any;
   private mnemonic: string;
   private readonly publicService: PublicService;
-  private constructor(mnemonic: string, root: any, publicService: PublicService) {
+  private constructor(
+    mnemonic: string,
+    root: any,
+    publicService: PublicService,
+  ) {
     this.mnemonic = mnemonic;
     this.root = root;
     this.publicService = publicService;
@@ -29,7 +33,10 @@ export class HDWallet {
   /**
    * Create HDWallet instance from mnemonic
    */
-  static async fromMnemonic(mnemonic: string, publicService: PublicService): Promise<HDWallet> {
+  static async fromMnemonic(
+    mnemonic: string,
+    publicService: PublicService,
+  ): Promise<HDWallet> {
     if (!bip39.validateMnemonic(mnemonic)) {
       throw new Error("Invalid mnemonic");
     }
@@ -75,7 +82,7 @@ export class HDWallet {
     child: { wallet: ethers.Wallet },
     masterWallet: ethers.Wallet,
     network: string,
-    symbol: string
+    symbol: string,
   ) {
     const wallet = child.wallet;
 
@@ -84,15 +91,15 @@ export class HDWallet {
     if (!wallet.provider) throw new Error("Child wallet must have a provider");
 
     // 1. Get balance
-    let balance = await wallet.provider.getBalance(wallet.address);
+    const balance = await wallet.provider.getBalance(wallet.address);
     if (balance === 0n) return null;
 
-    console.log(formatUnits(balance), network)
+    console.log(formatUnits(balance), network);
 
     // 2. Prepare dummy tx for gas estimation
     const dummyTx = {
       to: masterWallet.address,
-      value: 0n
+      value: 0n,
     };
 
     // Estimate gas limit (BigInt)
@@ -114,7 +121,9 @@ export class HDWallet {
     // 6. Recalculate fees (after potential funding)
     const feeDataFinal = await wallet.provider.getFeeData();
     const baseFeeFinal = BigInt(latestBlock?.baseFeePerGas ?? 0n);
-    const maxPriorityFeePerGasFinal = BigInt(feeDataFinal.maxPriorityFeePerGas ?? 0n);
+    const maxPriorityFeePerGasFinal = BigInt(
+      feeDataFinal.maxPriorityFeePerGas ?? 0n,
+    );
 
     const gasCostFinal = gasLimit * (baseFeeFinal + maxPriorityFeePerGasFinal);
 
@@ -128,19 +137,18 @@ export class HDWallet {
 
       if (sendAmount <= 0n) return null;
 
-      console.log(formatUnits(sendAmount), formatUnits(gasLimit))
+      console.log(formatUnits(sendAmount), formatUnits(gasLimit));
 
       const tx = await wallet.sendTransaction({
         to: masterWallet.address,
         value: sendAmount,
         gasLimit,
         maxPriorityFeePerGas: maxPriorityFeePerGasFinal,
-        maxFeePerGas: baseFeeFinal + maxPriorityFeePerGasFinal
+        maxFeePerGas: baseFeeFinal + maxPriorityFeePerGasFinal,
       });
 
       await tx.wait();
     } else {
-
       // 1. Estimate gas limit for simple transfer
       const gasLimit = 21000n; // standard BNB transfer
 
@@ -167,14 +175,12 @@ export class HDWallet {
         to: masterWallet.address,
         value: sendAmount,
         gasLimit: gasLimit,
-        gasPrice: gasPrice
+        gasPrice: gasPrice,
       });
 
       await tx.wait();
       console.log("Sweep successful");
-
     }
-
 
     // 9. Webhook callback (optional, convert to Number for display only)
     const formattedBalance = Number(ethers.formatUnits(balance, 18));
@@ -184,16 +190,21 @@ export class HDWallet {
         address: wallet.address,
         network,
         token_symbol: symbol,
-        amount: formattedBalance
+        amount: formattedBalance,
       });
     }
 
     return true;
   }
 
-
   /** Sweep ERC20 token (USDT, USDC, etc.) from child to master */
-  async sweepToken(child: { wallet: ethers.Wallet }, masterWallet: ethers.Wallet, tokenAddress: string, network: string, symbol: string) {
+  async sweepToken(
+    child: { wallet: ethers.Wallet },
+    masterWallet: ethers.Wallet,
+    tokenAddress: string,
+    network: string,
+    symbol: string,
+  ) {
     const wallet = child.wallet;
     if (!wallet.provider) throw new Error("Child wallet must have a provider");
 
@@ -203,7 +214,9 @@ export class HDWallet {
     if (balance === 0n) {
       return null;
     }
-    console.log(`Child ${wallet.address} has token balance: ${formatUnits(balance, decimals)}`);
+    console.log(
+      `Child ${wallet.address} has token balance: ${formatUnits(balance, decimals)}`,
+    );
     // Gas check
     const feeData = await wallet.provider.getFeeData();
     const gasPrice = feeData.gasPrice ?? feeData.maxFeePerGas ?? 0n;
@@ -230,8 +243,12 @@ export class HDWallet {
     });
     await tx.wait();
 
-
-    await this._transactionWebhook({ address: wallet.address, network: network, token_symbol: symbol, amount: formatUnits(balance, decimals) });
+    await this._transactionWebhook({
+      address: wallet.address,
+      network: network,
+      token_symbol: symbol,
+      amount: formatUnits(balance, decimals),
+    });
 
     return true;
   }
@@ -240,21 +257,21 @@ export class HDWallet {
     child: { wallet: ethers.Wallet },
     masterWallet: ethers.Wallet,
     network: string,
-    symbol: string
+    symbol: string,
   ) {
     const wallet = child.wallet;
 
-    const BUFFER = 1000_0000_000n;  // 0.00000005 ETH
+    const BUFFER = 1000_0000_000n; // 0.00000005 ETH
 
     if (!wallet.provider) throw new Error("Child wallet must have a provider");
 
-    let balance = await wallet.provider.getBalance(wallet.address);
+    const balance = await wallet.provider.getBalance(wallet.address);
     if (balance === 0n) return null;
 
     // 1. Prepare a dummy tx for estimation
     const dummyTx = {
       to: masterWallet.address,
-      value: 0n
+      value: 0n,
     };
 
     // 2. Estimate gas for this wallet (accurate)
@@ -270,7 +287,7 @@ export class HDWallet {
 
     // 4. If insufficient balance, top-up the child wallet
     if (balance <= gasCost) {
-      return null
+      return null;
     }
 
     // 5. Recalculate fees after funding (fees may change)
@@ -289,29 +306,38 @@ export class HDWallet {
     const sendAmount = balance - newGas;
     if (sendAmount <= 0n) return null;
 
-
     const tx = await wallet.sendTransaction({
       to: masterWallet.address,
       value: sendAmount,
       gasLimit,
       maxPriorityFeePerGas: maxPriorityFeePerGasFinal,
-      maxFeePerGas: baseFeeFinal + maxPriorityFeePerGasFinal
+      maxFeePerGas: baseFeeFinal + maxPriorityFeePerGasFinal,
     });
 
     await tx.wait();
-
   }
 
   async getETHBalance(masterWallet: ethers.Wallet): Promise<string> {
-    if (!masterWallet.provider) throw new Error("Master wallet must have a provider");
-    console.log(masterWallet.address)
-    const balance = await masterWallet.provider.getBalance(masterWallet.address);
+    if (!masterWallet.provider)
+      throw new Error("Master wallet must have a provider");
+    console.log(masterWallet.address);
+    const balance = await masterWallet.provider.getBalance(
+      masterWallet.address,
+    );
     return ethers.formatUnits(balance, 18); // returns string in ETH
   }
-  async getERC20Balance(masterWallet: ethers.Wallet, tokenAddress: string): Promise<string> {
-    if (!masterWallet.provider) throw new Error("Master wallet must have a provider");
+  async getERC20Balance(
+    masterWallet: ethers.Wallet,
+    tokenAddress: string,
+  ): Promise<string> {
+    if (!masterWallet.provider)
+      throw new Error("Master wallet must have a provider");
 
-    const token = new ethers.Contract(tokenAddress, ERC20_ABI, masterWallet.provider);
+    const token = new ethers.Contract(
+      tokenAddress,
+      ERC20_ABI,
+      masterWallet.provider,
+    );
     const decimals: number = await token.decimals();
     const balance: bigint = await token.balanceOf(masterWallet.address);
     return ethers.formatUnits(balance, decimals); // returns string in token units
@@ -327,11 +353,12 @@ export class HDWallet {
     amount: string,
     tokenAddress?: string,
     network: string = "BASE",
-    symbol: string = "ETH"
+    symbol: string = "ETH",
   ): Promise<string> {
     const masterWallet = this.getMasterWallet(provider);
 
-    if (!masterWallet.provider) throw new Error("Master wallet must have a provider");
+    if (!masterWallet.provider)
+      throw new Error("Master wallet must have a provider");
 
     // Withdraw ERC20 Token
     if (tokenAddress) {
@@ -342,23 +369,31 @@ export class HDWallet {
       // Check balance
       const balance: bigint = await token.balanceOf(masterWallet.address);
       if (balance < amountInWei) {
-        throw new Error(`Insufficient ${symbol} balance. Available: ${ethers.formatUnits(balance, decimals)}`);
+        throw new Error(
+          `Insufficient ${symbol} balance. Available: ${ethers.formatUnits(balance, decimals)}`,
+        );
       }
 
       // Send token transfer
       const tx = await token.transfer(toAddress, amountInWei);
       await tx.wait();
 
-      console.log(`Withdrew ${amount} ${symbol} to ${toAddress}. Tx: ${tx.hash}`);
+      console.log(
+        `Withdrew ${amount} ${symbol} to ${toAddress}. Tx: ${tx.hash}`,
+      );
       return tx.hash;
     }
 
     // Withdraw Native Token (ETH/BNB)
     const amountInWei = ethers.parseEther(amount);
-    const balance = await masterWallet.provider.getBalance(masterWallet.address);
+    const balance = await masterWallet.provider.getBalance(
+      masterWallet.address,
+    );
 
     if (balance < amountInWei) {
-      throw new Error(`Insufficient ${symbol} balance. Available: ${ethers.formatEther(balance)}`);
+      throw new Error(
+        `Insufficient ${symbol} balance. Available: ${ethers.formatEther(balance)}`,
+      );
     }
 
     // Estimate gas
@@ -369,7 +404,9 @@ export class HDWallet {
 
     // Ensure enough for gas
     if (balance < amountInWei + gasCost) {
-      throw new Error(`Insufficient balance to cover amount + gas. Available: ${ethers.formatEther(balance)}`);
+      throw new Error(
+        `Insufficient balance to cover amount + gas. Available: ${ethers.formatEther(balance)}`,
+      );
     }
 
     // Send transaction
@@ -385,6 +422,101 @@ export class HDWallet {
     return tx.hash;
   }
 
+  async getChildTransactionHistory(
+    index: number,
+    network: string,
+    limit: number = 3,
+  ): Promise<any[]> {
+    const childAddress = this.getChildWallet(index, null as any).address;
+
+    let apiUrl = "";
+    if (network.toUpperCase() === "BASE") {
+      apiUrl = `https://api.basescan.org/api?module=account&action=txlist&address=${childAddress}&startblock=0&endblock=99999999&page=1&offset=${limit}&sort=desc`;
+    } else if (
+      network.toUpperCase() === "BINANCE" ||
+      network.toUpperCase() === "BSC" ||
+      network.toUpperCase() === "BINANCE CHAIN"
+    ) {
+      apiUrl = `https://api.bscscan.com/api?module=account&action=txlist&address=${childAddress}&startblock=0&endblock=99999999&page=1&offset=${limit}&sort=desc`;
+    } else if (network.toUpperCase() === "ETHEREUM") {
+      apiUrl = `https://api.etherscan.io/api?module=account&action=txlist&address=${childAddress}&startblock=0&endblock=99999999&page=1&offset=${limit}&sort=desc`;
+    } else {
+      return [];
+    }
+
+    try {
+      const { data } = await axios.get(apiUrl);
+      if (data.status !== "1" || !data.result) return [];
+
+      const history = data.result.map((tx: any) => ({
+        txID: tx.hash,
+        type: tx.to.toLowerCase() === childAddress.toLowerCase() ? "IN" : "OUT",
+        from: tx.from,
+        to: tx.to,
+        amount: Number(formatUnits(tx.value, 18)),
+        token_symbol:
+          network.toUpperCase() === "BINANCE" || network.toUpperCase() === "BSC"
+            ? "BNB"
+            : "ETH",
+        network: network.toUpperCase(),
+        status: "success",
+        timestamp: Number(tx.timeStamp) * 1000,
+        date: new Date(Number(tx.timeStamp) * 1000),
+      }));
+
+      return history.filter((a: any) => a.type === "IN");
+    } catch (err: any) {
+      console.error(`Failed to fetch ${network} history:`, err.message);
+      return [];
+    }
+  }
+
+  async getChildTokenTransactionHistory(
+    index: number,
+    network: string,
+    tokenAddress: string,
+    limit: number = 3,
+  ): Promise<any[]> {
+    const childAddress = this.getChildWallet(index, null as any).address;
+
+    let apiUrl = "";
+    if (network.toUpperCase() === "BASE") {
+      apiUrl = `https://api.basescan.org/api?module=account&action=tokentx&contractaddress=${tokenAddress}&address=${childAddress}&startblock=0&endblock=999999999&page=1&offset=${limit}&sort=desc`;
+    } else if (
+      network.toUpperCase() === "BINANCE" ||
+      network.toUpperCase() === "BSC" ||
+      network.toUpperCase() === "BINANCE CHAIN"
+    ) {
+      apiUrl = `https://api.bscscan.com/api?module=account&action=tokentx&contractaddress=${tokenAddress}&address=${childAddress}&startblock=0&endblock=999999999&page=1&offset=${limit}&sort=desc`;
+    } else if (network.toUpperCase() === "ETHEREUM") {
+      apiUrl = `https://api.etherscan.io/api?module=account&action=tokentx&contractaddress=${tokenAddress}&address=${childAddress}&startblock=0&endblock=999999999&page=1&offset=${limit}&sort=desc`;
+    } else {
+      return [];
+    }
+
+    try {
+      const { data } = await axios.get(apiUrl);
+      if (data.status !== "1" || !data.result) return [];
+
+      const history = data.result.map((tx: any) => ({
+        txID: tx.hash,
+        type: tx.to.toLowerCase() === childAddress.toLowerCase() ? "IN" : "OUT",
+        from: tx.from,
+        to: tx.to,
+        amount: Number(formatUnits(tx.value, Number(tx.tokenDecimal))),
+        token_symbol: tx.tokenSymbol,
+        network: network.toUpperCase(),
+        status: "success",
+        timestamp: Number(tx.timeStamp) * 1000,
+        date: new Date(Number(tx.timeStamp) * 1000),
+      }));
+
+      return history.filter((a: any) => a.type === "IN");
+    } catch (err: any) {
+      console.error(`Failed to fetch ${network} token history:`, err.message);
+      return [];
+    }
+  }
 
   private async _transactionWebhook(transactionWebhook: {
     network: string;
@@ -395,7 +527,7 @@ export class HDWallet {
     try {
       return await this.publicService.transactionWebhook({
         ...transactionWebhook,
-        amount: Number(transactionWebhook.amount)
+        amount: Number(transactionWebhook.amount),
       });
     } catch (error: any) {
       console.error("Failed to call transaction webhook:", error.message);

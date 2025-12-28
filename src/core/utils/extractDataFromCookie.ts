@@ -15,7 +15,7 @@ export function getUserCookieData(userEmail: string, req: UserRequest) {
 
   const raw = Crypto.decrypt(cookieData);
   const { user } = JSON.parse(
-    decodeURIComponent(raw)
+    decodeURIComponent(raw),
   ) as unknown as iCookieData;
 
   if (!user) return null;
@@ -37,7 +37,7 @@ export function extractDataFromCookie(request: Request): iCookieData {
 }
 
 export function encryptData(data) {
-  var encode = encodeURIComponent(JSON.stringify(data));
+  const encode = encodeURIComponent(JSON.stringify(data));
   return Crypto.encrypt(encode);
 }
 
@@ -82,7 +82,7 @@ export function getAdminCookieData(email: string, req: AdminRequest) {
   if (!cookieData) return null;
 
   const { admin } = JSON.parse(
-    decodeURIComponent(cookieData)
+    decodeURIComponent(cookieData),
   ) as unknown as iAdminCookieData;
   if (!admin) return null;
 
@@ -94,13 +94,13 @@ export function extractAdminDataFromCookie(request: Request): iAdminCookieData {
 
   if (!cookieData) throw new UnauthorizedException("You are unauthenticated");
   const { token, admin } = JSON.parse(
-    decodeURIComponent(cookieData)
+    decodeURIComponent(cookieData),
   ) as unknown as iAdminCookieData;
 
   if (!token) throw new NotAcceptableException("You are not logged in!");
   if (!admin)
     throw new NotAcceptableException(
-      "No admin account is associated with this user!"
+      "No admin account is associated with this user!",
     );
 
   return { token, admin };

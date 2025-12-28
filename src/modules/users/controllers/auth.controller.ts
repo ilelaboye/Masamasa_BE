@@ -43,7 +43,7 @@ export class AuthController {
   async login(
     @Body() loginStaffDto: LoginStaffDto,
     @Req() req: UserRequest,
-    @Res({ passthrough: true }) res: Response
+    @Res({ passthrough: true }) res: Response,
   ) {
     res.clearCookie(_AUTH_COOKIE_NAME_);
 
@@ -67,7 +67,7 @@ export class AuthController {
   @Post("create-account")
   async createAccount(
     @Body() createAccountDto: CreateAccountDto,
-    @Res({ passthrough: true }) res: Response
+    @Res({ passthrough: true }) res: Response,
   ) {
     res.clearCookie(_AUTH_COOKIE_NAME_);
 

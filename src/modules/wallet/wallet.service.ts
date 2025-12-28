@@ -9,7 +9,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 export class WalletService {
   constructor(
     @InjectRepository(Wallet)
-    private readonly walletRepository: Repository<Wallet>
+    private readonly walletRepository: Repository<Wallet>,
   ) {}
 
   async saveWalletAddress(createWalletDto: CreateWalletDto, req: UserRequest) {

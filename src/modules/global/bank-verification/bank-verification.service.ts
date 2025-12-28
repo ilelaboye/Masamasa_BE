@@ -15,7 +15,7 @@ import {
 export class BankVerificationService {
   constructor(
     @InjectRepository(BankVerification)
-    private readonly bankVerificationRepository: Repository<BankVerification>
+    private readonly bankVerificationRepository: Repository<BankVerification>,
   ) {}
 
   verifyUserDetailsWithBvn(bvnDetails, userDetails: BVNUserDto) {
@@ -52,7 +52,7 @@ export class BankVerificationService {
       if (verify) {
         const detailsVerification = this.verifyUserDetailsWithBvn(
           existingVerification.metadata,
-          bvnUserDto
+          bvnUserDto,
         );
         delete existingVerification.hashed_value;
 
@@ -72,7 +72,7 @@ export class BankVerificationService {
             "x-api-key": appConfig.PREMBLY_IDENTITY_PASSAPIKEY,
             // "app-id": appConfig.PREMBLY_IDENTITY_PASSAPPID,
           },
-        }
+        },
       );
       if (!response.status) return { success: false, data: null };
       console.log("response", response);
@@ -93,7 +93,7 @@ export class BankVerificationService {
 
       const detailsVerification = this.verifyUserDetailsWithBvn(
         response.data,
-        bvnUserDto
+        bvnUserDto,
       );
       if (!detailsVerification) return { success: false, data: verification };
 
@@ -112,7 +112,7 @@ export class BankVerificationService {
     if (existingVerification) {
       const verify = await verifyHash(
         bankCode,
-        existingVerification.hashed_value
+        existingVerification.hashed_value,
       );
       delete existingVerification.hashed_value;
 
@@ -128,7 +128,7 @@ export class BankVerificationService {
         `https://api.paystack.co/bank/resolve?account_number=${accountNumber}&bank_code=${bankCode}`,
         {
           headers: { Authorization: `Bearer ${appConfig.PAYSTACK_SECRET_KEY}` },
-        }
+        },
       );
       if (!response.status)
         throw new BadRequestException("Account number verification failed");

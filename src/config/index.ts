@@ -1,2 +1,2 @@
-export * from './app';
-export * from './typeorm.config';
+export * from "./app";
+export * from "./typeorm.config";

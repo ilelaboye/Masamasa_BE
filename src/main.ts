@@ -38,7 +38,7 @@ async function bootstrap() {
     basicAuth({
       challenge: true,
       users: { ["masamasa"]: appConfig.SWAGGER_PASSWORD },
-    })
+    }),
   );
 
   const swaggerConfig = new DocumentBuilder()
@@ -63,7 +63,7 @@ async function bootstrap() {
   app.useGlobalInterceptors(new GlobalHTTPInterceptor());
   app.useGlobalFilters(
     new HttpExceptionFilter(),
-    new GlobalExceptionFilter(httpAdapterHost)
+    new GlobalExceptionFilter(httpAdapterHost),
   );
 
   await app.listen(appConfig.PORT);

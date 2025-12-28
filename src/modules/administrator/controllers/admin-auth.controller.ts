@@ -34,13 +34,13 @@ export class AdminAuthController {
   async login(
     @Body() adminLoginDto: AdminLoginDto,
     @Req() req: AdminRequest,
-    @Res({ passthrough: true }) res: Response
+    @Res({ passthrough: true }) res: Response,
   ) {
     res.clearCookie(_ADMIN_AUTH_COOKIE_NAME_);
 
     const { token, user } = await this.adminAuthService.login(
       adminLoginDto,
-      req
+      req,
     );
 
     if (!token || !user) {
@@ -54,7 +54,7 @@ export class AdminAuthController {
     res.cookie(
       _ADMIN_AUTH_COOKIE_NAME_,
       encodeURIComponent(JSON.stringify(cookieData)),
-      CookieOptions
+      CookieOptions,
     );
 
     return { data: { ...user } };

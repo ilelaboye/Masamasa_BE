@@ -4,7 +4,6 @@ export class CreateWalletDto {
   id: string;
 }
 
-
 export class WithdrawTokenDto {
   amount: ethers.BigNumberish;
   to: string;

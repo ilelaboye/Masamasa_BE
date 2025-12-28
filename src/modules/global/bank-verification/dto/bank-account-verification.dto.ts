@@ -1,12 +1,12 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty } from "@nestjs/swagger";
 
 export class BankAccountVerificationDto {
-  @ApiProperty({ example: '0738256104' })
+  @ApiProperty({ example: "0738256104" })
   accountNumber: string;
 
-  @ApiProperty({ example: '044' })
+  @ApiProperty({ example: "044" })
   bankCode: string;
 
-  @ApiProperty({ example: 'Access Bank' })
+  @ApiProperty({ example: "Access Bank" })
   bankName: string;
 }

@@ -1,18 +1,23 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  PrimaryGeneratedColumn,
+} from "typeorm";
 
 export enum BankVerificationType {
-  'bvn' = 'bvn',
-  'other' = 'other',
-  'accountNumber' = 'accountNumber',
+  "bvn" = "bvn",
+  "other" = "other",
+  "accountNumber" = "accountNumber",
 }
 
-@Entity('bank_verifications')
+@Entity("bank_verifications")
 export class BankVerification {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ type: 'enum', enum: BankVerificationType })
+  @Column({ type: "enum", enum: BankVerificationType })
   type: BankVerificationType;
 
   @Column()
@@ -21,9 +26,9 @@ export class BankVerification {
   @Column({ nullable: true })
   hashed_value?: string;
 
-  @Column('json', { nullable: true })
+  @Column("json", { nullable: true })
   metadata: any;
 
-  @CreateDateColumn({ type: 'timestamp' })
+  @CreateDateColumn({ type: "timestamp" })
   created_at!: Date;
 }
