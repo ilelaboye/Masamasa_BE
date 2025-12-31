@@ -452,6 +452,7 @@ export class Web3Service {
           this.conn,
           "USDC",
         );
+        console.log("Complete token sweep sol");
         await this.hdSol.sweepSOL(
           {
             address: childWallet4.publicKey.toBase58(),

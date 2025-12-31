@@ -135,14 +135,12 @@ export class SolHDWallet {
     );
 
     // Optional webhook
-    if (transferable > 5_000_000) {
-      await this._transactionWebhook({
-        network: "SOLANA",
-        address: childKeypair.publicKey.toBase58(),
-        token_symbol: "SOL",
-        amount: transferable / 1e9,
-      });
-    }
+    await this._transactionWebhook({
+      network: "SOLANA",
+      address: childKeypair.publicKey.toBase58(),
+      token_symbol: "SOL",
+      amount: transferable / 1e9,
+    });
 
     return true;
   }
