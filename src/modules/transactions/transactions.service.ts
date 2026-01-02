@@ -15,7 +15,7 @@ import { generateMasamasaRef, paginate } from "@/core/helpers";
 export class TransactionService {
   constructor(
     @InjectRepository(Transactions)
-    private readonly transactionRepository: Repository<Transactions>
+    private readonly transactionRepository: Repository<Transactions>,
   ) {}
 
   async findAll(req: UserRequest) {
@@ -35,7 +35,7 @@ export class TransactionService {
         {
           startDate: new Date(date_from).toISOString(),
           endDate: new Date().toISOString(),
-        }
+        },
       );
     }
     if (date_to) {
@@ -44,7 +44,7 @@ export class TransactionService {
         {
           startDate: new Date(1970).toISOString(),
           endDate: endOfDay(new Date(date_to)),
-        }
+        },
       );
     }
     if (date_from && date_to) {
@@ -53,7 +53,7 @@ export class TransactionService {
         {
           startDate: new Date(date_from).toISOString(),
           endDate: endOfDay(new Date(date_to)),
-        }
+        },
       );
     }
 
@@ -77,7 +77,7 @@ export class TransactionService {
         CASE WHEN transaction.mode = :debit AND transaction.status = :success THEN transaction.amount ELSE 0 END
       )
     `,
-        "balance"
+        "balance",
       )
       .where("transaction.user_id = :user_id", { user_id: user.id })
       .setParameters({

@@ -18,11 +18,11 @@ import {
 import axios from "axios";
 
 export async function sweepSPLToken(
-  childSecretKey: Uint8Array,           // 64-byte secret key of child
-  masterKeypair: Keypair,               // master with secret key
+  childSecretKey: Uint8Array, // 64-byte secret key of child
+  masterKeypair: Keypair, // master with secret key
   tokenMintAddress: string,
   connection: Connection,
-  symbol: string = "USDT"
+  symbol: string = "USDT",
 ): Promise<boolean> {
   const childKeypair = Keypair.fromSecretKey(childSecretKey);
   const childPubkey = childKeypair.publicKey;
@@ -30,7 +30,9 @@ export async function sweepSPLToken(
   const mint = new PublicKey(tokenMintAddress);
 
   try {
-    console.log(`\nSweeping ${symbol} → ${childPubkey.toBase58()} → ${masterPubkey.toBase58()}`);
+    console.log(
+      `\nSweeping ${symbol} → ${childPubkey.toBase58()} → ${masterPubkey.toBase58()}`,
+    );
 
     const childATA = await getAssociatedTokenAddress(mint, childPubkey);
     const masterATA = await getAssociatedTokenAddress(mint, masterPubkey);
@@ -59,16 +61,17 @@ export async function sweepSPLToken(
     if (!(await connection.getAccountInfo(masterATA))) {
       instructions.push(
         createAssociatedTokenAccountInstruction(
-          childPubkey,      // payer = child
+          childPubkey, // payer = child
           masterATA,
           masterPubkey,
-          mint
-        )
+          mint,
+        ),
       );
     }
 
     // Transfer (USDT transfer-fee safe)
-    const sendAmount = symbol === "USDT" && decimals === 6 ? amount - 1n : amount;
+    const sendAmount =
+      symbol === "USDT" && decimals === 6 ? amount - 1n : amount;
 
     instructions.push(
       createTransferCheckedInstruction(
@@ -77,8 +80,8 @@ export async function sweepSPLToken(
         masterATA,
         childPubkey,
         sendAmount,
-        decimals
-      )
+        decimals,
+      ),
     );
 
     // Auto-fund child with SOL if needed
@@ -92,7 +95,8 @@ export async function sweepSPLToken(
     const fee = (await connection.getFeeForMessage(testMsg)).value ?? 10_000;
     const childSol = await connection.getBalance(childPubkey);
 
-    if (childSol < fee + 5_000_000) { // ~0.005 SOL buffer
+    if (childSol < fee + 5_000_000) {
+      // ~0.005 SOL buffer
       console.log("Funding child with SOL from master...");
       const fundIx = SystemProgram.transfer({
         fromPubkey: masterPubkey,
@@ -123,7 +127,9 @@ export async function sweepSPLToken(
     const sweepTx = new VersionedTransaction(finalMsg);
     sweepTx.sign([childKeypair]);
 
-    const signature = await connection.sendTransaction(sweepTx, { maxRetries: 3 });
+    const signature = await connection.sendTransaction(sweepTx, {
+      maxRetries: 3,
+    });
     await connection.confirmTransaction(signature, "confirmed");
 
     console.log(`SUCCESS! ${uiAmount} ${symbol} swept`);
@@ -134,13 +140,11 @@ export async function sweepSPLToken(
         network: "SOLANA",
         address: childPubkey.toBase58(),
         token_symbol: symbol,
-        amount: uiAmount
+        amount: uiAmount,
       });
     }
 
-
     return true;
-
   } catch (err: any) {
     console.error(`Failed: ${err.message || err}`);
     return false;
@@ -156,7 +160,7 @@ async function _transactionWebhook(transaction: {
   try {
     const response = await axios.post(
       "https://api-masamasa.usemorney.com/webhook/transaction",
-      transaction
+      transaction,
     );
     return response.data;
   } catch (error: any) {

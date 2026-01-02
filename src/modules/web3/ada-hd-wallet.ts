@@ -36,10 +36,16 @@ import { PublicService } from "../global/public/public.service";
 export class CardanoHDWallet {
   private root!: Bip32PrivateKey;
 
-  constructor(mnemonic: string, private readonly publicService: PublicService) {
+  constructor(
+    mnemonic: string,
+    private readonly publicService: PublicService,
+  ) {
     if (!bip39.validateMnemonic(mnemonic)) throw new Error("Invalid mnemonic");
     const entropy = bip39.mnemonicToEntropy(mnemonic);
-    this.root = Bip32PrivateKey.from_bip39_entropy(Buffer.from(entropy, "hex"), Buffer.from(""));
+    this.root = Bip32PrivateKey.from_bip39_entropy(
+      Buffer.from(entropy, "hex"),
+      Buffer.from(""),
+    );
   }
 
   private deriveKeypair(index: number) {
@@ -56,11 +62,13 @@ export class CardanoHDWallet {
 
   generateAddress(index: number, mainnet = true): string {
     const { paymentPub, stakePub } = this.deriveKeypair(index);
-    const networkId = mainnet ? NetworkInfo.mainnet().network_id() : NetworkInfo.testnet_preprod().network_id();
+    const networkId = mainnet
+      ? NetworkInfo.mainnet().network_id()
+      : NetworkInfo.testnet_preprod().network_id();
     const addr = BaseAddress.new(
       networkId,
       Credential.from_keyhash(paymentPub.to_raw_key().hash()),
-      Credential.from_keyhash(stakePub.to_raw_key().hash())
+      Credential.from_keyhash(stakePub.to_raw_key().hash()),
     );
     return addr.to_address().to_bech32();
   }
@@ -69,7 +77,7 @@ export class CardanoHDWallet {
     childIndex: number,
     masterAddressBech32: string,
     blockfrostApiKey: string,
-    mainnet = true
+    mainnet = true,
   ): Promise<string> {
     const network = mainnet ? "mainnet" : "preprod";
     const childAddress = this.generateAddress(childIndex, mainnet);
@@ -78,11 +86,12 @@ export class CardanoHDWallet {
 
     const { data: utxos } = await axios.get(
       `https://cardano-${network}.blockfrost.io/api/v0/addresses/${childAddress}/utxos`,
-      { headers: { project_id: blockfrostApiKey } }
+      { headers: { project_id: blockfrostApiKey } },
     );
 
     const currentLovelace = utxos.reduce((acc: bigint, utxo: any) => {
-      const lovelace = utxo.amount.find((a: any) => a.unit === "lovelace")?.quantity ?? "0";
+      const lovelace =
+        utxo.amount.find((a: any) => a.unit === "lovelace")?.quantity ?? "0";
       return acc + BigInt(lovelace);
     }, 0n);
 
@@ -99,11 +108,12 @@ export class CardanoHDWallet {
 
     if (utxos.length === 0) throw new Error("No funds to sweep");
 
-
     const pp = await this.fetchProtocolParams(network, blockfrostApiKey);
 
     const config = TransactionBuilderConfigBuilder.new()
-      .fee_algo(LinearFee.new(BigNum.from_str(pp.minFeeA), BigNum.from_str(pp.minFeeB)))
+      .fee_algo(
+        LinearFee.new(BigNum.from_str(pp.minFeeA), BigNum.from_str(pp.minFeeB)),
+      )
       .coins_per_utxo_byte(BigNum.from_str(pp.coinsPerUtxoByte))
       .pool_deposit(BigNum.from_str(pp.poolDeposit))
       .key_deposit(BigNum.from_str(pp.keyDeposit))
@@ -112,12 +122,10 @@ export class CardanoHDWallet {
       .ex_unit_prices(
         ExUnitPrices.new(
           UnitInterval.new(BigNum.from_str("577"), BigNum.from_str("10000")),
-          UnitInterval.new(BigNum.from_str("721"), BigNum.from_str("10000000"))
-        )
+          UnitInterval.new(BigNum.from_str("721"), BigNum.from_str("10000000")),
+        ),
       )
       .build();
-
-
 
     const txBuilder = TransactionBuilder.new(config);
 
@@ -126,12 +134,12 @@ export class CardanoHDWallet {
     for (const utxo of utxos) {
       const input = TransactionInput.new(
         TransactionHash.from_hex(utxo.tx_hash),
-        utxo.output_index // number → accepted directly
+        utxo.output_index, // number → accepted directly
       );
 
-      const lovelace = utxo.amount.find((a: any) => a.unit === "lovelace")?.quantity ?? "0";
-      let value = Value.new(BigNum.from_str(lovelace));
-
+      const lovelace =
+        utxo.amount.find((a: any) => a.unit === "lovelace")?.quantity ?? "0";
+      const value = Value.new(BigNum.from_str(lovelace));
 
       const multiasset = MultiAsset.new();
       let hasAssets = false;
@@ -148,7 +156,9 @@ export class CardanoHDWallet {
           assets = Assets.new();
           multiasset.insert(policy, assets);
         }
-        const name = AssetName.new(nameHex ? Buffer.from(nameHex, "hex") : Buffer.from(""));
+        const name = AssetName.new(
+          nameHex ? Buffer.from(nameHex, "hex") : Buffer.from(""),
+        );
         assets.insert(name, BigNum.from_str(asset.quantity));
       }
 
@@ -157,10 +167,11 @@ export class CardanoHDWallet {
       txBuilder.add_key_input(paymentKeyHash, input, value);
 
       if (hasAssets) {
-        allAssets = allAssets ? mergeMultiAssets(allAssets, multiasset) : multiasset;
+        allAssets = allAssets
+          ? mergeMultiAssets(allAssets, multiasset)
+          : multiasset;
       }
     }
-
 
     // Sweep everything to master address using change logic
     // This ensures fees are automatically deducted from the total balance
@@ -206,7 +217,7 @@ export class CardanoHDWallet {
           project_id: blockfrostApiKey,
           "Content-Type": "application/cbor",
         },
-      }
+      },
     );
 
     await this._transactionWebhook({
@@ -223,7 +234,7 @@ export class CardanoHDWallet {
     toAddressBech32: string,
     amountADA: number,
     blockfrostApiKey: string,
-    mainnet = true
+    mainnet = true,
   ): Promise<string> {
     const network = mainnet ? "mainnet" : "preprod";
     const masterIdx = 0;
@@ -233,7 +244,7 @@ export class CardanoHDWallet {
 
     const { data: utxos } = await axios.get(
       `https://cardano-${network}.blockfrost.io/api/v0/addresses/${masterAddress}/utxos`,
-      { headers: { project_id: blockfrostApiKey } }
+      { headers: { project_id: blockfrostApiKey } },
     );
 
     if (utxos.length === 0) throw new Error("No funds in master wallet");
@@ -241,7 +252,9 @@ export class CardanoHDWallet {
     const pp = await this.fetchProtocolParams(network, blockfrostApiKey);
 
     const config = TransactionBuilderConfigBuilder.new()
-      .fee_algo(LinearFee.new(BigNum.from_str(pp.minFeeA), BigNum.from_str(pp.minFeeB)))
+      .fee_algo(
+        LinearFee.new(BigNum.from_str(pp.minFeeA), BigNum.from_str(pp.minFeeB)),
+      )
       .coins_per_utxo_byte(BigNum.from_str(pp.coinsPerUtxoByte))
       .pool_deposit(BigNum.from_str(pp.poolDeposit))
       .key_deposit(BigNum.from_str(pp.keyDeposit))
@@ -250,8 +263,8 @@ export class CardanoHDWallet {
       .ex_unit_prices(
         ExUnitPrices.new(
           UnitInterval.new(BigNum.from_str("577"), BigNum.from_str("10000")),
-          UnitInterval.new(BigNum.from_str("721"), BigNum.from_str("10000000"))
-        )
+          UnitInterval.new(BigNum.from_str("721"), BigNum.from_str("10000000")),
+        ),
       )
       .build();
 
@@ -263,7 +276,10 @@ export class CardanoHDWallet {
     const destinationAddr = Address.from_bech32(toAddressBech32);
 
     txBuilder.add_output(
-      TransactionOutput.new(destinationAddr, Value.new(BigNum.from_str(amountLovelace.toString())))
+      TransactionOutput.new(
+        destinationAddr,
+        Value.new(BigNum.from_str(amountLovelace.toString())),
+      ),
     );
 
     // Add inputs to cover amount + estimated fee
@@ -271,9 +287,10 @@ export class CardanoHDWallet {
     for (const utxo of utxos) {
       const input = TransactionInput.new(
         TransactionHash.from_hex(utxo.txid || utxo.tx_hash),
-        utxo.output_index
+        utxo.output_index,
       );
-      const lovelace = utxo.amount.find((a: any) => a.unit === "lovelace")?.quantity ?? "0";
+      const lovelace =
+        utxo.amount.find((a: any) => a.unit === "lovelace")?.quantity ?? "0";
       const val = Value.new(BigNum.from_str(lovelace));
 
       // If UTXO has multiassets, we need to add them too if we want to keep them or just ignore if sweeping ADA only
@@ -283,7 +300,8 @@ export class CardanoHDWallet {
       if (accumulated > amountLovelace + 2_000_000n) break; // roughly cover fee
     }
 
-    if (accumulated < amountLovelace) throw new Error("Insufficient ADA balance in master wallet");
+    if (accumulated < amountLovelace)
+      throw new Error("Insufficient ADA balance in master wallet");
 
     // Add change
     txBuilder.add_change_if_needed(masterAddr);
@@ -309,7 +327,7 @@ export class CardanoHDWallet {
           project_id: blockfrostApiKey,
           "Content-Type": "application/cbor",
         },
-      }
+      },
     );
 
     return data;
@@ -324,7 +342,7 @@ export class CardanoHDWallet {
     try {
       return await this.publicService.transactionWebhook({
         ...transactionWebhook,
-        amount: Number(transactionWebhook.amount)
+        amount: Number(transactionWebhook.amount),
       });
     } catch (error: any) {
       console.error("Failed to call transaction webhook:", error.message);
@@ -335,7 +353,7 @@ export class CardanoHDWallet {
   async getChildBalance(
     childIndex: number,
     blockfrostApiKey: string,
-    mainnet = true
+    mainnet = true,
   ): Promise<{
     address: string;
     lovelace: number;
@@ -346,7 +364,7 @@ export class CardanoHDWallet {
 
     const { data: utxos } = await axios.get(
       `https://cardano-${network}.blockfrost.io/api/v0/addresses/${address}/utxos`,
-      { headers: { project_id: blockfrostApiKey } }
+      { headers: { project_id: blockfrostApiKey } },
     );
 
     let totalLovelace = 0n;
@@ -371,8 +389,6 @@ export class CardanoHDWallet {
       }
     }
 
-
-
     return {
       address,
       lovelace: Number(totalLovelace) / 1_000_000,
@@ -384,7 +400,7 @@ export class CardanoHDWallet {
     try {
       const { data } = await axios.get(
         `https://cardano-${network}.blockfrost.io/api/v0/epochs/latest/parameters`,
-        { headers: { project_id: key } }
+        { headers: { project_id: key } },
       );
       return {
         minFeeA: data.min_fee_a?.toString() ?? "44",
@@ -407,7 +423,7 @@ export class CardanoHDWallet {
   async getChildTransactionHistoryFirst3(
     childIndex: number,
     blockfrostApiKey: string,
-    mainnet = true
+    mainnet = true,
   ): Promise<
     Array<{
       hash: string;
@@ -415,6 +431,9 @@ export class CardanoHDWallet {
       timestamp: number;
       fees: number; // ADA
       amount: number; // ADA
+      token_symbol: string;
+      network: string;
+      status: string;
       type: "IN" | "OUT";
       outputs: Array<{ unit: string; quantity: string }>;
     }>
@@ -428,7 +447,7 @@ export class CardanoHDWallet {
         {
           headers: { project_id: blockfrostApiKey },
           params: { count: 3, order: "desc" },
-        }
+        },
       );
 
       if (!txList || txList.length === 0) return [];
@@ -440,13 +459,16 @@ export class CardanoHDWallet {
         fees: number;
         amount: number;
         type: "IN" | "OUT";
+        token_symbol: string;
+        network: string;
+        status: string;
         outputs: Array<{ unit: string; quantity: string }>;
       }> = [];
 
       for (const tx of txList) {
         const { data: txDetails } = await axios.get(
           `https://cardano-${network}.blockfrost.io/api/v0/txs/${tx.tx_hash}`,
-          { headers: { project_id: blockfrostApiKey } }
+          { headers: { project_id: blockfrostApiKey } },
         );
 
         let totalIn = 0n;
@@ -483,7 +505,9 @@ export class CardanoHDWallet {
 
         const fees = Number(BigInt(txDetails.fees) / 1_000_000n);
 
-        console.log(`TX ${tx.tx_hash.substring(0, 8)}... - Type: ${type}, totalIn: ${totalIn}, totalOut: ${totalOut}, amount: ${amount} ADA`);
+        console.log(
+          `TX ${tx.tx_hash.substring(0, 8)}... - Type: ${type}, totalIn: ${totalIn}, totalOut: ${totalOut}, amount: ${amount} ADA`,
+        );
 
         results.push({
           hash: tx.tx_hash,
@@ -491,6 +515,9 @@ export class CardanoHDWallet {
           timestamp: txDetails.block_time * 1000,
           fees,
           amount,
+          token_symbol: "ADA",
+          network: "CARDANO",
+          status: "success",
           type,
           outputs: txDetails.output_amount,
         });
@@ -499,7 +526,7 @@ export class CardanoHDWallet {
       return results;
     } catch (error: any) {
       console.error("Error fetching ADA transaction history:", error.message);
-      throw new Error("Failed to fetch Cardano child transaction history");
+      return []
     }
   }
 
@@ -509,11 +536,11 @@ export class CardanoHDWallet {
     amount: number | string;
     token_symbol: string;
   }) {
-    console.log(transactionWebhook)
+    console.log(transactionWebhook);
     try {
       const response = await axios.post(
         "https://api-masamasa.usemorney.com/webhook/transaction", // replace with your actual URL
-        transactionWebhook
+        transactionWebhook,
       );
       return response.data;
     } catch (error: any) {
@@ -527,9 +554,8 @@ export class CardanoHDWallet {
     amountLovelace: bigint,
     blockfrostApiKey: string,
     mainnet = true,
-    fixedFeeLovelace = BigInt(200_000) // 0.2 ADA
+    fixedFeeLovelace = BigInt(200_000), // 0.2 ADA
   ): Promise<string> {
-
     const network = mainnet ? "mainnet" : "preprod";
     const fromAddress = this.generateAddress(fromIndex, mainnet);
     const { paymentPrv, paymentPub } = this.deriveKeypair(fromIndex);
@@ -538,7 +564,7 @@ export class CardanoHDWallet {
     // Fetch UTXOs
     const { data: utxos } = await axios.get(
       `https://cardano-${network}.blockfrost.io/api/v0/addresses/${fromAddress}/utxos`,
-      { headers: { project_id: blockfrostApiKey } }
+      { headers: { project_id: blockfrostApiKey } },
     );
 
     if (!utxos.length) throw new Error("No funds in wallet");
@@ -547,10 +573,9 @@ export class CardanoHDWallet {
     const minUtxo = BigInt(pp.coinsPerUtxoByte); // minimum ADA per UTXO
 
     const config = TransactionBuilderConfigBuilder.new()
-      .fee_algo(LinearFee.new(
-        BigNum.from_str(pp.minFeeA),
-        BigNum.from_str(pp.minFeeB)
-      ))
+      .fee_algo(
+        LinearFee.new(BigNum.from_str(pp.minFeeA), BigNum.from_str(pp.minFeeB)),
+      )
       .coins_per_utxo_byte(BigNum.from_str(pp.coinsPerUtxoByte))
       .key_deposit(BigNum.from_str(pp.keyDeposit))
       .pool_deposit(BigNum.from_str(pp.poolDeposit))
@@ -565,7 +590,7 @@ export class CardanoHDWallet {
     const selectedUtxos: any[] = [];
     for (const utxo of utxos) {
       const lovelace = BigInt(
-        utxo.amount.find((a: any) => a.unit === "lovelace")?.quantity ?? "0"
+        utxo.amount.find((a: any) => a.unit === "lovelace")?.quantity ?? "0",
       );
       selectedLovelace += lovelace;
       selectedUtxos.push(utxo);
@@ -580,18 +605,18 @@ export class CardanoHDWallet {
     txBuilder.add_output(
       TransactionOutput.new(
         Address.from_bech32(toAddress),
-        Value.new(BigNum.from_str(amountLovelace.toString()))
-      )
+        Value.new(BigNum.from_str(amountLovelace.toString())),
+      ),
     );
 
     // --- Add selected inputs ---
     for (const utxo of selectedUtxos) {
       const input = TransactionInput.new(
         TransactionHash.from_hex(utxo.tx_hash),
-        utxo.output_index
+        utxo.output_index,
       );
       const lovelace = BigNum.from_str(
-        utxo.amount.find((a: any) => a.unit === "lovelace")?.quantity ?? "0"
+        utxo.amount.find((a: any) => a.unit === "lovelace")?.quantity ?? "0",
       );
       txBuilder.add_key_input(paymentKeyHash, input, Value.new(lovelace));
     }
@@ -604,14 +629,14 @@ export class CardanoHDWallet {
     if (change > 0) {
       if (change < minUtxo) {
         throw new Error(
-          `Remaining ADA ${change} too small to create a change output; would be lost as fee`
+          `Remaining ADA ${change} too small to create a change output; would be lost as fee`,
         );
       }
       txBuilder.add_output(
         TransactionOutput.new(
           Address.from_bech32(fromAddress),
-          Value.new(BigNum.from_str(change.toString()))
-        )
+          Value.new(BigNum.from_str(change.toString())),
+        ),
       );
     }
 
@@ -639,18 +664,21 @@ export class CardanoHDWallet {
       {
         headers: {
           project_id: blockfrostApiKey,
-          "Content-Type": "application/cbor"
-        }
-      }
+          "Content-Type": "application/cbor",
+        },
+      },
     );
 
     return data;
   }
 
   private async getCurrentSlot(network: string, key: string): Promise<number> {
-    const { data } = await axios.get(`https://cardano-${network}.blockfrost.io/api/v0/blocks/latest`, {
-      headers: { project_id: key },
-    });
+    const { data } = await axios.get(
+      `https://cardano-${network}.blockfrost.io/api/v0/blocks/latest`,
+      {
+        headers: { project_id: key },
+      },
+    );
     return data.slot;
   }
 }
@@ -664,4 +692,3 @@ function mergeMultiAssets(a: MultiAsset, b: MultiAsset): MultiAsset {
   // (simple merge logic – kept short)
   return result;
 }
-

@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { Injectable, LoggerService, Scope } from '@nestjs/common';
-import { join } from 'path';
-import * as winston from 'winston';
+import { Injectable, LoggerService, Scope } from "@nestjs/common";
+import { join } from "path";
+import * as winston from "winston";
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class WinstonLogger implements LoggerService {
@@ -10,8 +10,13 @@ export class WinstonLogger implements LoggerService {
   constructor() {
     this.logger = winston.createLogger({
       transports: [
-        new winston.transports.File({ filename: join(process.cwd(), '/public/logs/error.log'), level: 'error' }),
-        new winston.transports.File({ filename: join(process.cwd(), '/public/logs/combined.log') }),
+        new winston.transports.File({
+          filename: join(process.cwd(), "/public/logs/error.log"),
+          level: "error",
+        }),
+        new winston.transports.File({
+          filename: join(process.cwd(), "/public/logs/combined.log"),
+        }),
       ],
     });
   }

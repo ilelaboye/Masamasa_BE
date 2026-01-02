@@ -30,7 +30,7 @@ import { CreateWalletDto } from "@/modules/wallet/wallet.dto";
 export class PublicController {
   constructor(
     private readonly publicService: PublicService,
-    private readonly exchangeRateService: ExchangeRateService
+    private readonly exchangeRateService: ExchangeRateService,
   ) {}
 
   // @UsePipes(new JoiValidationPipe(ConfirmUserEmailValidation))
@@ -70,10 +70,10 @@ export class PublicController {
   @UsePipes(new JoiValidationPipe(BankAccountVerificationValidation))
   @Post("bank-verification/verify-account-details")
   async verifyAccountNumber(
-    @Body() bankAccountVerificationDto: BankAccountVerificationDto
+    @Body() bankAccountVerificationDto: BankAccountVerificationDto,
   ) {
     return await this.publicService.verifyAccountNumber(
-      bankAccountVerificationDto
+      bankAccountVerificationDto,
     );
   }
 

@@ -10,7 +10,11 @@ export class TronHDWallet {
   private tronWeb: any;
   private readonly publicService: PublicService;
 
-  constructor(mnemonic: string, fullNode = "https://api.trongrid.io", publicService: PublicService) {
+  constructor(
+    mnemonic: string,
+    fullNode = "https://api.trongrid.io",
+    publicService: PublicService,
+  ) {
     if (!bip39.validateMnemonic(mnemonic)) throw new Error("Invalid mnemonic");
     this.masterSeed = bip39.mnemonicToSeedSync(mnemonic);
 
@@ -55,12 +59,11 @@ export class TronHDWallet {
     return this.tronWeb;
   }
 
-
   async sweepTRON(
     child: { privateKey: string; address: string },
     masterAddressBase58: string,
     tronRpc: string,
-    symbol: string = "TRX"
+    symbol: string = "TRX",
   ) {
     const tronWeb = new TronWeb({
       fullHost: tronRpc,
@@ -76,7 +79,7 @@ export class TronHDWallet {
     // TRON transfer fee is always ~15 TRX bandwidth/energy if not frozen
     const FEE = 1_500; // 1.5 TRX in SUN
 
-    if (balance <= (FEE + 1)) {
+    if (balance <= FEE + 1) {
       console.log("Insufficient balance to cover TRON network fee");
       return null;
     }
@@ -87,7 +90,7 @@ export class TronHDWallet {
     const tx = await tronWeb.transactionBuilder.sendTrx(
       masterAddressBase58,
       sendAmount,
-      address
+      address,
     );
 
     const signedTx = await tronWeb.trx.sign(tx, child.privateKey);
@@ -100,7 +103,7 @@ export class TronHDWallet {
       address,
       network: "TRON",
       token_symbol: symbol,
-      amount: sendAmount / 1e6
+      amount: sendAmount / 1e6,
     });
 
     return true;
@@ -111,7 +114,7 @@ export class TronHDWallet {
     master: { privateKey: string; address: string },
     tronRpc: string,
     tokenAddress: string,
-    symbol: string = "USDT"
+    symbol: string = "USDT",
   ) {
     // 1. Initialize TronWeb for child wallet
     const tronWebChild = new TronWeb({
@@ -142,9 +145,9 @@ export class TronHDWallet {
 
     const tokenBalance = Number(balanceRaw);
 
-
-
-    console.log(`${symbol} balance of child wallet ${childAddress}: ${tokenBalance}`);
+    console.log(
+      `${symbol} balance of child wallet ${childAddress}: ${tokenBalance}`,
+    );
 
     if (tokenBalance === 0) return null;
     // 4. Check TRX balance to pay fees
@@ -177,20 +180,20 @@ export class TronHDWallet {
     return true;
   }
 
-  async withdrawTRX(
-    toAddress: string,
-    amountTRX: number
-  ): Promise<string> {
+  async withdrawTRX(toAddress: string, amountTRX: number): Promise<string> {
     const master = this.getMasterWallet();
     const amountSun = Math.floor(amountTRX * 1_000_000);
 
     const transaction = await this.tronWeb.transactionBuilder.sendTrx(
       toAddress,
       amountSun,
-      master.address
+      master.address,
     );
 
-    const signedTx = await this.tronWeb.trx.sign(transaction, master.privateKey);
+    const signedTx = await this.tronWeb.trx.sign(
+      transaction,
+      master.privateKey,
+    );
     const receipt = await this.tronWeb.trx.sendRawTransaction(signedTx);
 
     if (!receipt.result) {
@@ -203,7 +206,7 @@ export class TronHDWallet {
   async withdrawTRC20(
     toAddress: string,
     amount: number,
-    tokenAddress: string
+    tokenAddress: string,
   ): Promise<string> {
     const master = this.getMasterWallet();
     const contract = await this.tronWeb.contract().at(tokenAddress);
@@ -221,7 +224,7 @@ export class TronHDWallet {
   async getChildTRC20History(
     childIndex: number,
     tokenAddress: string,
-    limit: number = 3
+    limit: number = 3,
   ): Promise<any[]> {
     const childAddress = this.getChildAddress(childIndex);
     console.log(childAddress);
@@ -236,19 +239,20 @@ export class TronHDWallet {
       if (!data || !data.data) return [];
 
       // Normalize history entries
-      const history = data.data.map((tx: any) => (
-        {
-          txID: tx.transaction_id,
-          type: tx.from === childAddress ? "OUT" : "IN",
-          from: tx.from,
-          to: tx.to,
-          amount: Number(tx.value) / 1e6, // typical 6 decimals
-          tokenAddress: tx.token_info.address,
-          symbol: tx.token_info.symbol,
-          decimals: tx.token_info.decimals,
-          timestamp: tx.block_timestamp,
-          date: new Date(tx.block_timestamp),
-        }));
+      const history = data.data.map((tx: any) => ({
+        txID: tx.transaction_id,
+        type: tx.from === childAddress ? "OUT" : "IN",
+        from: tx.from,
+        to: tx.to,
+        amount: Number(tx.value) / 1e6, // typical 6 decimals
+        tokenAddress: tx.token_info.address,
+        symbol: tx.token_info.symbol,
+        decimals: tx.token_info.decimals,
+        network: "TRON",
+        status: "success",
+        timestamp: tx.block_timestamp,
+        date: new Date(tx.block_timestamp),
+      }));
 
       const filterData = history.filter((a: any) => a.type === "IN");
 
@@ -259,6 +263,49 @@ export class TronHDWallet {
     }
   }
 
+  async getChildTRXHistory(
+    childIndex: number,
+    limit: number = 3,
+  ): Promise<any[]> {
+    const childAddress = this.getChildAddress(childIndex);
+    const url = `https://api.trongrid.io/v1/accounts/${childAddress}/transactions?limit=${limit}`;
+
+    try {
+      const { data } = await axios.get(url, {
+        headers: { "TRON-PRO-API-KEY": appConfig.TRX_API_KEY },
+      });
+
+      if (!data || !data.data) return [];
+
+      const history = data.data
+        .filter(
+          (tx: any) => tx.raw_data.contract[0].type === "TransferContract",
+        )
+        .map((tx: any) => {
+          const contract = tx.raw_data.contract[0].value;
+          const from = this.tronWeb.address.fromHex(contract.owner_address);
+          const to = this.tronWeb.address.fromHex(contract.to_address);
+
+          return {
+            txID: tx.txID,
+            type: from === childAddress ? "OUT" : "IN",
+            from,
+            to,
+            amount: contract.amount / 1e6,
+            token_symbol: "TRX",
+            network: "TRON",
+            status: "success",
+            timestamp: tx.raw_data.timestamp,
+            date: new Date(tx.raw_data.timestamp),
+          };
+        });
+
+      return history.filter((a: any) => a.type === "IN");
+    } catch (err: any) {
+      console.error("Failed to fetch TRX history:", err.message);
+      return [];
+    }
+  }
 
   private async _transactionWebhook(transactionWebhook: {
     network: string;
@@ -269,7 +316,7 @@ export class TronHDWallet {
     try {
       return await this.publicService.transactionWebhook({
         ...transactionWebhook,
-        amount: Number(transactionWebhook.amount)
+        amount: Number(transactionWebhook.amount),
       });
     } catch (error: any) {
       console.error("Failed to call transaction webhook:", error.message);

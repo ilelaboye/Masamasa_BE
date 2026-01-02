@@ -45,7 +45,7 @@ import { BVNVerificationDto } from "@/modules/global/bank-verification/dto/bvn-v
 export class UsersController {
   constructor(
     private readonly usersService: UsersService,
-    private readonly cacheService: CacheService
+    private readonly cacheService: CacheService,
   ) {}
 
   @Get("profile")
@@ -73,7 +73,7 @@ export class UsersController {
   @UsePipes(new JoiValidationPipe(WithdrawalValidation))
   async withdrawal(
     @Body() withdrawalDto: WithdrawalDto,
-    @Req() req: UserRequest
+    @Req() req: UserRequest,
   ) {
     return await this.usersService.withdrawal(withdrawalDto, req);
   }
@@ -87,7 +87,7 @@ export class UsersController {
   @Post("change-password")
   async changePassword(
     @Body() changeUserPasswordDto: ChangeUserPasswordDto,
-    @Req() req: UserRequest
+    @Req() req: UserRequest,
   ) {
     return await this.usersService.changePassword(changeUserPasswordDto, req);
   }
@@ -96,7 +96,7 @@ export class UsersController {
   @Post("upload-image")
   async uploadImage(
     @Body() uploadImageDto: UploadImageDto,
-    @Req() req: UserRequest
+    @Req() req: UserRequest,
   ) {
     return await this.usersService.uploadImage(uploadImageDto, req);
   }
@@ -105,7 +105,7 @@ export class UsersController {
   @Post("update-profile")
   async updateProfile(
     @Body() updateAccountDto: UpdateAccountDto,
-    @Req() req: UserRequest
+    @Req() req: UserRequest,
   ) {
     return await this.usersService.updateProfile(updateAccountDto, req);
   }
@@ -114,7 +114,7 @@ export class UsersController {
   @UsePipes(new JoiValidationPipe(BVNVerificationValidation))
   async kyc(
     @Body() bVNVerificationDto: BVNVerificationDto,
-    @Req() req: UserRequest
+    @Req() req: UserRequest,
   ) {
     return await this.usersService.userKyc(bVNVerificationDto, req);
   }

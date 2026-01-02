@@ -41,7 +41,7 @@ import {
 export class PurchaseController {
   constructor(
     private readonly purchaseService: PurchaseService,
-    private readonly providerService: ProviderService
+    private readonly providerService: ProviderService,
   ) {}
 
   @ApiOperation({ summary: "Create airtime purchase" })
@@ -49,11 +49,11 @@ export class PurchaseController {
   @Post("airtime")
   async createAirtime(
     @Body() createAirtimePurchaseDto: PurchaseRequestItemDto,
-    @Req() req: UserRequest
+    @Req() req: UserRequest,
   ) {
     return await this.purchaseService.createAirtime(
       createAirtimePurchaseDto,
-      req
+      req,
     );
   }
 
@@ -62,7 +62,7 @@ export class PurchaseController {
   @UsePipes(new JoiValidationPipe(CreateDataPurchaseValidation))
   async createData(
     @Body() createDataPurchaseDto: PurchaseRequestItemDto,
-    @Req() req: UserRequest
+    @Req() req: UserRequest,
   ) {
     return await this.purchaseService.createData(createDataPurchaseDto, req);
   }
@@ -72,11 +72,11 @@ export class PurchaseController {
   @UsePipes(new JoiValidationPipe(CreateElectricityPurchaseValidation))
   async createElecticity(
     @Body() electricityPurchaseDto: IElectricityPurchaseDto,
-    @Req() req: UserRequest
+    @Req() req: UserRequest,
   ) {
     return await this.purchaseService.createElectricity(
       electricityPurchaseDto,
-      req
+      req,
     );
   }
 
@@ -139,7 +139,7 @@ export class PurchaseController {
   @Get("service-provider/:serviceID")
   async getServiceProvider(
     @Param("serviceID") serviceID: string,
-    @Req() req: UserRequest
+    @Req() req: UserRequest,
   ) {
     return await this.providerService.getServiceByID(serviceID);
   }
@@ -147,7 +147,7 @@ export class PurchaseController {
   @Get("service-variation/:serviceID")
   async getServiceVariation(
     @Param("serviceID") serviceID: string,
-    @Req() req: UserRequest
+    @Req() req: UserRequest,
   ) {
     return await this.providerService.getServiceVariation(serviceID);
   }
@@ -157,7 +157,7 @@ export class PurchaseController {
   @Post("service-provider/verify-meter")
   async validateMeterNumber(
     @Body() validateMeterNoDto: ValidateMeterNoDto,
-    @Req() req: UserRequest
+    @Req() req: UserRequest,
   ) {
     return await this.providerService.validateMeterNumber(validateMeterNoDto);
   }

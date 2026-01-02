@@ -12,7 +12,7 @@ import {
 export class ExchangeRateService {
   constructor(
     @InjectRepository(ExchangeRate)
-    private readonly exchangeRateRepository: Repository<ExchangeRate>
+    private readonly exchangeRateRepository: Repository<ExchangeRate>,
   ) {}
 
   async findAll() {
@@ -47,7 +47,7 @@ export class ExchangeRateService {
   async saveNewRate(admin_id, currency, rate) {
     const update = await this.exchangeRateRepository.update(
       { currency: currency },
-      { status: ExchangeRateStatus.disabled }
+      { status: ExchangeRateStatus.disabled },
     );
     const create = await this.exchangeRateRepository.save({
       admin_id,

@@ -12,7 +12,7 @@ export class AdminAuthService {
   constructor(
     @InjectRepository(Administrator)
     private readonly adminRepository: Repository<Administrator>,
-    private readonly jwtService: JwtService
+    private readonly jwtService: JwtService,
   ) {}
   async login(adminLoginDto: AdminLoginDto, req: AdminRequest) {
     // const { admin } = req;
@@ -26,12 +26,12 @@ export class AdminAuthService {
 
     if (!admin)
       throw new NotAcceptableException(
-        "Incorrect email & password, please try again"
+        "Incorrect email & password, please try again",
       );
     const verified = await verifyHash(adminLoginDto.password, admin.password);
     if (!verified)
       throw new NotAcceptableException(
-        "Incorrect details given, please try again"
+        "Incorrect details given, please try again",
       );
 
     // let adminData = getAdminCookieData(admin.email, req);

@@ -1,6 +1,6 @@
-import { Global, Module } from '@nestjs/common';
-import { BeneficiariesController } from './beneficiaries.controller';
-import { BeneficiariesService } from './beneficiaries.service';
+import { Global, Module } from "@nestjs/common";
+import { BeneficiariesController } from "./beneficiaries.controller";
+import { BeneficiariesService } from "./beneficiaries.service";
 
 @Global()
 @Module({

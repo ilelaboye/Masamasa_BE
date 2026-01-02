@@ -43,12 +43,12 @@ export class PurchaseService {
     private readonly dataSource: DataSource,
     private readonly cacheService: CacheService,
     private readonly providerService: ProviderService,
-    private readonly usersService: UsersService
+    private readonly usersService: UsersService,
   ) {}
 
   async createAirtime(
     createAirtimePurchaseDto: PurchaseRequestItemDto,
-    req: UserRequest
+    req: UserRequest,
   ) {
     const wallet = await this.usersService.walletBalance(req);
     if (wallet < createAirtimePurchaseDto.amount) {
@@ -82,7 +82,7 @@ export class PurchaseService {
     try {
       const resp = await this.providerService.processAirtimePurchase(
         createdPurchaseRequests,
-        requestId
+        requestId,
       );
       if (!resp.status) {
         throw new BadRequestException(resp.message);
@@ -98,7 +98,7 @@ export class PurchaseService {
               ...createdPurchaseRequests.metadata,
               provider_response: resp.data,
             },
-          }
+          },
         );
       } else {
         await queryRunner.manager.update(
@@ -112,7 +112,7 @@ export class PurchaseService {
               ...createdPurchaseRequests.metadata,
               provider_response: resp.data,
             },
-          }
+          },
         );
         await queryRunner.manager.save(Transactions, {
           user_id: req.user.id,
@@ -147,7 +147,7 @@ export class PurchaseService {
 
   async createData(
     createDataPurchaseDto: PurchaseRequestItemDto,
-    req: UserRequest
+    req: UserRequest,
   ) {
     const {
       amount,
@@ -159,14 +159,14 @@ export class PurchaseService {
     } = createDataPurchaseDto;
 
     let variationList: any = await this.cacheService.get(
-      `vtpass_variation_${network}`
+      `vtpass_variation_${network}`,
     );
     console.log("variationList", variationList);
     if (!variationList) {
       variationList = await this.providerService.getServiceVariation(network);
     }
     const variation = variationList.variations.find(
-      (item) => item.variation_code == variation_code
+      (item) => item.variation_code == variation_code,
     );
     if (!variation) {
       throw new BadRequestException("Data selected is currently not available");
@@ -204,7 +204,7 @@ export class PurchaseService {
     try {
       const resp = await this.providerService.processDataPurchase(
         createdPurchaseRequests,
-        requestId
+        requestId,
       );
       console.log("resp", resp);
       if (!resp.status) {
@@ -227,7 +227,7 @@ export class PurchaseService {
               ...createdPurchaseRequests.metadata,
               provider_response: resp.data,
             },
-          }
+          },
         );
         await queryRunner.manager.save(Transactions, {
           user_id: req.user.id,
@@ -256,7 +256,7 @@ export class PurchaseService {
               ...createdPurchaseRequests.metadata,
               provider_response: resp.data,
             },
-          }
+          },
         );
       }
 
@@ -274,7 +274,7 @@ export class PurchaseService {
 
   async createElectricity(
     electricityPurchaseDto: IElectricityPurchaseDto,
-    req: UserRequest
+    req: UserRequest,
   ) {
     const {
       amount,
@@ -317,7 +317,7 @@ export class PurchaseService {
       const resp = await this.providerService.processElectricityPurchase(
         createdPurchaseRequests,
         requestId,
-        req.user
+        req.user,
       );
       if (!resp.status) {
         throw new BadRequestException(resp.message);
@@ -333,7 +333,7 @@ export class PurchaseService {
               ...createdPurchaseRequests.metadata,
               provider_response: resp.data,
             },
-          }
+          },
         );
       } else {
         await queryRunner.manager.update(
@@ -347,7 +347,7 @@ export class PurchaseService {
               ...createdPurchaseRequests.metadata,
               provider_response: resp.data,
             },
-          }
+          },
         );
         await queryRunner.manager.save(Transactions, {
           user_id: req.user.id,
@@ -403,7 +403,7 @@ export class PurchaseService {
         {
           startDate: new Date(date_from).toISOString(),
           endDate: new Date().toISOString(),
-        }
+        },
       );
     }
     if (date_to) {
@@ -412,7 +412,7 @@ export class PurchaseService {
         {
           startDate: new Date(1970).toISOString(),
           endDate: endOfDay(new Date(date_to)),
-        }
+        },
       );
     }
     if (date_from && date_to) {
@@ -421,7 +421,7 @@ export class PurchaseService {
         {
           startDate: new Date(date_from).toISOString(),
           endDate: endOfDay(new Date(date_to)),
-        }
+        },
       );
     }
 

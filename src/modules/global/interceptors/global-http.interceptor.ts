@@ -1,6 +1,11 @@
-import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from '@nestjs/common';
-import { Observable } from 'rxjs';
-import { map } from 'rxjs/operators';
+import {
+  CallHandler,
+  ExecutionContext,
+  Injectable,
+  NestInterceptor,
+} from "@nestjs/common";
+import { Observable } from "rxjs";
+import { map } from "rxjs/operators";
 
 interface ResponseDTO<T> {
   success: boolean;
@@ -9,8 +14,14 @@ interface ResponseDTO<T> {
 }
 
 @Injectable()
-export class GlobalHTTPInterceptor<T> implements NestInterceptor<T, ResponseDTO<T>> {
-  intercept(context: ExecutionContext, next: CallHandler): Observable<ResponseDTO<T>> {
+export class GlobalHTTPInterceptor<T> implements NestInterceptor<
+  T,
+  ResponseDTO<T>
+> {
+  intercept(
+    context: ExecutionContext,
+    next: CallHandler,
+  ): Observable<ResponseDTO<T>> {
     // TODO: Use later to get status code
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const request = context.switchToHttp().getRequest();
@@ -21,11 +32,11 @@ export class GlobalHTTPInterceptor<T> implements NestInterceptor<T, ResponseDTO<
         let message = response?.message || undefined;
 
         // Handle special cases where data might be nested
-        if (typeof response === 'object' && response !== null) {
-          if ('data' in response) {
+        if (typeof response === "object" && response !== null) {
+          if ("data" in response) {
             data = response.data;
           }
-          if ('message' in response && Object.keys(response).length < 2) {
+          if ("message" in response && Object.keys(response).length < 2) {
             message = response.message;
             data = undefined;
           }

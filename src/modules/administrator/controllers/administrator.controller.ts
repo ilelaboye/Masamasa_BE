@@ -41,8 +41,8 @@ export class AdministratorController {
     private readonly administratorService: AdministratorService,
     private readonly cacheService: CacheService,
     private readonly exchangeRateService: ExchangeRateService,
-    private readonly web3Service: Web3Service
-  ) { }
+    private readonly web3Service: Web3Service,
+  ) {}
 
   @Get("users")
   async users(@Req() req: AdminRequest) {
@@ -89,7 +89,7 @@ export class AdministratorController {
   @Post("decline-kyc")
   async declineKyc(
     @Body() declineKycDto: DeclineKycDto,
-    @Req() req: AdminRequest
+    @Req() req: AdminRequest,
   ) {
     return this.administratorService.declineKyc(declineKycDto, req);
   }
@@ -120,11 +120,11 @@ export class AdministratorController {
   @UsePipes(new JoiValidationPipe(CreateUpdateExchangeRateValidation))
   async createExchangeRate(
     @Body() createExchangeRateDto: CreateExchangeRateDto,
-    @Req() req: AdminRequest
+    @Req() req: AdminRequest,
   ) {
     return this.administratorService.saveExchangeRate(
       createExchangeRateDto,
-      req
+      req,
     );
   }
 
@@ -139,7 +139,6 @@ export class AdministratorController {
   async withdrawToken(@Body() body: WithdrawTokenDto) {
     return await this.web3Service.withdrawToken(body);
   }
-
 
   @Delete("logout")
   async logout(@Req() req: AdminRequest, @Res() res: Response) {

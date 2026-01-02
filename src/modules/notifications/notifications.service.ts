@@ -13,12 +13,12 @@ export class NotificationsService {
   constructor(
     private readonly eventEmitter: EventEmitter2,
     @InjectRepository(Notification)
-    private readonly notificationRepository: Repository<Notification>
+    private readonly notificationRepository: Repository<Notification>,
   ) {}
 
   async create(
     createNotificationDto: CreateNotificationDto,
-    queryRunner?: QueryRunner
+    queryRunner?: QueryRunner,
   ) {
     const { metadata } = createNotificationDto;
 

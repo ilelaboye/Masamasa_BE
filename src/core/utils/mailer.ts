@@ -18,7 +18,7 @@ export async function sendMailJet(
     from = { name: appConfig.MAILJET_FROM_NAME, email: appConfig.MAILJET_FROM },
   }: MailerOptions,
   mailData: MailDataType,
-  removeAttachment = true
+  removeAttachment = true,
 ) {
   const attachments: MailAttachment[] = [];
   if (Array.isArray(mailData.attachments)) {
@@ -77,7 +77,7 @@ export async function sendMailJetWithTemplate(
     from = { name: appConfig.MAILJET_FROM_NAME, email: appConfig.MAILJET_FROM },
   }: MailerOptions,
   mailData: MailDataType,
-  removeAttachment = true
+  removeAttachment = true,
 ) {
   const attachments: MailAttachment[] = [];
   if (Array.isArray(mailData.attachments)) {
@@ -134,7 +134,7 @@ export async function sendZohoMailWithTemplate(
     to,
     from = { name: appConfig.ZOHO_FROM_NAME, email: appConfig.ZOHO_FROM },
   }: MailerOptions,
-  mailData: MailDataType
+  mailData: MailDataType,
 ) {
   const response = await axiosClient(
     `https://api.zeptomail.com/v1.1/email/template`,
@@ -156,6 +156,6 @@ export async function sendZohoMailWithTemplate(
       headers: {
         authorization: `Zoho-enczapikey ${appConfig.ZOHO_MAIL_CLIENT_ID}`,
       },
-    }
+    },
   );
 }

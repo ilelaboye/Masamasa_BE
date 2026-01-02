@@ -1,6 +1,12 @@
-import { appConfig } from '@/config';
-import { ArgumentsHost, Catch, ExceptionFilter, HttpException, Logger } from '@nestjs/common';
-import { Response } from 'express';
+import { appConfig } from "@/config";
+import {
+  ArgumentsHost,
+  Catch,
+  ExceptionFilter,
+  HttpException,
+  Logger,
+} from "@nestjs/common";
+import { Response } from "express";
 
 @Catch(HttpException)
 export class HttpExceptionFilter implements ExceptionFilter {
@@ -19,7 +25,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       status,
       message: exception.message,
       errors: exception.cause,
-      stacktrace: appConfig.ENV === 'dev' ? exception.stack : undefined,
+      stacktrace: appConfig.ENV === "dev" ? exception.stack : undefined,
     });
   }
 }

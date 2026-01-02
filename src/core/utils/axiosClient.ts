@@ -6,7 +6,7 @@ interface FetchOptions extends AxiosRequestConfig {
 
 export async function axiosClient<T = any>(
   url: string,
-  options: FetchOptions = {}
+  options: FetchOptions = {},
 ): Promise<any> {
   const { method = "GET", body, headers } = options;
 

@@ -13,7 +13,7 @@ import { User } from "../entities/user.entity";
 export class UserLoginGuard implements CanActivate {
   constructor(
     @InjectRepository(User)
-    private readonly usersRepository: Repository<User>
+    private readonly usersRepository: Repository<User>,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -40,7 +40,7 @@ export class UserLoginGuard implements CanActivate {
 
     if (!user)
       throw new NotAcceptableException(
-        "Incorrect details given, please try again."
+        "Incorrect details given, please try again.",
       );
     if (user.deleted_at)
       throw new ForbiddenException("This account is no longer active.");

@@ -3,11 +3,7 @@ import { ethers, formatUnits } from "ethers";
 import axios from "axios";
 import { appConfig } from "@/config";
 import { WithdrawTokenDto } from "./web3.dto";
-import {
-  Connection,
-  LAMPORTS_PER_SOL,
-  PublicKey
-} from "@solana/web3.js";
+import { Connection, LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
 import FormData from "form-data";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Wallet } from "../wallet/wallet.entity";
@@ -34,7 +30,7 @@ const walletManagerAbi = [
   "function getAllTransactions() view returns (tuple(string network, address wallet, uint256 amount, string tokenSymbol, address tokenAddress, uint256 timestamp)[])",
   "function getTokenBalance(address tokenAddress) view returns (uint256)",
   "function withdrawContractETH(uint256 amount, address payable to)",
-  "function withdrawContractToken(address tokenAddress, uint256 amount, address to)"
+  "function withdrawContractToken(address tokenAddress, uint256 amount, address to)",
 ];
 
 @Injectable()
@@ -66,11 +62,25 @@ export class Web3Service {
     }
 
     this.conn = new Connection(appConfig.SOL_RPC_URL, "confirmed");
-    this.hdSol = new SolHDWallet(appConfig.SOL_MASTER_MNEMONIC, this.publicService);
-    this.hdTRX = new TronHDWallet(appConfig.TRX_MASTER_MNEMONIC, "https://api.trongrid.io", this.publicService);
+    this.hdSol = new SolHDWallet(
+      appConfig.SOL_MASTER_MNEMONIC,
+      this.publicService,
+    );
+    this.hdTRX = new TronHDWallet(
+      appConfig.TRX_MASTER_MNEMONIC,
+      "https://api.trongrid.io",
+      this.publicService,
+    );
     this.tronWeb = this.hdTRX.getTronWebInstance();
-    this.hdADA = new CardanoHDWallet(appConfig.ADA_MASTER_MNEMONIC, this.publicService);
-    this.hdBTC = new BtcHDWallet(appConfig.BTC_MASTER_MNEMONIC, false, this.publicService);
+    this.hdADA = new CardanoHDWallet(
+      appConfig.ADA_MASTER_MNEMONIC,
+      this.publicService,
+    );
+    this.hdBTC = new BtcHDWallet(
+      appConfig.BTC_MASTER_MNEMONIC,
+      false,
+      this.publicService,
+    );
   }
 
   // -----------------------------
@@ -78,7 +88,10 @@ export class Web3Service {
   // -----------------------------
   private async initHDWallet() {
     if (!this.hd) {
-      this.hd = await HDWallet.fromMnemonic(appConfig.MASTER_MNEMONIC, this.publicService);
+      this.hd = await HDWallet.fromMnemonic(
+        appConfig.MASTER_MNEMONIC,
+        this.publicService,
+      );
     }
   }
 
@@ -92,8 +105,15 @@ export class Web3Service {
   // -----------------------------
   // HELPER: contract
   // -----------------------------
-  private getContract(address?: string, signerOrProvider?: ethers.Signer | ethers.Provider) {
-    return new ethers.Contract(address ?? "", walletManagerAbi, signerOrProvider);
+  private getContract(
+    address?: string,
+    signerOrProvider?: ethers.Signer | ethers.Provider,
+  ) {
+    return new ethers.Contract(
+      address ?? "",
+      walletManagerAbi,
+      signerOrProvider,
+    );
   }
 
   // -----------------------------
@@ -106,19 +126,27 @@ export class Web3Service {
       const userId = payload.id.toString();
 
       const childWallet = this.hd.getChildWallet(userId, this.provider);
-      const solChildWallet = this.hdSol.deriveKeypair(userId).publicKey.toBase58();
+      const solChildWallet = this.hdSol
+        .deriveKeypair(userId)
+        .publicKey.toBase58();
       const tronChildWallet = this.hdTRX.getChildAddress(userId);
 
-      const existWalletETH = await this.walletRepository.findOne({ where: { wallet_address: childWallet.address } });
-      const existWalletSOL = await this.walletRepository.findOne({ where: { wallet_address: solChildWallet } });
-      const existWalletTRX = await this.walletRepository.findOne({ where: { wallet_address: tronChildWallet } });
+      const existWalletETH = await this.walletRepository.findOne({
+        where: { wallet_address: childWallet.address },
+      });
+      const existWalletSOL = await this.walletRepository.findOne({
+        where: { wallet_address: solChildWallet },
+      });
+      const existWalletTRX = await this.walletRepository.findOne({
+        where: { wallet_address: tronChildWallet },
+      });
       const cardanoChild = this.hdADA.generateAddress(userId, true);
       const existWalletADA = await this.walletRepository.findOne({
-        where: { wallet_address: cardanoChild }
+        where: { wallet_address: cardanoChild },
       });
       const btcChild = this.hdBTC.generateAddress(Number(userId));
       const existWalletBTC = await this.walletRepository.findOne({
-        where: { wallet_address: btcChild }
+        where: { wallet_address: btcChild },
       });
 
       if (!existWalletBTC) {
@@ -126,7 +154,7 @@ export class Web3Service {
           user: req.user,
           network: "BITCOIN",
           currency: "BTC",
-          wallet_address: btcChild
+          wallet_address: btcChild,
         });
         await this.walletRepository.save(btc);
       }
@@ -136,7 +164,7 @@ export class Web3Service {
           user: req.user,
           network: "CARDANO",
           currency: "ADA",
-          wallet_address: cardanoChild
+          wallet_address: cardanoChild,
         });
         await this.walletRepository.save(ada);
       }
@@ -156,7 +184,7 @@ export class Web3Service {
           user: req.user,
           network: "SOLANA",
           currency: "SOL",
-          wallet_address: solChildWallet
+          wallet_address: solChildWallet,
         });
         await this.walletRepository.save(sol);
       }
@@ -166,7 +194,7 @@ export class Web3Service {
           user: req.user,
           network: "TRON",
           currency: "TRX",
-          wallet_address: tronChildWallet
+          wallet_address: tronChildWallet,
         });
         await this.walletRepository.save(trx);
       }
@@ -176,7 +204,7 @@ export class Web3Service {
         sol: solChildWallet,
         trx: tronChildWallet,
         ada: cardanoChild,
-        btc: btcChild
+        btc: btcChild,
       };
     } catch (err: any) {
       console.error(err);
@@ -197,37 +225,50 @@ export class Web3Service {
     const masterWallet = this.hd.getMasterWallet(this.provider);
     const transactionsTron = await this.transactionRepository
       .createQueryBuilder("transactions")
-      .where("transactions.user_id = :user_id AND transactions.network = :network", {
-        user_id: req.user.id,
-        network: "Tron",
-      })
+      .where(
+        "transactions.user_id = :user_id AND transactions.network = :network",
+        {
+          user_id: req.user.id,
+          network: "Tron",
+        },
+      )
       .orderBy("transactions.created_at", "DESC")
       .getMany(); // fetch results
 
-    const formattedTransactions = transactionsTron.map(tx => ({
+    const formattedTransactions = transactionsTron.map((tx) => ({
       network: tx.network,
       token_symbol: tx.metadata?.token_symbol,
       amount: tx.metadata?.amount,
-      created_at: tx.created_at
+      created_at: tx.created_at,
     }));
 
     const masterWalletTron = this.hdTRX.getMasterWallet();
-    const w = await this.walletRepository.findOne({ where: { user: req.user.id } });
+    const w = await this.walletRepository.findOne({
+      where: { user: req.user.id },
+    });
 
     if (!w) return false;
     const tronChildWallet = this.hdTRX.getChildAddress(req.user.id);
 
     try {
-      const tron = await this.hdTRX.getChildTRC20History(req.user.id, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t");
+      const tron = await this.hdTRX.getChildTRC20History(
+        req.user.id,
+        "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+      );
 
       // Get the most recent DB transaction timestamp for TRON
-      const latestDbTronTime = formattedTransactions.reduce((latest, tx: any) => {
-        const txTime = new Date(tx.metadata?.timestamp || tx.created_at).getTime();
-        return txTime > latest ? txTime : latest;
-      }, 0);
+      const latestDbTronTime = formattedTransactions.reduce(
+        (latest, tx: any) => {
+          const txTime = new Date(
+            tx.metadata?.timestamp || tx.created_at,
+          ).getTime();
+          return txTime > latest ? txTime : latest;
+        },
+        0,
+      );
 
       // Filter unmatched TRON transactions
-      const unmatchedTronTransactions = tron.filter(onChainTx => {
+      const unmatchedTronTransactions = tron.filter((onChainTx) => {
         const onChainTime = new Date(onChainTx.date).getTime();
         return (
           onChainTime > latestDbTronTime // only after latest DB tx
@@ -240,15 +281,14 @@ export class Web3Service {
             network: "Tron",
             address: tronChildWallet,
             amount: a.amount,
-            token_symbol: a.symbol
-          })
-        })
+            token_symbol: a.symbol,
+          });
+        });
       }
-
     } catch (err) {
-      console.log(err)
+      console.log(err);
     }
-    return { transactions: true }
+    return { transactions: true };
   }
 
   async sweepWallets(req) {
@@ -260,10 +300,13 @@ export class Web3Service {
     const masterWalletTron = this.hdTRX.getMasterWallet();
     const masterWalletSOL = this.hdSol.getMasterKeypair().publicKey.toBase58();
 
-
     // Fetch the user's wallet
-    const w = await this.walletRepository.findOne({ where: { user: req.user.id } });
-    const w2 = await this.walletRepository.findOne({ where: { wallet_address: "TLKtezKsvMT2Koez8LXGhgVmBvX9pAJSxK" } });
+    const w = await this.walletRepository.findOne({
+      where: { user: req.user.id },
+    });
+    const w2 = await this.walletRepository.findOne({
+      where: { wallet_address: "TLKtezKsvMT2Koez8LXGhgVmBvX9pAJSxK" },
+    });
     if (!w) return false;
 
     try {
@@ -279,7 +322,7 @@ export class Web3Service {
         BNB_BTC: "0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c", // BSC BTC
         SOL_USDT: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
         SOL_USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-        TRON_USDT: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
+        TRON_USDT: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
         // Add Base USDT/USDC addresses here if needed
       };
 
@@ -287,79 +330,157 @@ export class Web3Service {
       // BASE and BSC
       // -----------------------------
       if (w) {
-        const childWallet = this.hd.getChildWallet(Number(req.user.id), this.providerBase);
-        const childWallet2 = this.hd.getChildWallet(Number(req.user.id), this.provider);
+        const childWallet = this.hd.getChildWallet(
+          Number(req.user.id),
+          this.providerBase,
+        );
+        const childWallet2 = this.hd.getChildWallet(
+          Number(req.user.id),
+          this.provider,
+        );
         const childWallet3 = this.hdTRX.deriveChild(Number(req.user.id));
         const childWallet4 = this.hdSol.deriveKeypair(Number(req.user.id));
-        const childWallet5 = this.hd.getChildWallet(Number(req.user.id), this.providerETH);
+        const childWallet5 = this.hd.getChildWallet(
+          Number(req.user.id),
+          this.providerETH,
+        );
 
         //BASE
-        await this.hd.sweepToken(childWallet, masterWalletBase, ERC20_TOKENS["BASE_USDT"], "BASE", "USDT");
-        await this.hd.sweepToken(childWallet, masterWalletBase, ERC20_TOKENS["BASE_USDC"], "BASE", "USDC");
-        await this.hd.sweepToken(childWallet, masterWalletBase, ERC20_TOKENS["BASE_BTC"], "BASE", "BTC");
-        await this.hd.sweepToken(childWallet, masterWalletBase, ERC20_TOKENS["BASE_BNB"], "BASE", "BNB");
+        await this.hd.sweepToken(
+          childWallet,
+          masterWalletBase,
+          ERC20_TOKENS["BASE_USDT"],
+          "BASE",
+          "USDT",
+        );
+        await this.hd.sweepToken(
+          childWallet,
+          masterWalletBase,
+          ERC20_TOKENS["BASE_USDC"],
+          "BASE",
+          "USDC",
+        );
+        await this.hd.sweepToken(
+          childWallet,
+          masterWalletBase,
+          ERC20_TOKENS["BASE_BTC"],
+          "BASE",
+          "BTC",
+        );
+        await this.hd.sweepToken(
+          childWallet,
+          masterWalletBase,
+          ERC20_TOKENS["BASE_BNB"],
+          "BASE",
+          "BNB",
+        );
         //bsc erc20 tokens
-        await this.hd.sweepToken(childWallet2, masterWallet, ERC20_TOKENS["BNB_USDT"], "BINANCE CHAIN", "USDT");
-        await this.hd.sweepToken(childWallet2, masterWallet, ERC20_TOKENS["BNB_USDC"], "BINANCE CHAIN", "USDC");
-        await this.hd.sweepToken(childWallet2, masterWallet, ERC20_TOKENS["BNB_RIPPLE"], "BINANCE CHAIN", "XRP");
-        await this.hd.sweepToken(childWallet2, masterWallet, ERC20_TOKENS["BNB_DOGE"], "BINANCE CHAIN", "DOGE");
-        await this.hd.sweepToken(childWallet2, masterWallet, ERC20_TOKENS["BNB_BTC"], "BINANCE CHAIN", "BTC");
+        await this.hd.sweepToken(
+          childWallet2,
+          masterWallet,
+          ERC20_TOKENS["BNB_USDT"],
+          "BINANCE CHAIN",
+          "USDT",
+        );
+        await this.hd.sweepToken(
+          childWallet2,
+          masterWallet,
+          ERC20_TOKENS["BNB_USDC"],
+          "BINANCE CHAIN",
+          "USDC",
+        );
+        await this.hd.sweepToken(
+          childWallet2,
+          masterWallet,
+          ERC20_TOKENS["BNB_RIPPLE"],
+          "BINANCE CHAIN",
+          "XRP",
+        );
+        await this.hd.sweepToken(
+          childWallet2,
+          masterWallet,
+          ERC20_TOKENS["BNB_DOGE"],
+          "BINANCE CHAIN",
+          "DOGE",
+        );
+        await this.hd.sweepToken(
+          childWallet2,
+          masterWallet,
+          ERC20_TOKENS["BNB_BTC"],
+          "BINANCE CHAIN",
+          "BTC",
+        );
         console.log("Complete token sweep");
 
         try {
           //BASE
           await this.hd.sweep(childWallet, masterWalletBase, "BASE", "ETH");
         } catch (e) {
-          console.log(e)
+          console.log(e);
         }
         try {
           //BSC
-          await this.hd.sweep(childWallet2, masterWallet, "BINANCE CHAIN", "BNB");
+          await this.hd.sweep(
+            childWallet2,
+            masterWallet,
+            "BINANCE CHAIN",
+            "BNB",
+          );
         } catch (e) {
-          console.log(e)
+          console.log(e);
         }
         try {
           //ETH
           await this.hd.sweep(childWallet5, masterWalletETH, "ETHEREUM", "ETH");
         } catch (e) {
-          console.log(e)
+          console.log(e);
         }
         // //BASE ERC20 tokens
         const childKeySol = Buffer.from(childWallet4.secretKey).toString("hex");
-
-
 
         await sweepSPLToken(
           childWallet4.secretKey,
           this.hdSol.getMasterKeypair(),
           ERC20_TOKENS["SOL_USDT"],
           this.conn,
-          "USDT"
+          "USDT",
         );
         await sweepSPLToken(
           childWallet4.secretKey,
           this.hdSol.getMasterKeypair(),
           ERC20_TOKENS["SOL_USDC"],
           this.conn,
-          "USDC"
+          "USDC",
         );
+        console.log("Complete token sweep sol");
         await this.hdSol.sweepSOL(
-          { address: childWallet4.publicKey.toBase58(), privateKey: childKeySol },
+          {
+            address: childWallet4.publicKey.toBase58(),
+            privateKey: childKeySol,
+          },
           masterWalletSOL,
           this.conn,
-          req.user.id
+          req.user.id,
         );
 
         // trc20
         // await this.hdTRX.sweepTRC20(childWallet3, masterWalletTron, "https://api.trongrid.io", ERC20_TOKENS["TRON_USDT"])
 
-        await this.hdTRX.sweepTRON(childWallet3, masterWalletTron.address, "https://api.trongrid.io");
+        await this.hdTRX.sweepTRON(
+          childWallet3,
+          masterWalletTron.address,
+          "https://api.trongrid.io",
+        );
         // ada
-        const txHash = await this.hdADA.sweepADA(req.user.id, this.hdADA.generateAddress(0), appConfig.BLOCK_API_KEY ?? "", true);
+        const txHash = await this.hdADA.sweepADA(
+          req.user.id,
+          this.hdADA.generateAddress(0),
+          appConfig.BLOCK_API_KEY ?? "",
+          true,
+        );
 
         // btc
         await this.hdBTC.sweepBTC(req.user.id, this.hdBTC.generateAddress(0));
-
       }
     } catch (err: any) {
       console.error(`Failed to for user ${req.user.id}:`, err);
@@ -385,7 +506,7 @@ export class Web3Service {
         BNB_BTC: "0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c", // BSC BTC
         SOL_USDT: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
         SOL_USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-        TRON_USDT: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
+        TRON_USDT: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
       };
 
       // Determine which provider to use based on network
@@ -394,12 +515,21 @@ export class Web3Service {
       const amount = Number(payload.amount);
 
       if (network === "BITCOIN" || network === "BTC") {
-        const txHash = await this.hdBTC.withdrawBTC(this.hdBTC.generateAddress(0), payload.to, amount);
+        const txHash = await this.hdBTC.withdrawBTC(
+          this.hdBTC.generateAddress(0),
+          payload.to,
+          amount,
+        );
         return { success: true, txHash };
       }
 
       if (network === "CARDANO" || network === "ADA") {
-        const txHash = await this.hdADA.withdrawADA(payload.to, amount, appConfig.BLOCK_API_KEY ?? "", true);
+        const txHash = await this.hdADA.withdrawADA(
+          payload.to,
+          amount,
+          appConfig.BLOCK_API_KEY ?? "",
+          true,
+        );
         return { success: true, txHash };
       }
 
@@ -410,7 +540,12 @@ export class Web3Service {
         } else {
           const tokenMint = ERC20_TOKENS[`SOL_${symbol}`];
           if (!tokenMint) throw new Error(`Unsupported SOL token: ${symbol}`);
-          txHash = await this.hdSol.withdrawSPLToken(payload.to, amount, tokenMint, this.conn);
+          txHash = await this.hdSol.withdrawSPLToken(
+            payload.to,
+            amount,
+            tokenMint,
+            this.conn,
+          );
         }
         return { success: true, txHash };
       }
@@ -421,8 +556,13 @@ export class Web3Service {
           txHash = await this.hdTRX.withdrawTRX(payload.to, amount);
         } else {
           const tokenAddress = ERC20_TOKENS[`TRON_${symbol}`];
-          if (!tokenAddress) throw new Error(`Unsupported TRON token: ${symbol}`);
-          txHash = await this.hdTRX.withdrawTRC20(payload.to, amount, tokenAddress);
+          if (!tokenAddress)
+            throw new Error(`Unsupported TRON token: ${symbol}`);
+          txHash = await this.hdTRX.withdrawTRC20(
+            payload.to,
+            amount,
+            tokenAddress,
+          );
         }
         return { success: true, txHash };
       }
@@ -430,7 +570,11 @@ export class Web3Service {
       let provider: ethers.JsonRpcProvider;
       if (network === "BASE") {
         provider = this.providerBase;
-      } else if (network === "BINANCE" || network === "BSC" || network === "BNB") {
+      } else if (
+        network === "BINANCE" ||
+        network === "BSC" ||
+        network === "BNB"
+      ) {
         provider = this.provider;
       } else {
         provider = this.providerBase; // default to Base
@@ -449,7 +593,12 @@ export class Web3Service {
 
         if (!tokenAddress) {
           throw new BadRequestException(
-            `Token ${symbol} not supported on ${network} network. Available tokens: ${Object.keys(ERC20_TOKENS).filter(k => k.startsWith(network)).map(k => k.split('_')[1]).join(', ')}`
+            `Token ${symbol} not supported on ${network} network. Available tokens: ${Object.keys(
+              ERC20_TOKENS,
+            )
+              .filter((k) => k.startsWith(network))
+              .map((k) => k.split("_")[1])
+              .join(", ")}`,
           );
         }
       }
@@ -461,7 +610,7 @@ export class Web3Service {
         payload.amount.toString(),
         tokenAddress,
         network,
-        symbol
+        symbol,
       );
 
       return { success: true, txHash };
@@ -473,7 +622,10 @@ export class Web3Service {
   // -----------------------------
   // GET TOKEN BALANCES
   // -----------------------------
-  private async getTokenBalanceETH(tokenAddress: string, decimals = 18): Promise<number> {
+  private async getTokenBalanceETH(
+    tokenAddress: string,
+    decimals = 18,
+  ): Promise<number> {
     await this.initHDWallet();
     const masterAddress = this.hd.getMasterWallet(this.provider).address;
     if (!tokenAddress) return 0;
@@ -481,7 +633,7 @@ export class Web3Service {
     const contract = new ethers.Contract(
       tokenAddress,
       ["function balanceOf(address) view returns (uint256)"],
-      this.provider
+      this.provider,
     );
 
     const balance = await contract.balanceOf(masterAddress);
@@ -496,12 +648,18 @@ export class Web3Service {
       const balance = await contract.balanceOf(master).call();
       return Number(balance) / 1e6;
     } catch (err) {
-      console.error(`Failed to fetch TRX token balance for ${tokenAddress}:`, err.message || err);
+      console.error(
+        `Failed to fetch TRX token balance for ${tokenAddress}:`,
+        err.message || err,
+      );
       return 0;
     }
   }
 
-  private async getTokenBalanceSOL(tokenMint: PublicKey, owner: PublicKey): Promise<number> {
+  private async getTokenBalanceSOL(
+    tokenMint: PublicKey,
+    owner: PublicKey,
+  ): Promise<number> {
     try {
       const tokenAddr = await getAssociatedTokenAddress(tokenMint, owner);
       const tokenAcc = await getAccount(this.conn, tokenAddr);
@@ -529,10 +687,9 @@ export class Web3Service {
       BNB_BTC: "0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c", // BSC BTC
       SOL_USDT: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
       SOL_USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-      TRON_USDT: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
+      TRON_USDT: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
       // Add Base USDT/USDC addresses here if needed
     };
-
 
     try {
       const masterWalletBase = this.hd.getMasterWallet(this.providerBase);
@@ -540,47 +697,94 @@ export class Web3Service {
       const masterWallet = this.hd.getMasterWallet(this.provider);
 
       const masterWalletTron = this.hdTRX.getMasterWallet();
-      const masterWalletSOL = this.hdSol.getMasterKeypair().publicKey.toBase58();
+      const masterWalletSOL = this.hdSol
+        .getMasterKeypair()
+        .publicKey.toBase58();
 
-      const baseBalance = await this.hd.getETHBalance(masterWalletBase)
-      const ethBalance = await this.hd.getETHBalance(masterWalletETH)
-      const bnbBalance = await this.hd.getETHBalance(masterWallet)
-      const solBalance = await this.hdSol.getSolBalance(this.conn, masterWalletSOL)
+      const baseBalance = await this.hd.getETHBalance(masterWalletBase);
+      const ethBalance = await this.hd.getETHBalance(masterWalletETH);
+      const bnbBalance = await this.hd.getETHBalance(masterWallet);
+      const solBalance = await this.hdSol.getSolBalance(
+        this.conn,
+        masterWalletSOL,
+      );
 
       //base
-      const baseUSDT = await this.hd.getERC20Balance(masterWalletBase, ERC20_TOKENS["BASE_USDT"])
-      const baseUSDC = await this.hd.getERC20Balance(masterWalletBase, ERC20_TOKENS["BASE_USDC"])
-      const baseBTC = await this.hd.getERC20Balance(masterWalletBase, ERC20_TOKENS["BASE_BTC"])
-      const baseBNB = await this.hd.getERC20Balance(masterWalletBase, ERC20_TOKENS["BASE_BNB"])
+      const baseUSDT = await this.hd.getERC20Balance(
+        masterWalletBase,
+        ERC20_TOKENS["BASE_USDT"],
+      );
+      const baseUSDC = await this.hd.getERC20Balance(
+        masterWalletBase,
+        ERC20_TOKENS["BASE_USDC"],
+      );
+      const baseBTC = await this.hd.getERC20Balance(
+        masterWalletBase,
+        ERC20_TOKENS["BASE_BTC"],
+      );
+      const baseBNB = await this.hd.getERC20Balance(
+        masterWalletBase,
+        ERC20_TOKENS["BASE_BNB"],
+      );
 
       //BNB
-      const BNBUSDT = await this.hd.getERC20Balance(masterWallet, ERC20_TOKENS["BNB_USDT"])
-      const BNBUSDC = await this.hd.getERC20Balance(masterWallet, ERC20_TOKENS["BNB_USDC"])
-      const BNBBTC = await this.hd.getERC20Balance(masterWallet, ERC20_TOKENS["BNB_BTC"])
-      const BNBRIPPLE = await this.hd.getERC20Balance(masterWallet, ERC20_TOKENS["BNB_RIPPLE"])
-      const BNBDOGE = await this.hd.getERC20Balance(masterWallet, ERC20_TOKENS["BNB_DOGE"])
+      const BNBUSDT = await this.hd.getERC20Balance(
+        masterWallet,
+        ERC20_TOKENS["BNB_USDT"],
+      );
+      const BNBUSDC = await this.hd.getERC20Balance(
+        masterWallet,
+        ERC20_TOKENS["BNB_USDC"],
+      );
+      const BNBBTC = await this.hd.getERC20Balance(
+        masterWallet,
+        ERC20_TOKENS["BNB_BTC"],
+      );
+      const BNBRIPPLE = await this.hd.getERC20Balance(
+        masterWallet,
+        ERC20_TOKENS["BNB_RIPPLE"],
+      );
+      const BNBDOGE = await this.hd.getERC20Balance(
+        masterWallet,
+        ERC20_TOKENS["BNB_DOGE"],
+      );
 
       //SOL
-      const solUSDT = await this.hdSol.getSPLTokenBalance(this.conn, masterWalletSOL, ERC20_TOKENS["SOL_USDT"])
-      const solUSDC = await this.hdSol.getSPLTokenBalance(this.conn, masterWalletSOL, ERC20_TOKENS["SOL_USDC"])
-
+      const solUSDT = await this.hdSol.getSPLTokenBalance(
+        this.conn,
+        masterWalletSOL,
+        ERC20_TOKENS["SOL_USDT"],
+      );
+      const solUSDC = await this.hdSol.getSPLTokenBalance(
+        this.conn,
+        masterWalletSOL,
+        ERC20_TOKENS["SOL_USDC"],
+      );
 
       let trxBalance = 0;
       let trxUSDTBalance = 0;
       try {
         const masterTRX = this.hdTRX.getMasterWallet().address;
         trxBalance = (await this.tronWeb.trx.getBalance(masterTRX)) / 1e6;
-        trxUSDTBalance = await this.getTokenBalanceTRX(ERC20_TOKENS["TRON_USDT"]);
+        trxUSDTBalance = await this.getTokenBalanceTRX(
+          ERC20_TOKENS["TRON_USDT"],
+        );
       } catch (err) {
         console.error("TRX balance fetch error:", err.message || err);
       }
 
-      const cardanoChild = await this.hdADA.getChildBalance(0, appConfig.BLOCK_API_KEY ?? "", true);
-      const btcBalance = await this.hdBTC.getBalance(this.hdBTC.generateAddress(0));
+      const cardanoChild = await this.hdADA.getChildBalance(
+        0,
+        appConfig.BLOCK_API_KEY ?? "",
+        true,
+      );
+      const btcBalance = await this.hdBTC.getBalance(
+        this.hdBTC.generateAddress(0),
+      );
 
       return {
         ethereum: {
-          ETH: ethBalance
+          ETH: ethBalance,
         },
         base: {
           ETH: baseBalance,
@@ -595,23 +799,23 @@ export class Web3Service {
           USDC: BNBUSDC,
           BTC: BNBBTC,
           RIPPLE: BNBRIPPLE,
-          DOGE: BNBDOGE
+          DOGE: BNBDOGE,
         },
         sol: {
           SOL: solBalance,
           USDT: solUSDT,
-          USDC: solUSDC
+          USDC: solUSDC,
         },
         TRX: { TRX: trxBalance, USDT: trxUSDTBalance },
         ADA: {
-          ADA: cardanoChild.lovelace
+          ADA: cardanoChild.lovelace,
         },
         BTC: {
-          BTC: btcBalance
-        }
+          BTC: btcBalance,
+        },
       };
     } catch (err: any) {
-      console.log(err)
+      console.log(err);
       throw new BadRequestException(err.message || "Failed to fetch balances");
     }
   }
@@ -631,10 +835,84 @@ export class Web3Service {
         amount: (Number(tx.amount) / 1e18).toString(),
         tokenSymbol: tx.tokenSymbol,
         tokenAddress: tx.tokenAddress,
-        timestamp: tx.timestamp.toString()
+        timestamp: tx.timestamp.toString(),
       }));
     } catch (err: any) {
-      throw new BadRequestException(err.message || "Get recent transactions failed");
+      throw new BadRequestException(
+        err.message || "Get recent transactions failed",
+      );
+    }
+  }
+
+  async getLastTransactionsFromBlockchain(req: any) {
+    await this.initHDWallet();
+    const userId = req.user.id;
+    const limit = 3;
+
+    try {
+      const histories = await Promise.all([
+        // Native
+        this.hdBTC.getChildTransactionHistory(userId, limit),
+        this.hdADA.getChildTransactionHistoryFirst3(
+          userId,
+          appConfig.BLOCK_API_KEY ?? "",
+          true,
+        ),
+        this.hdSol.getChildTransactionHistory(userId, limit),
+
+        // Tokens
+        // Tron
+        this.hdTRX.getChildTRC20History(
+          userId,
+          "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+          limit,
+        ), // USDT
+
+        // Solana
+        this.hdSol.getChildSPLHistory(
+          userId,
+          "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+          limit,
+        ), // USDT
+        this.hdSol.getChildSPLHistory(
+          userId,
+          "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+          limit,
+        ), // USDC
+
+      ]);
+
+      const flatHistory = histories.flat();
+
+      // Normalize results
+      const normalized = flatHistory.map((tx: any) => ({
+        address: tx.to || tx.address || "",
+        timestamp:
+          tx.timestamp || (tx.date ? new Date(tx.date).getTime() : Date.now()),
+        amount: tx.amount,
+        symbol: tx.token_symbol || tx.symbol || "",
+        status: tx.status || "success",
+        network:
+          tx.network ||
+          (tx.token_symbol === "BTC"
+            ? "BITCOIN"
+            : tx.token_symbol === "ADA"
+              ? "CARDANO"
+              : tx.token_symbol === "SOL"
+                ? "SOLANA"
+                : tx.token_symbol === "TRX"
+                  ? "TRON"
+                  : ""),
+        txID: tx.txID || tx.hash || "",
+      }));
+
+      // Sort by timestamp desc and take top 3
+      return normalized.sort((a, b) => b.timestamp - a.timestamp).slice(0, 3);
+    } catch (err: any) {
+      console.error("Failed to fetch all blockchain histories:", err.message);
+      throw new BadRequestException(
+        "Failed to fetch recent transactions from blockchain",
+      );
     }
   }
 
@@ -652,12 +930,14 @@ export class Web3Service {
       const response = await axios.post(
         `https://api.cloudinary.com/v1_1/${appConfig.CLOUDINARY_CLOUD_NAME}/image/upload`,
         form,
-        { headers: form.getHeaders() }
+        { headers: form.getHeaders() },
       );
 
       return { success: true, imageUrl: response.data.secure_url };
     } catch (err: any) {
-      throw new BadRequestException(err.response?.data || err.message || "Image upload failed");
+      throw new BadRequestException(
+        err.response?.data || err.message || "Image upload failed",
+      );
     }
   }
 }

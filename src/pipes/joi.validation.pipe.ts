@@ -1,5 +1,10 @@
-import { ArgumentMetadata, Injectable, PipeTransform, UnprocessableEntityException } from '@nestjs/common';
-import { ObjectSchema } from 'joi';
+import {
+  ArgumentMetadata,
+  Injectable,
+  PipeTransform,
+  UnprocessableEntityException,
+} from "@nestjs/common";
+import { ObjectSchema } from "joi";
 
 @Injectable()
 export class JoiValidationPipe implements PipeTransform {
@@ -14,9 +19,12 @@ export class JoiValidationPipe implements PipeTransform {
     if (error) {
       const cause = error.details.map((detail) => ({
         name: detail.context?.key,
-        message: detail.message.replace(/"/g, ''),
+        message: detail.message.replace(/"/g, ""),
       }));
-      throw new UnprocessableEntityException('Validation failed.', { cause, description: error.message });
+      throw new UnprocessableEntityException("Validation failed.", {
+        cause,
+        description: error.message,
+      });
     }
     return value;
   }

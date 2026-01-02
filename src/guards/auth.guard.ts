@@ -27,7 +27,7 @@ export class AuthGuard implements CanActivate {
     } catch {
       res.clearCookie(_AUTH_COOKIE_NAME_);
       throw new UnauthorizedException(
-        "Your session has expired, please login to continue"
+        "Your session has expired, please login to continue",
       );
     }
 

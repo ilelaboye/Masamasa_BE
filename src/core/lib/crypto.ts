@@ -20,14 +20,14 @@ export class Crypto {
       salt,
       Crypto.iterations,
       Crypto.keylen,
-      Crypto.digest
+      Crypto.digest,
     );
     const cipher = crypto.createCipheriv(Crypto.algorithm, key, iv);
     const enc1 = cipher.update(data, inputEncoding);
     const enc2 = cipher.final();
     const tag = cipher.getAuthTag();
     const encryptedData = Buffer.concat([iv, salt, tag, enc1, enc2]).toString(
-      outputEncoding
+      outputEncoding,
     );
     return encryptedData;
   }
@@ -46,7 +46,7 @@ export class Crypto {
       salt,
       Crypto.iterations,
       Crypto.keylen,
-      Crypto.digest
+      Crypto.digest,
     );
     const decipher = crypto.createDecipheriv(Crypto.algorithm, key, iv);
     decipher.setAuthTag(tag);
