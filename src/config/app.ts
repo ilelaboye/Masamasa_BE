@@ -80,6 +80,7 @@ export const appConfig = {
   BASE_RPC_URL: "https://base-mainnet.public.blastapi.io",
   ETH_RPC_URL: "https://eth.meowrpc.com",
   SOL_RPC_URL: "https://api.mainnet-beta.solana.com",
+  XRP_RPC_URL: "wss://xrplcluster.com",
   TRX_API_KEY: process.env.TRX_API_KEY ?? "",
   ETH_PRIVATE_KEY: process.env.PRIVATE_KEY ?? "",
   //BLOCK
