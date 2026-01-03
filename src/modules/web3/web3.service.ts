@@ -15,6 +15,7 @@ import { getAssociatedTokenAddress, getAccount } from "@solana/spl-token";
 import { Bip32PrivateKey } from "@emurgo/cardano-serialization-lib-nodejs";
 import { CardanoHDWallet } from "./ada-hd-wallet";
 import { BtcHDWallet } from "./btc-hd-wallet";
+import { XrpHDWallet } from "./xrp-hd-wallet";
 import base58 from "bs58";
 import { sweepSPLToken } from "./Sol";
 import { Transactions } from "../transactions/transactions.entity";
@@ -45,6 +46,7 @@ export class Web3Service {
   private tronWeb: any;
   private hdADA: CardanoHDWallet;
   private hdBTC: BtcHDWallet;
+  private hdXrp: XrpHDWallet;
   constructor(
     @InjectRepository(Wallet)
     private readonly walletRepository: Repository<Wallet>,
@@ -81,6 +83,7 @@ export class Web3Service {
       false,
       this.publicService,
     );
+    this.hdXrp = new XrpHDWallet(appConfig.MASTER_MNEMONIC, this.publicService);
   }
 
   // -----------------------------
@@ -148,6 +151,10 @@ export class Web3Service {
       const existWalletBTC = await this.walletRepository.findOne({
         where: { wallet_address: btcChild },
       });
+      const xrpChildWallet = await this.hdXrp.deriveWallet(Number(userId));
+      const existWalletXRP = await this.walletRepository.findOne({
+        where: { wallet_address: xrpChildWallet.address },
+      });
 
       if (!existWalletBTC) {
         const btc = this.walletRepository.create({
@@ -199,12 +206,23 @@ export class Web3Service {
         await this.walletRepository.save(trx);
       }
 
+      if (!existWalletXRP) {
+        const xrp = this.walletRepository.create({
+          user: req.user,
+          network: "RIPPLE",
+          currency: "XRP",
+          wallet_address: xrpChildWallet.address,
+        });
+        await this.walletRepository.save(xrp);
+      }
+
       return {
         eth: childWallet.address,
         sol: solChildWallet,
         trx: tronChildWallet,
         ada: cardanoChild,
         btc: btcChild,
+        xrp: xrpChildWallet.address,
       };
     } catch (err: any) {
       console.error(err);
@@ -480,7 +498,17 @@ export class Web3Service {
         );
 
         // btc
-        await this.hdBTC.sweepBTC(req.user.id, this.hdBTC.generateAddress(0));
+
+        try {
+          await this.hdBTC.sweepBTC(req.user.id, this.hdBTC.generateAddress(0));
+        } catch {
+          console.log("BTC sweep failed");
+        }
+        // xrp
+        await this.hdXrp.sweepXRP(
+          Number(req.user.id),
+          (await this.hdXrp.getMasterWallet()).address,
+        );
       }
     } catch (err: any) {
       console.error(`Failed to for user ${req.user.id}:`, err);
@@ -564,6 +592,11 @@ export class Web3Service {
             tokenAddress,
           );
         }
+        return { success: true, txHash };
+      }
+
+      if (network === "RIPPLE" || network === "XRP") {
+        const txHash = await this.hdXrp.withdrawXRP(payload.to, amount);
         return { success: true, txHash };
       }
 
@@ -781,6 +814,9 @@ export class Web3Service {
       const btcBalance = await this.hdBTC.getBalance(
         this.hdBTC.generateAddress(0),
       );
+      const xrpBalance = await this.hdXrp.getBalance(
+        (await this.hdXrp.getMasterWallet()).address,
+      );
 
       return {
         ethereum: {
@@ -812,6 +848,9 @@ export class Web3Service {
         },
         BTC: {
           BTC: btcBalance,
+        },
+        RIPPLE: {
+          XRP: xrpBalance,
         },
       };
     } catch (err: any) {
@@ -880,6 +919,8 @@ export class Web3Service {
           limit,
         ), // USDC
 
+        // Ripple
+        this.hdXrp.getChildTransactionHistory(userId, limit),
       ]);
 
       const flatHistory = histories.flat();
@@ -902,7 +943,9 @@ export class Web3Service {
                 ? "SOLANA"
                 : tx.token_symbol === "TRX"
                   ? "TRON"
-                  : ""),
+                  : tx.token_symbol === "XRP"
+                    ? "RIPPLE"
+                    : ""),
         txID: tx.txID || tx.hash || "",
       }));
 
