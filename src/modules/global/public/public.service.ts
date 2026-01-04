@@ -39,7 +39,7 @@ export class PublicService {
     private readonly webhookRepository: Repository<Webhook>,
     private readonly exchangeRateService: ExchangeRateService,
     private readonly notificationsService: NotificationsService,
-  ) {}
+  ) { }
 
   async transactionWebhook(transactionWebhook: TransactionWebhookDto) {
     const { address, network, amount, token_symbol } = transactionWebhook;

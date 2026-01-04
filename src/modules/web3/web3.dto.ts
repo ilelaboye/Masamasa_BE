@@ -9,6 +9,7 @@ export class WithdrawTokenDto {
   to: string;
   network: string;
   symbol: string;
+  destinationTag?: number;
 }
 
 export class TokenBalanceDto {
