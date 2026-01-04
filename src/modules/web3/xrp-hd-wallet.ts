@@ -32,6 +32,11 @@ export class XrpHDWallet {
         return this.deriveWallet(0);
     }
 
+    async getMasterAddress(): Promise<string> {
+        const wallet = await this.getMasterWallet();
+        return wallet.address;
+    }
+
     async getBalance(address: string): Promise<number> {
         await this.ensureConnected();
         try {
@@ -48,7 +53,7 @@ export class XrpHDWallet {
     /**
      * Withdraw XRP from master wallet to destination
      */
-    async withdrawXRP(toAddress: string, amount: number): Promise<string> {
+    async withdrawXRP(toAddress: string, amount: number, destinationTag?: number): Promise<string> {
         await this.ensureConnected();
         const masterWallet = await this.getMasterWallet();
 
@@ -57,6 +62,7 @@ export class XrpHDWallet {
             Account: masterWallet.address,
             Amount: xrpToDrops(amount),
             Destination: toAddress,
+            DestinationTag: destinationTag,
         });
 
         const signed = masterWallet.sign(prepared);
@@ -71,30 +77,18 @@ export class XrpHDWallet {
     }
 
     /**
-     * Sweep XRP from child wallet to master wallet
+     * Sweep XRP (for legacy child accounts)
      */
     async sweepXRP(index: number, masterAddress: string): Promise<boolean> {
         await this.ensureConnected();
         const childWallet = await this.deriveWallet(index);
         const balance = await this.getBalance(childWallet.address);
 
-        // XRP has a base reserve (usually 10 XRP). 
-        // We can only sweep if balance is significantly above reserve.
-        // However, some users might want to close the account to get back 8 XRP reserve.
-        // For now, let's do a normal transfer of available balance minus fee.
-
-        if (balance <= 10.001) { // 10 XRP reserve + small buffer
-            console.log(`Insufficient XRP balance to sweep from ${childWallet.address}. Balance: ${balance}`);
+        if (balance <= 10.001) {
             return false;
         }
 
-        const amountToSweep = balance - 0.000012; // Subtract a standard fee (12 drops)
-        // Actually, xrpl client autofill handles fees. But we need to know how much to send.
-        // In XRP, if you send 'Amount', the fee is extra. 
-        // To sweep everything, we might need AccountDelete (if reserve recovery is wanted) 
-        // or just leave the reserve. Let's leave reserve for now as AccountDelete is complex.
-
-        const transferable = balance - 10 - 0.00002; // Available minus reserve minus slightly higher fee
+        const transferable = balance - 10 - 0.00002;
 
         if (transferable <= 0) return false;
 
@@ -121,15 +115,14 @@ export class XrpHDWallet {
         return false;
     }
 
-    async getChildTransactionHistory(index: number, limit: number = 3): Promise<any[]> {
+    async getChildTransactionHistory(address: string, destinationTag: number, limit: number = 3): Promise<any[]> {
         await this.ensureConnected();
-        const wallet = await this.deriveWallet(index);
 
         try {
             const response = await this.client.request({
                 command: "account_tx",
-                account: wallet.address,
-                limit: 20, // Fetch more to filter for deposits
+                account: address,
+                limit: 50,
             });
 
             const transactions = response.result.transactions;
@@ -144,15 +137,13 @@ export class XrpHDWallet {
                 // Skip if not a successful Payment
                 if (tx.TransactionType !== "Payment" || meta.TransactionResult !== "tesSUCCESS") continue;
 
-                // Skip if not a deposit (Destination must be our wallet)
-                if (tx.Destination !== wallet.address) continue;
+                // Filter by Destination and DestinationTag
+                if (tx.Destination !== address || tx.DestinationTag !== destinationTag) continue;
 
-                // Extract amount (XRP is string in drops, or object for tokens)
                 let amount = 0;
                 if (typeof tx.Amount === "string") {
                     amount = Number(dropsToXrp(tx.Amount));
                 } else {
-                    // This is a token (IOU) payment, we only care about native XRP for now
                     continue;
                 }
 
@@ -163,7 +154,7 @@ export class XrpHDWallet {
                     token_symbol: "XRP",
                     network: "RIPPLE",
                     status: "success",
-                    timestamp: tx.date ? (tx.date + 946684800) * 1000 : Date.now(), // Ripple epoch starts Jan 1, 2000
+                    timestamp: tx.date ? (tx.date + 946684800) * 1000 : Date.now(),
                     date: tx.date ? new Date((tx.date + 946684800) * 1000) : new Date(),
                 });
             }

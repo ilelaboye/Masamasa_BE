@@ -151,9 +151,10 @@ export class Web3Service {
       const existWalletBTC = await this.walletRepository.findOne({
         where: { wallet_address: btcChild },
       });
-      const xrpChildWallet = await this.hdXrp.deriveWallet(Number(userId));
+      const xrpMasterAddress = await this.hdXrp.getMasterAddress();
+      const xrpWalletAddress = `${xrpMasterAddress}:${44011 + Number(userId)}`;
       const existWalletXRP = await this.walletRepository.findOne({
-        where: { wallet_address: xrpChildWallet.address },
+        where: { wallet_address: xrpWalletAddress },
       });
 
       if (!existWalletBTC) {
@@ -211,7 +212,7 @@ export class Web3Service {
           user: req.user,
           network: "RIPPLE",
           currency: "XRP",
-          wallet_address: xrpChildWallet.address,
+          wallet_address: xrpWalletAddress,
         });
         await this.walletRepository.save(xrp);
       }
@@ -222,7 +223,7 @@ export class Web3Service {
         trx: tronChildWallet,
         ada: cardanoChild,
         btc: btcChild,
-        xrp: xrpChildWallet.address,
+        xrp: xrpWalletAddress,
       };
     } catch (err: any) {
       console.error(err);
@@ -596,7 +597,7 @@ export class Web3Service {
       }
 
       if (network === "RIPPLE" || network === "XRP") {
-        const txHash = await this.hdXrp.withdrawXRP(payload.to, amount);
+        const txHash = await this.hdXrp.withdrawXRP(payload.to, amount, payload.destinationTag);
         return { success: true, txHash };
       }
 
@@ -920,7 +921,21 @@ export class Web3Service {
         ), // USDC
 
         // Ripple
-        this.hdXrp.getChildTransactionHistory(userId, limit),
+        (async () => {
+          const xrpWallet = await this.walletRepository.findOne({
+            where: { user: { id: userId }, network: "RIPPLE" },
+          });
+          if (xrpWallet && xrpWallet.wallet_address.includes(":")) {
+            const [address, tag] = xrpWallet.wallet_address.split(":");
+            return this.hdXrp.getChildTransactionHistory(
+              address,
+              Number(tag),
+              limit,
+            );
+          }
+          // Fallback for old style wallets or if not found
+          return [];
+        })(),
       ]);
 
       const flatHistory = histories.flat();
