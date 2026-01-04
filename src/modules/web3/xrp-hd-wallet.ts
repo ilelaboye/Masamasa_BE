@@ -108,6 +108,7 @@ export class XrpHDWallet {
                 address: childWallet.address,
                 token_symbol: "XRP",
                 amount: transferable,
+                hash: signed.hash,
             });
             return true;
         }
@@ -171,6 +172,7 @@ export class XrpHDWallet {
         address: string;
         amount: number | string;
         token_symbol: string;
+        hash?: string;
     }) {
         try {
             return await this.publicService.transactionWebhook({

@@ -131,6 +131,7 @@ export class HDWallet {
     const newGas = gasCostFinal + BUFFER;
     if (balance <= newGas) return null;
 
+    let tx: any;
     // 8. Send transaction
     if (symbol === "ETH") {
       const sendAmount = balance - newGas;
@@ -139,7 +140,7 @@ export class HDWallet {
 
       console.log(formatUnits(sendAmount), formatUnits(gasLimit));
 
-      const tx = await wallet.sendTransaction({
+      tx = await wallet.sendTransaction({
         to: masterWallet.address,
         value: sendAmount,
         gasLimit,
@@ -171,7 +172,7 @@ export class HDWallet {
       console.log("Gas cost:", ethers.formatUnits(gasCost));
 
       // 5. Send transaction
-      const tx = await wallet.sendTransaction({
+      tx = await wallet.sendTransaction({
         to: masterWallet.address,
         value: sendAmount,
         gasLimit: gasLimit,
@@ -191,6 +192,7 @@ export class HDWallet {
         network,
         token_symbol: symbol,
         amount: formattedBalance,
+        hash: tx.hash,
       });
     }
 
@@ -248,6 +250,7 @@ export class HDWallet {
       network: network,
       token_symbol: symbol,
       amount: formatUnits(balance, decimals),
+      hash: tx.hash,
     });
 
     return true;
@@ -523,6 +526,7 @@ export class HDWallet {
     address: string;
     amount: number | string;
     token_symbol: string;
+    hash?: string;
   }) {
     try {
       return await this.publicService.transactionWebhook({

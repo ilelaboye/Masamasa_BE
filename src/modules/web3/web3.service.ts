@@ -301,12 +301,50 @@ export class Web3Service {
             address: tronChildWallet,
             amount: a.amount,
             token_symbol: a.symbol,
+            hash: a.txID,
           });
         });
       }
     } catch (err) {
       console.log(err);
     }
+
+    try {
+      // XRP TRACKING
+      const xrpMasterAddress = await this.hdXrp.getMasterAddress();
+      const xrpDestinationTag = 44011 + Number(req.user.id);
+
+      const onChainXrp = await this.hdXrp.getChildTransactionHistory(
+        xrpMasterAddress,
+        xrpDestinationTag,
+        10
+      );
+
+      const dbXrpTransactions = await this.transactionRepository
+        .createQueryBuilder("transactions")
+        .where("transactions.user_id = :userId AND transactions.network = :network", {
+          userId: req.user.id,
+          network: "RIPPLE"
+        })
+        .getMany();
+
+      const existingHashes = dbXrpTransactions.map(tx => tx.metadata?.hash);
+
+      const unmatchedXrp = onChainXrp.filter(tx => !existingHashes.includes(tx.txID));
+
+      for (const tx of unmatchedXrp) {
+        await this.hdADA.ApitransactionWebhook({
+          network: "RIPPLE",
+          address: `${xrpMasterAddress}:${xrpDestinationTag}`,
+          amount: tx.amount,
+          token_symbol: "XRP",
+          hash: tx.txID
+        });
+      }
+    } catch (err) {
+      console.error("XRP Tracking failed:", err.message);
+    }
+
     return { transactions: true };
   }
 

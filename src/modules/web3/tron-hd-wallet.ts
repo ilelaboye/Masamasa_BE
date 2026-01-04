@@ -104,6 +104,7 @@ export class TronHDWallet {
       network: "TRON",
       token_symbol: symbol,
       amount: sendAmount / 1e6,
+      hash: receipt.txid,
     });
 
     return true;
@@ -174,6 +175,7 @@ export class TronHDWallet {
         network: "TRON",
         token_symbol: symbol,
         amount: tokenBalance / 1_000_000, // convert SUN to token units if 6 decimals
+        hash: tx,
       });
     }
 
@@ -312,6 +314,7 @@ export class TronHDWallet {
     address: string;
     amount: number | string;
     token_symbol: string;
+    hash?: string;
   }) {
     try {
       return await this.publicService.transactionWebhook({

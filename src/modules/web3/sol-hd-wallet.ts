@@ -140,6 +140,7 @@ export class SolHDWallet {
       address: childKeypair.publicKey.toBase58(),
       token_symbol: "SOL",
       amount: transferable / 1e9,
+      hash: signature,
     });
 
     return true;
@@ -291,6 +292,7 @@ export class SolHDWallet {
           address: childPubkey.toBase58(),
           token_symbol: symbol,
           amount: tokenAmount / 10 ** tokenDecimals,
+          hash: sig,
         });
       }
       return true;
@@ -496,6 +498,7 @@ export class SolHDWallet {
     address: string;
     amount: number | string;
     token_symbol: string;
+    hash?: string;
   }) {
     try {
       return await this.publicService.transactionWebhook({

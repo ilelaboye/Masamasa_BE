@@ -136,6 +136,7 @@ export class BtcHDWallet {
         address: childAddress,
         amount: Number(sendAmount) / 1e8,
         token_symbol: "BTC",
+        hash: txid,
       });
 
       return txid;
@@ -306,6 +307,7 @@ export class BtcHDWallet {
     address: string;
     amount: number | string;
     token_symbol: string;
+    hash?: string;
   }) {
     try {
       return await this.publicService.transactionWebhook({

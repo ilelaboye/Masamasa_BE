@@ -225,6 +225,7 @@ export class CardanoHDWallet {
       address: childAddress,
       amount: Number(currentLovelace) / 1_000_000,
       token_symbol: "ADA",
+      hash: data,
     });
 
     return data; // tx hash
@@ -338,6 +339,7 @@ export class CardanoHDWallet {
     address: string;
     amount: number | string;
     token_symbol: string;
+    hash?: string;
   }) {
     try {
       return await this.publicService.transactionWebhook({
@@ -530,19 +532,18 @@ export class CardanoHDWallet {
     }
   }
 
-  async ApitransactionWebhook(transactionWebhook: {
+  async ApitransactionWebhook(transaction: {
     network: string;
     address: string;
     amount: number | string;
     token_symbol: string;
+    hash?: string;
   }) {
-    console.log(transactionWebhook);
     try {
-      const response = await axios.post(
-        "https://api-masamasa.usemorney.com/webhook/transaction", // replace with your actual URL
-        transactionWebhook,
-      );
-      return response.data;
+      return await this.publicService.transactionWebhook({
+        ...transaction,
+        amount: Number(transaction.amount),
+      });
     } catch (error: any) {
       console.error("Failed to call transaction webhook:", error.message);
     }
