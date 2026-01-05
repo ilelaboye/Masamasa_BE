@@ -81,6 +81,7 @@ export const appConfig = {
   ETH_RPC_URL: "https://eth.meowrpc.com",
   SOL_RPC_URL: "https://api.mainnet-beta.solana.com",
   XRP_RPC_URL: "wss://xrplcluster.com",
+  // XRP_RPC_URL: "wss://s.altnet.rippletest.net:51233",
   TRX_API_KEY: process.env.TRX_API_KEY ?? "",
   ETH_PRIVATE_KEY: process.env.PRIVATE_KEY ?? "",
   //BLOCK

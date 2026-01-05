@@ -32,6 +32,9 @@ export class TransactionWebhookDto {
 
   @ApiProperty({ example: "SOL" })
   token_symbol: string;
+
+  @ApiProperty({ example: "0x..." })
+  hash?: string;
 }
 
 export class BankAccountVerificationDto {

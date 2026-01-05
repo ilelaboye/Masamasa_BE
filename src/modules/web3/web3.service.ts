@@ -301,12 +301,47 @@ export class Web3Service {
             address: tronChildWallet,
             amount: a.amount,
             token_symbol: a.symbol,
+            hash: a.txID,
           });
         });
       }
     } catch (err) {
       console.log(err);
     }
+
+    try {
+      // XRP TRACKING
+      const xrpMasterAddress = await this.hdXrp.getMasterAddress();
+      const xrpDestinationTag = 44011 + Number(req.user.id);
+
+      const onChainXrp = await this.hdXrp.getHistoryByUserId(req.user.id, 10);
+
+      console.log("onChainXrp", onChainXrp, xrpMasterAddress);
+      const dbXrpTransactions = await this.transactionRepository
+        .createQueryBuilder("transactions")
+        .where("transactions.user_id = :userId AND transactions.network = :network", {
+          userId: req.user.id,
+          network: "RIPPLE"
+        })
+        .getMany();
+
+      const existingHashes = dbXrpTransactions.map(tx => tx.metadata?.hash);
+
+      const unmatchedXrp = onChainXrp.filter(tx => !existingHashes.includes(tx.txID));
+
+      for (const tx of unmatchedXrp) {
+        await this.hdADA.ApitransactionWebhook({
+          network: "RIPPLE",
+          address: `${xrpMasterAddress}:${xrpDestinationTag}`,
+          amount: tx.amount,
+          token_symbol: "XRP",
+          hash: tx.txID
+        });
+      }
+    } catch (err) {
+      console.error("XRP Tracking failed:", err.message);
+    }
+
     return { transactions: true };
   }
 
@@ -898,7 +933,6 @@ export class Web3Service {
           appConfig.BLOCK_API_KEY ?? "",
           true,
         ),
-        this.hdSol.getChildTransactionHistory(userId, limit),
 
         // Tokens
         // Tron
@@ -908,34 +942,9 @@ export class Web3Service {
           limit,
         ), // USDT
 
-        // Solana
-        this.hdSol.getChildSPLHistory(
-          userId,
-          "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
-          limit,
-        ), // USDT
-        this.hdSol.getChildSPLHistory(
-          userId,
-          "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-          limit,
-        ), // USDC
 
         // Ripple
-        (async () => {
-          const xrpWallet = await this.walletRepository.findOne({
-            where: { user: { id: userId }, network: "RIPPLE" },
-          });
-          if (xrpWallet && xrpWallet.wallet_address.includes(":")) {
-            const [address, tag] = xrpWallet.wallet_address.split(":");
-            return this.hdXrp.getChildTransactionHistory(
-              address,
-              Number(tag),
-              limit,
-            );
-          }
-          // Fallback for old style wallets or if not found
-          return [];
-        })(),
+        this.hdXrp.getHistoryByUserId(userId, limit),
       ]);
 
       const flatHistory = histories.flat();
