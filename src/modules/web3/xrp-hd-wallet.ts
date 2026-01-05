@@ -128,12 +128,16 @@ export class XrpHDWallet {
 
             const transactions = response.result.transactions;
             const results: any[] = [];
+            console.log("transactions", transactions);
 
             for (const txObj of transactions) {
                 if (results.length >= limit) break;
 
-                const tx: any = txObj.tx;
+                const tx: any = txObj.tx || txObj.tx_json;
                 const meta: any = txObj.meta;
+
+                // Skip if tx or meta is missing or meta is not an object
+                if (!tx || !meta || typeof meta === "string") continue;
 
                 // Skip if not a successful Payment
                 if (tx.TransactionType !== "Payment" || meta.TransactionResult !== "tesSUCCESS") continue;
@@ -142,14 +146,16 @@ export class XrpHDWallet {
                 if (tx.Destination !== address || tx.DestinationTag !== destinationTag) continue;
 
                 let amount = 0;
-                if (typeof tx.Amount === "string") {
-                    amount = Number(dropsToXrp(tx.Amount));
+                const rawAmount = tx.Amount || tx.DeliverMax || meta.delivered_amount;
+
+                if (typeof rawAmount === "string") {
+                    amount = Number(dropsToXrp(rawAmount));
                 } else {
                     continue;
                 }
 
                 results.push({
-                    txID: tx.hash,
+                    txID: txObj.hash || tx.hash,
                     type: "IN",
                     amount: amount,
                     token_symbol: "XRP",
@@ -165,6 +171,12 @@ export class XrpHDWallet {
             console.error("Failed to fetch XRP history:", error.message);
             return [];
         }
+    }
+
+    async getHistoryByUserId(userId: string | number, limit: number = 3): Promise<any[]> {
+        const address = await this.getMasterAddress();
+        const destinationTag = 44011 + Number(userId);
+        return this.getChildTransactionHistory(address, destinationTag, limit);
     }
 
     private async _transactionWebhook(transaction: {
