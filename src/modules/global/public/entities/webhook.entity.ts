@@ -14,6 +14,9 @@ export class Webhook {
   @PrimaryGeneratedColumn()
   id: number;
 
+  @Column({ unique: true, nullable: true })
+  hash?: string;
+
   @Column("varchar")
   entity_type: WebhookEntityType;
 

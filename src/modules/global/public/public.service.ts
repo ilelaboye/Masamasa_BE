@@ -38,16 +38,25 @@ export class PublicService {
     @InjectRepository(Webhook)
     private readonly webhookRepository: Repository<Webhook>,
     private readonly exchangeRateService: ExchangeRateService,
-    private readonly notificationsService: NotificationsService,
-  ) { }
+    private readonly notificationsService: NotificationsService
+  ) {}
 
   async transactionWebhook(transactionWebhook: TransactionWebhookDto) {
-    const { address, network, amount, token_symbol } = transactionWebhook;
+    const { address, network, amount, token_symbol, hash } = transactionWebhook;
+
+    const find = await this.webhookRepository.findOne({
+      where: { hash: hash },
+    });
+
+    if (find) {
+      throw new BadRequestException("Webhook already processed");
+    }
 
     const wb = await this.webhookRepository.save({
       address,
       entity_type: WebhookEntityType.deposit,
       metadata: JSON.stringify(transactionWebhook),
+      hash: hash,
     });
 
     const wallet = await this.walletRepository.findOne({
@@ -56,7 +65,7 @@ export class PublicService {
     if (!wallet) throw new BadRequestException("Wallet address not found");
 
     const rate = await this.exchangeRateService.getCurrencyActiveRate(
-      token_symbol.toLowerCase(),
+      token_symbol.toLowerCase()
     );
     let exchange = 0;
     console.log("rate", rate);
@@ -66,7 +75,7 @@ export class PublicService {
     console.log("exchange", exchange);
     let coin_price = 0;
     const price: { status: boolean; price: any } = await this.getPrice(
-      `${token_symbol}`,
+      `${token_symbol}`
     );
     console.log("price", price);
     if (price.status) {
@@ -110,7 +119,7 @@ export class PublicService {
         if (webhook.data.status == "FAILED") {
           this.transactionsRepository.update(
             { id: transaction.id },
-            { status: TransactionStatusType.failed },
+            { status: TransactionStatusType.failed }
           );
         }
       }
@@ -128,13 +137,13 @@ export class PublicService {
     // }
     try {
       const coin = await axios.get(
-        `https://api.coingecko.com/api/v3/search?query=${symbol}`,
+        `https://api.coingecko.com/api/v3/search?query=${symbol}`
       );
       console.log("coin", coin);
       // return coin;
       const api_symbol = coin.data.coins[0].api_symbol;
       const responses = await axios.get(
-        `https://api.coingecko.com/api/v3/simple/price?ids=${api_symbol}&vs_currencies=usd`,
+        `https://api.coingecko.com/api/v3/simple/price?ids=${api_symbol}&vs_currencies=usd`
       );
       return { status: true, price: responses.data[api_symbol].usd };
     } catch (error) {
@@ -178,7 +187,7 @@ export class PublicService {
             page: 1,
             price_change_percentage: "24h",
           },
-        },
+        }
       );
 
       // Transform response into your desired format
@@ -259,7 +268,7 @@ export class PublicService {
   // }
 
   async verifyAccountNumber(
-    bankAccountVerificationDto: BankAccountVerificationDto,
+    bankAccountVerificationDto: BankAccountVerificationDto
   ) {
     const { accountNumber, bankCode, bankName } = bankAccountVerificationDto;
 
@@ -287,7 +296,7 @@ export class PublicService {
               account_number: accountNumber,
             },
             headers: { "x-api-key": `${appConfig.CLAN_TOKEN}` },
-          },
+          }
         );
         if (!response.status)
           throw new BadRequestException("Account number verification failed");
@@ -319,7 +328,7 @@ export class PublicService {
         variables: {
           token: "1234",
         },
-      },
+      }
     );
   }
 }
