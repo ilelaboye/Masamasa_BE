@@ -47,7 +47,7 @@ export class PublicService {
     const find = await this.webhookRepository.findOne({
       where: { hash: hash },
     });
-
+    console.log("find webhook", find);
     if (find) {
       throw new BadRequestException("Webhook already processed");
     }
@@ -139,7 +139,7 @@ export class PublicService {
       const coin = await axios.get(
         `https://api.coingecko.com/api/v3/search?query=${symbol}`
       );
-      console.log("coin", coin);
+      console.log("coin", coin.data);
       // return coin;
       const api_symbol = coin.data.coins[0].api_symbol;
       const responses = await axios.get(
