@@ -242,24 +242,6 @@ export class Web3Service {
     await this.initHDWallet();
     const masterWalletBase = this.hd.getMasterWallet(this.providerBase);
     const masterWallet = this.hd.getMasterWallet(this.provider);
-    const transactionsTron = await this.transactionRepository
-      .createQueryBuilder("transactions")
-      .where(
-        "transactions.user_id = :user_id AND transactions.network = :network",
-        {
-          user_id: req.user.id,
-          network: "Tron",
-        },
-      )
-      .orderBy("transactions.created_at", "DESC")
-      .getMany(); // fetch results
-
-    const formattedTransactions = transactionsTron.map((tx) => ({
-      network: tx.network,
-      token_symbol: tx.metadata?.token_symbol,
-      amount: tx.metadata?.amount,
-      created_at: tx.created_at,
-    }));
 
     const masterWalletTron = this.hdTRX.getMasterWallet();
     const w = await this.walletRepository.findOne({
@@ -269,44 +251,37 @@ export class Web3Service {
     if (!w) return false;
     const tronChildWallet = this.hdTRX.getChildAddress(req.user.id);
 
+
     try {
-      const tron = await this.hdTRX.getChildTRC20History(
+      // TRON TRACKING - using hash matching like ADA/XRP
+      const onChainTron = await this.hdTRX.getChildTRC20History(
         req.user.id,
         "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
       );
 
-      // Get the most recent DB transaction timestamp for TRON
-      const latestDbTronTime = formattedTransactions.reduce(
-        (latest, tx: any) => {
-          const txTime = new Date(
-            tx.metadata?.timestamp || tx.created_at,
-          ).getTime();
-          return txTime > latest ? txTime : latest;
-        },
-        0,
-      );
+      const dbTronTransactions = await this.transactionRepository
+        .createQueryBuilder("transactions")
+        .where("transactions.user_id = :userId AND transactions.network = :network", {
+          userId: req.user.id,
+          network: "Tron"
+        })
+        .getMany();
 
-      // Filter unmatched TRON transactions
-      const unmatchedTronTransactions = tron.filter((onChainTx) => {
-        const onChainTime = new Date(onChainTx.date).getTime();
-        return (
-          onChainTime > latestDbTronTime // only after latest DB tx
-        );
-      });
+      const existingHashes = dbTronTransactions.map(tx => tx.metadata?.hash);
 
-      if (unmatchedTronTransactions && unmatchedTronTransactions.length > 0.1) {
-        unmatchedTronTransactions.map(async (a: any) => {
-          await this.hdADA.ApitransactionWebhook({
-            network: "Tron",
-            address: tronChildWallet,
-            amount: a.amount,
-            token_symbol: a.symbol,
-            hash: a.txID,
-          });
+      const unmatchedTron = onChainTron.filter(tx => !existingHashes.includes(tx.txID));
+
+      for (const tx of unmatchedTron) {
+        await this.hdADA.ApitransactionWebhook({
+          network: "Tron",
+          address: tronChildWallet,
+          amount: tx.amount,
+          token_symbol: tx.symbol,
+          hash: tx.txID,
         });
       }
     } catch (err) {
-      console.log(err);
+      console.error("TRON Tracking failed:", err.message);
     }
 
     try {
