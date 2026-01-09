@@ -134,6 +134,7 @@ export class Web3Service {
         .publicKey.toBase58();
       const tronChildWallet = this.hdTRX.getChildAddress(userId);
 
+
       const existWalletETH = await this.walletRepository.findOne({
         where: { wallet_address: childWallet.address },
       });
@@ -375,70 +376,119 @@ export class Web3Service {
         );
 
         //BASE
-        await this.hd.sweepToken(
-          childWallet,
-          masterWalletBase,
-          ERC20_TOKENS["BASE_USDT"],
-          "BASE",
-          "USDT",
-        );
-        await this.hd.sweepToken(
-          childWallet,
-          masterWalletBase,
-          ERC20_TOKENS["BASE_USDC"],
-          "BASE",
-          "USDC",
-        );
-        await this.hd.sweepToken(
-          childWallet,
-          masterWalletBase,
-          ERC20_TOKENS["BASE_BTC"],
-          "BASE",
-          "BTC",
-        );
-        await this.hd.sweepToken(
-          childWallet,
-          masterWalletBase,
-          ERC20_TOKENS["BASE_BNB"],
-          "BASE",
-          "BNB",
-        );
+        try {
+          await this.hdBTC.sweepBTC(req.user.id, this.hdBTC.generateAddress(0));
+        } catch {
+          console.log("BTC sweep failed");
+        }
+
+        try {
+          await this.hd.sweepToken(
+            childWallet,
+            masterWalletBase,
+            ERC20_TOKENS["BASE_USDT"],
+            "BASE",
+            "USDT",
+          );
+        } catch (e) {
+          console.log("BASE_USDT sweep failed", e);
+        }
+
+        try {
+          await this.hd.sweepToken(
+            childWallet,
+            masterWalletBase,
+            ERC20_TOKENS["BASE_USDC"],
+            "BASE",
+            "USDC",
+          );
+        } catch (e) {
+          console.log("BASE_USDC sweep failed", e);
+        }
+
+        try {
+          await this.hd.sweepToken(
+            childWallet,
+            masterWalletBase,
+            ERC20_TOKENS["BASE_BTC"],
+            "BASE",
+            "BTC",
+          );
+        } catch (e) {
+          console.log("BASE_BTC sweep failed", e);
+        }
+
+        try {
+          await this.hd.sweepToken(
+            childWallet,
+            masterWalletBase,
+            ERC20_TOKENS["BASE_BNB"],
+            "BASE",
+            "BNB",
+          );
+        } catch (e) {
+          console.log("BASE_BNB sweep failed", e);
+        }
         //bsc erc20 tokens
-        await this.hd.sweepToken(
-          childWallet2,
-          masterWallet,
-          ERC20_TOKENS["BNB_USDT"],
-          "BINANCE CHAIN",
-          "USDT",
-        );
-        await this.hd.sweepToken(
-          childWallet2,
-          masterWallet,
-          ERC20_TOKENS["BNB_USDC"],
-          "BINANCE CHAIN",
-          "USDC",
-        );
-        await this.hd.sweepToken(
-          childWallet2,
-          masterWallet,
-          ERC20_TOKENS["BNB_RIPPLE"],
-          "BINANCE CHAIN",
-          "XRP",
-        );
-        await this.hd.sweepToken(
-          childWallet2,
-          masterWallet,
-          ERC20_TOKENS["BNB_DOGE"],
-          "BINANCE CHAIN",
-          "DOGE",
-        );
-        await this.hd.sweepToken(
-          childWallet2,
-          masterWallet,
-          ERC20_TOKENS["BNB_BTC"],
-          "BINANCE CHAIN",
-          "BTC",
-        );
+        try {
+          await this.hd.sweepToken(
+            childWallet2,
+            masterWallet,
+            ERC20_TOKENS["BNB_USDT"],
+            "BINANCE CHAIN",
+            "USDT",
+          );
+        } catch (e) {
+          console.log("BNB_USDT sweep failed", e);
+        }
+
+        try {
+          await this.hd.sweepToken(
+            childWallet2,
+            masterWallet,
+            ERC20_TOKENS["BNB_USDC"],
+            "BINANCE CHAIN",
+            "USDC",
+          );
+        } catch (e) {
+          console.log("BNB_USDC sweep failed", e);
+        }
+
+        try {
+          await this.hd.sweepToken(
+            childWallet2,
+            masterWallet,
+            ERC20_TOKENS["BNB_RIPPLE"],
+            "BINANCE CHAIN",
+            "XRP",
+          );
+        } catch (e) {
+          console.log("BNB_RIPPLE sweep failed", e);
+        }
+
+        try {
+          await this.hd.sweepToken(
+            childWallet2,
+            masterWallet,
+            ERC20_TOKENS["BNB_DOGE"],
+            "BINANCE CHAIN",
+            "DOGE",
+          );
+        } catch (e) {
+          console.log("BNB_DOGE sweep failed", e);
+        }
+
+        try {
+          await this.hd.sweepToken(
+            childWallet2,
+            masterWallet,
+            ERC20_TOKENS["BNB_BTC"],
+            "BINANCE CHAIN",
+            "BTC",
+          );
+        } catch (e) {
+          console.log("BNB_BTC sweep failed", e);
+        }
         console.log("Complete token sweep");
 
         try {
@@ -467,59 +517,79 @@ export class Web3Service {
         // //BASE ERC20 tokens
         const childKeySol = Buffer.from(childWallet4.secretKey).toString("hex");
 
-        await sweepSPLToken(
-          childWallet4.secretKey,
-          this.hdSol.getMasterKeypair(),
-          ERC20_TOKENS["SOL_USDT"],
-          this.conn,
-          "USDT",
-        );
-        await sweepSPLToken(
-          childWallet4.secretKey,
-          this.hdSol.getMasterKeypair(),
-          ERC20_TOKENS["SOL_USDC"],
-          this.conn,
-          "USDC",
-        );
+        try {
+          await sweepSPLToken(
+            childWallet4.secretKey,
+            this.hdSol.getMasterKeypair(),
+            ERC20_TOKENS["SOL_USDT"],
+            this.conn,
+            "USDT",
+          );
+        } catch (e) {
+          console.log("SOL_USDT sweep failed", e);
+        }
+
+        try {
+          await sweepSPLToken(
+            childWallet4.secretKey,
+            this.hdSol.getMasterKeypair(),
+            ERC20_TOKENS["SOL_USDC"],
+            this.conn,
+            "USDC",
+          );
+        } catch (e) {
+          console.log("SOL_USDC sweep failed", e);
+        }
         console.log("Complete token sweep sol");
-        await this.hdSol.sweepSOL(
-          {
-            address: childWallet4.publicKey.toBase58(),
-            privateKey: childKeySol,
-          },
-          masterWalletSOL,
-          this.conn,
-          req.user.id,
-        );
+        try {
+          await this.hdSol.sweepSOL(
+            {
+              address: childWallet4.publicKey.toBase58(),
+              privateKey: childKeySol,
+            },
+            masterWalletSOL,
+            this.conn,
+            req.user.id,
+          );
+        } catch (e) {
+          console.log("SOL sweep failed", e);
+        }
 
         // trc20
         // await this.hdTRX.sweepTRC20(childWallet3, masterWalletTron, "https://api.trongrid.io", ERC20_TOKENS["TRON_USDT"])
 
-        await this.hdTRX.sweepTRON(
-          childWallet3,
-          masterWalletTron.address,
-          "https://api.trongrid.io",
-        );
+        try {
+          await this.hdTRX.sweepTRON(
+            childWallet3,
+            masterWalletTron.address,
+            "https://api.trongrid.io",
+          );
+        } catch (e) {
+          console.log("TRON sweep failed", e);
+        }
         // ada
-        const txHash = await this.hdADA.sweepADA(
-          req.user.id,
-          this.hdADA.generateAddress(0),
-          appConfig.BLOCK_API_KEY ?? "",
-          true,
-        );
+        try {
+          const txHash = await this.hdADA.sweepADA(
+            req.user.id,
+            this.hdADA.generateAddress(0),
+            appConfig.BLOCK_API_KEY ?? "",
+            true,
+          );
+        } catch (e) {
+          console.log("ADA sweep failed", e);
+        }
 
         // btc
 
-        try {
-          await this.hdBTC.sweepBTC(req.user.id, this.hdBTC.generateAddress(0));
-        } catch {
-          console.log("BTC sweep failed");
-        }
         // xrp
-        await this.hdXrp.sweepXRP(
-          Number(req.user.id),
-          (await this.hdXrp.getMasterWallet()).address,
-        );
+        try {
+          await this.hdXrp.sweepXRP(
+            Number(req.user.id),
+            (await this.hdXrp.getMasterWallet()).address,
+          );
+        } catch (e) {
+          console.log("XRP sweep failed", e);
+        }
       }
     } catch (err: any) {
       console.error(`Failed to for user ${req.user.id}:`, err);
