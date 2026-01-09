@@ -941,8 +941,8 @@ export class Web3Service {
         TRX: {
           TRX: trxBalance,
           USDT: trxUSDTBalance + 20,
-          energy: 70000 + (tronWalletCount * 65000),
-          energy_in_usdt: 2 + (tronWalletCount * 1.5)
+          energy: (tronWalletCount * 70000),
+          energy_in_usdt: (tronWalletCount * 3)
         },
         ADA: {
           ADA: cardanoChild.lovelace,
