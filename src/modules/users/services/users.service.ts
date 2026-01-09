@@ -41,7 +41,7 @@ export class UsersService extends BaseService {
     @InjectRepository(Notification)
     private readonly notificationRepository: Repository<Notification>,
     private readonly transactionService: TransactionService,
-    private readonly bankVerificationService: BankVerificationService
+    private readonly bankVerificationService: BankVerificationService,
   ) {
     super();
   }
@@ -68,7 +68,7 @@ export class UsersService extends BaseService {
         city: updateAccountDto.city,
         state: updateAccountDto.state,
         country: updateAccountDto.country,
-      }
+      },
     );
   }
 
@@ -86,13 +86,13 @@ export class UsersService extends BaseService {
 
     if (fetch && fetch.pin) {
       throw new BadRequestException(
-        "Pin has already been set, please click on change pin to proceed"
+        "Pin has already been set, please click on change pin to proceed",
       );
     }
 
     const save = await this.userRepository.update(
       { id: user.id },
-      { pin: hashResourceSync(`${createPinDto.pin}`) }
+      { pin: hashResourceSync(`${createPinDto.pin}`) },
     );
 
     return user;
@@ -121,7 +121,7 @@ export class UsersService extends BaseService {
 
     const save = await this.userRepository.update(
       { id: user.id },
-      { pin: hashResourceSync(`${changePinDto.pin}`) }
+      { pin: hashResourceSync(`${changePinDto.pin}`) },
     );
 
     return { ...user, hasPin: fetch.pin ? true : false };
@@ -129,7 +129,7 @@ export class UsersService extends BaseService {
 
   async changePassword(
     changeUserPasswordDto: ChangeUserPasswordDto,
-    req: UserRequest
+    req: UserRequest,
   ) {
     const user = await this.userRepository.findOne({
       where: { email: req.user.email },
@@ -141,7 +141,7 @@ export class UsersService extends BaseService {
 
     const verified = await verifyHash(
       changeUserPasswordDto.old_password,
-      user.password
+      user.password,
     );
     if (!verified) throw new BadRequestException("Incorrect current password");
 
@@ -150,13 +150,13 @@ export class UsersService extends BaseService {
       changeUserPasswordDto.new_password_confirmation
     ) {
       throw new BadRequestException(
-        "New password and confirm password does not match"
+        "New password and confirm password does not match",
       );
     }
 
     const saved = this.userRepository.update(
       { email: user.email },
-      { password: changeUserPasswordDto.new_password }
+      { password: changeUserPasswordDto.new_password },
     );
     return saved;
   }
@@ -171,7 +171,7 @@ export class UsersService extends BaseService {
     if (uploadImageDto.type == "kyc") {
       if (user.kyc_status == KycStatus.pending) {
         throw new BadRequestException(
-          "We are currently verifying your document, you can't upload another document during this period"
+          "We are currently verifying your document, you can't upload another document during this period",
         );
       }
       if (user.kyc_status == KycStatus.success) {
@@ -180,13 +180,13 @@ export class UsersService extends BaseService {
 
       await this.userRepository.update(
         { id: user.id },
-        { kyc_image: uploadImageDto.image, kyc_status: KycStatus.pending }
+        { kyc_image: uploadImageDto.image, kyc_status: KycStatus.pending },
       );
       return { message: "KYC document uploaded successfully" };
     } else if (uploadImageDto.type == "profile_image") {
       await this.userRepository.update(
         { id: user.id },
-        { profile_image: uploadImageDto.image }
+        { profile_image: uploadImageDto.image },
       );
       return { message: "Profile image uploaded successfully" };
     } else {
@@ -212,7 +212,7 @@ export class UsersService extends BaseService {
       .getOne();
     if (!user) {
       throw new UnauthorizedException(
-        "Auth user not found, please login again"
+        "Auth user not found, please login again",
       );
     }
     if (user.id == find.id) {
@@ -291,7 +291,7 @@ export class UsersService extends BaseService {
       .getOne();
     if (!user) {
       throw new UnauthorizedException(
-        "Auth user not found, please login again"
+        "Auth user not found, please login again",
       );
     }
     const balance = await this.transactionService.getAccountBalance(req);
@@ -335,15 +335,14 @@ export class UsersService extends BaseService {
     const user = await this.userRepository.findOne({
       where: { id: req.user.id },
     });
-    if (!user) throw new BadRequestException("User not found");
     if (user && user.kyc_status == KycStatus.success)
       return { message: "You are already verified." };
 
     try {
       const { data, success } =
         await this.bankVerificationService.bvnVerification(bvn, {
-          first_name: user.first_name,
-          last_name: user.last_name,
+          first_name,
+          last_name,
           dob,
           gender,
         });
@@ -351,16 +350,16 @@ export class UsersService extends BaseService {
       if (!success) {
         if (!data)
           throw new BadRequestException(
-            "BVN verification can not be processed at the moment, please try again later"
+            "BVN verification can not be processed at the moment, please try again later",
           );
         throw new BadRequestException(
-          "BVN information does not match the user details provided"
+          "BVN information does not match the user details provided",
         );
       }
 
       const save = await this.userRepository.update(
         { id: req.user.id },
-        { kyc_status: KycStatus.success }
+        { kyc_status: KycStatus.success },
       );
       console.log("save", save);
       return {

@@ -86,9 +86,4 @@ export const appConfig = {
   ETH_PRIVATE_KEY: process.env.PRIVATE_KEY ?? "",
   //BLOCK
   BLOCK_API_KEY: process.env.BLOCK_API_KEY,
-
-  NOMBA_CLIENT_ID: process.env.NOMBA_CLIENT_ID || "",
-  NOMBA_PRIVATE_KEY: process.env.NOMBA_PRIVATE_KEY || "",
-  NOMBA_ACCOUNT_ID: process.env.NOMBA_ACCOUNT_ID || "",
-  NOMBA_BASE_URL: process.env.NOMBA_BASE_URL || "https://api.nomba.com",
 };

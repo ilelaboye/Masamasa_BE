@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { CronJob } from "./cron.job";
-import { Cron, Interval } from "@nestjs/schedule";
+import { Interval } from "@nestjs/schedule";
 
 @Injectable()
 export class CronService {
@@ -19,10 +19,5 @@ export class CronService {
   @Interval(6000)
   async verifyProcessingVtpassTransactions() {
     this.cronJob.verifyProcessingVtpassTransactions();
-  }
-
-  @Cron("*/20 * * * *")
-  async generateNombaAccessToken() {
-    await this.cronJob.generateNombaAccessToken();
   }
 }

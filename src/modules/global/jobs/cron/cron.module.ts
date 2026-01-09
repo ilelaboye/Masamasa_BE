@@ -10,7 +10,6 @@ import { User } from "@/modules/users/entities/user.entity";
 import { AdminLogs } from "@/modules/administrator/entities/admin-logs.entity";
 import { PurchaseRequest } from "@/modules/purchases/entities/purchases.entity";
 import { ProviderService } from "@/modules/purchases/services/providers.service";
-import { AccessToken } from "../../bank-verification/entities/access-token.entity";
 
 @Module({
   imports: [
@@ -21,7 +20,6 @@ import { AccessToken } from "../../bank-verification/entities/access-token.entit
       User,
       AdminLogs,
       PurchaseRequest,
-      AccessToken,
     ]),
   ],
   providers: [CronService, CronJob, AdministratorService, ProviderService],

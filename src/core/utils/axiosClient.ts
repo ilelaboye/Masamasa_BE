@@ -6,7 +6,7 @@ interface FetchOptions extends AxiosRequestConfig {
 
 export async function axiosClient<T = any>(
   url: string,
-  options: FetchOptions = {}
+  options: FetchOptions = {},
 ): Promise<any> {
   const { method = "GET", body, headers } = options;
 
@@ -24,12 +24,11 @@ export async function axiosClient<T = any>(
     return response.data;
   } catch (error) {
     console.log("axios error", error);
-    // const errorResponse = error.response?.data || {};
-    // const errorMessage =
-    //   errorResponse.message ||
-    //   "There was an error processing this request, please try again later";
+    const errorResponse = error.response?.data || {};
+    const errorMessage =
+      errorResponse.message ||
+      "There was an error processing this request, please try again later";
 
-    // throw new Error(errorMessage);
-    throw error;
+    throw new Error(errorMessage);
   }
 }
