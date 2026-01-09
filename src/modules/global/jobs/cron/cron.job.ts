@@ -1,4 +1,4 @@
-import { transfer, verifyTransfer } from "@/core/utils";
+import { axiosClient, transfer, verifyTransfer } from "@/core/utils";
 import { AdministratorService } from "@/modules/administrator/services/administrator.service";
 import {
   PurchaseRequest,
@@ -10,9 +10,14 @@ import {
   Transactions,
   TransactionStatusType,
 } from "@/modules/transactions/transactions.entity";
-import { Injectable, Logger } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
+import {
+  AccessToken,
+  AccessTokenType,
+} from "../../bank-verification/entities/access-token.entity";
+import { appConfig } from "@/config";
 
 @Injectable()
 export class CronJob {
@@ -21,8 +26,10 @@ export class CronJob {
     private readonly transactionsRepository: Repository<Transactions>,
     @InjectRepository(PurchaseRequest)
     private readonly purchaseRequestRepository: Repository<PurchaseRequest>,
+    @InjectRepository(AccessToken)
+    private readonly accessTokenRepository: Repository<AccessToken>,
     private readonly adminService: AdministratorService,
-    private readonly providerService: ProviderService,
+    private readonly providerService: ProviderService
   ) {}
 
   // Handles all notification jobs
@@ -41,7 +48,7 @@ export class CronJob {
 
     for (const trans of transactions) {
       const balance = await this.adminService.getUserWalletBalance(
-        trans.user_id,
+        trans.user_id
       );
       if (balance < trans.amount) {
         await this.transactionsRepository.update(
@@ -52,7 +59,7 @@ export class CronJob {
               error: "Insufficient wallet balance",
               ...trans.metadata,
             },
-          },
+          }
         );
         continue;
       }
@@ -77,7 +84,7 @@ export class CronJob {
                 error: null,
                 initiate_resp: resp.data,
               },
-            },
+            }
           );
         } else {
           await this.transactionsRepository.update(
@@ -88,7 +95,7 @@ export class CronJob {
                 ...trans.metadata,
                 error: resp.message,
               },
-            },
+            }
           );
           console.log("eerrr", resp.data);
         }
@@ -125,7 +132,7 @@ export class CronJob {
                 flutterwave_resp: resp.data,
                 error: null,
               },
-            },
+            }
           );
         } else {
           await this.transactionsRepository.update(
@@ -136,7 +143,7 @@ export class CronJob {
                 error: resp.message,
                 failed_resp: resp.data,
               },
-            },
+            }
           );
           console.log("eerrr", resp.data);
         }
@@ -158,7 +165,7 @@ export class CronJob {
     for (const purchase of purchases) {
       // Logic to verify VTPass transaction
       const verify = await this.providerService.verifyVtpassTransaction(
-        purchase.masamasa_ref,
+        purchase.masamasa_ref
       );
       console.log("verify vtpass", verify);
       if (verify.status) {
@@ -177,7 +184,7 @@ export class CronJob {
                 ...purchase.metadata,
                 provider_response: verify.body,
               },
-            },
+            }
           );
         } else if (
           verify.body.content &&
@@ -192,10 +199,55 @@ export class CronJob {
                 ...purchase.metadata,
                 provider_response: verify.body,
               },
-            },
+            }
           );
         }
       }
+    }
+  }
+
+  async generateNombaAccessToken() {
+    Logger.log("START GENERATING NOMBA ACCESS TOKEN");
+
+    try {
+      const res = await axiosClient(
+        `${appConfig.NOMBA_BASE_URL}/v1/auth/token/issue`,
+        {
+          method: "POST",
+          body: {
+            grant_type: "client_credentials",
+            client_id: appConfig.NOMBA_CLIENT_ID,
+            client_secret: appConfig.NOMBA_PRIVATE_KEY,
+          },
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            accountId: appConfig.NOMBA_ACCOUNT_ID,
+          },
+        }
+      );
+      console.log("Nomba access token response", res);
+      if (res.data) {
+        await this.accessTokenRepository
+          .createQueryBuilder("access_token")
+          .delete()
+          .where("type = :type", { type: AccessTokenType.nomba })
+          .execute();
+
+        await this.accessTokenRepository.save({
+          type: AccessTokenType.nomba,
+          token: res.data.access_token,
+          refresh_token: res.data.refresh_token,
+          metadata: res.data,
+          created_at: new Date(),
+        });
+        console.log("NOMBA ACCESS TOKEN GENERATED SUCCESSFULLY");
+        return res.data;
+      }
+    } catch (e) {
+      console.log("Error generating Nomba access token:", e);
+      // // this.monitorService.recordError(e);
+      throw new BadRequestException(e.message);
     }
   }
 }

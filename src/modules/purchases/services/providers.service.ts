@@ -16,7 +16,7 @@ export class ProviderService {
   constructor(
     @InjectRepository(PurchaseRequest)
     private readonly purchaseRepository: Repository<PurchaseRequest>,
-    private readonly cacheService: CacheService,
+    private readonly cacheService: CacheService
   ) {}
 
   async getServiceList() {
@@ -31,7 +31,7 @@ export class ProviderService {
           `${appConfig.VTPASS_URL}/service-categories`,
           {
             method: "GET",
-          },
+          }
         );
 
       const providers = res.content.filter(
@@ -39,7 +39,7 @@ export class ProviderService {
           provider.identifier.toLowerCase() !== "education" &&
           provider.identifier.toLowerCase() !== "other-services" &&
           provider.identifier.toLowerCase() !== "insurance" &&
-          provider.identifier.toLowerCase() !== "tv-subscription",
+          provider.identifier.toLowerCase() !== "tv-subscription"
       );
 
       this.cacheService.set(`vtpass_service_list`, providers);
@@ -66,16 +66,16 @@ export class ProviderService {
               "Content-Type": "application/json",
               Accept: "application/json",
             },
-          },
+          }
         );
 
       if (serviceID === "airtime") {
         return res.content.filter(
-          (provider) => provider.serviceID !== "foreign-airtime",
+          (provider) => provider.serviceID !== "foreign-airtime"
         );
       } else if (serviceID === "data") {
         return res.content.filter(
-          (provider) => provider.serviceID !== "foreign-data",
+          (provider) => provider.serviceID !== "foreign-data"
         );
       }
 
@@ -102,7 +102,7 @@ export class ProviderService {
               "Content-Type": "application/json",
               Accept: "application/json",
             },
-          },
+          }
         );
       this.cacheService.set(`vtpass_variation_${serviceID}`, res.content);
       return res.content;
@@ -113,7 +113,7 @@ export class ProviderService {
 
   async validateMeterNumber(validateMeterNoDto: ValidateMeterNoDto) {
     const token = Buffer.from(
-      `${appConfig.VTPASS_USERNAME}:${appConfig.VTPASS_PASSWORD}`,
+      `${appConfig.VTPASS_USERNAME}:${appConfig.VTPASS_PASSWORD}`
     ).toString("base64");
     try {
       const res = await axiosClient<VTPassResponse>(
@@ -131,7 +131,7 @@ export class ProviderService {
             "api-key": appConfig.VTPASS_API_KEY,
             "secret-key": appConfig.VTPASS_SECRET_KEY,
           },
-        },
+        }
       );
       const handler = this.vtpassErrorHandler(res.code, res);
       if (!handler.status) {
@@ -163,7 +163,7 @@ export class ProviderService {
             "api-key": appConfig.VTPASS_API_KEY,
             "secret-key": appConfig.VTPASS_SECRET_KEY,
           },
-        },
+        }
       );
       console.log("airtime purchase response", res);
       const handler = this.vtpassErrorHandler(res.code, res);
@@ -171,7 +171,7 @@ export class ProviderService {
       if (!handler.status) {
         this.purchaseRepository.update(
           { id: purchase.id },
-          { metadata: { ...purchase.metadata, error: handler.message } },
+          { metadata: { ...purchase.metadata, error: handler.message } }
         );
         return { status: false, message: handler.message };
       } else {
@@ -180,7 +180,12 @@ export class ProviderService {
     } catch (e) {
       console.log("Error processing data purchase:", e);
       // this.monitorService.recordError(e);
-      throw new BadRequestException(e.message);
+      const errorResponse = e.response?.data || {};
+      const errorMessage =
+        errorResponse.message ||
+        "There was an error processing this request, please try again later";
+
+      throw new BadRequestException(errorMessage);
     }
   }
 
@@ -204,7 +209,7 @@ export class ProviderService {
             "api-key": appConfig.VTPASS_API_KEY,
             "secret-key": appConfig.VTPASS_SECRET_KEY,
           },
-        },
+        }
       );
       console.log("data purchase response", res);
       const handler = this.vtpassErrorHandler(res.code, res);
@@ -213,7 +218,7 @@ export class ProviderService {
         // throw new BadRequestException(handler.message);
         this.purchaseRepository.update(
           { id: purchase.id },
-          { metadata: { ...purchase.metadata, error: handler.message } },
+          { metadata: { ...purchase.metadata, error: handler.message } }
         );
         return { status: false, message: handler.message };
       } else {
@@ -248,14 +253,19 @@ export class ProviderService {
     } catch (e) {
       console.log("Error processing data purchase:", e);
       // this.monitorService.recordError(e);
-      throw new BadRequestException(e.message);
+      const errorResponse = e.response?.data || {};
+      const errorMessage =
+        errorResponse.message ||
+        "There was an error processing this request, please try again later";
+
+      throw new BadRequestException(errorMessage);
     }
   }
 
   async processElectricityPurchase(
     purchase: PurchaseRequest,
     requestId: string,
-    user: User,
+    user: User
   ) {
     try {
       const res = await axiosClient<VTPassResponse>(
@@ -276,7 +286,7 @@ export class ProviderService {
             "api-key": appConfig.VTPASS_API_KEY,
             "secret-key": appConfig.VTPASS_SECRET_KEY,
           },
-        },
+        }
       );
       console.log("electricity purchase response", res);
       const handler = this.vtpassErrorHandler(res.code, res);
@@ -284,7 +294,7 @@ export class ProviderService {
         // throw new BadRequestException(handler.message);
         this.purchaseRepository.update(
           { id: purchase.id },
-          { metadata: { ...purchase.metadata, error: handler.message } },
+          { metadata: { ...purchase.metadata, error: handler.message } }
         );
         return { status: false, message: handler.message };
       } else {
@@ -300,13 +310,18 @@ export class ProviderService {
     } catch (e) {
       console.log("Error processing data purchase:", e);
       // this.monitorService.recordError(e);
-      throw new BadRequestException(e.message);
+      const errorResponse = e.response?.data || {};
+      const errorMessage =
+        errorResponse.message ||
+        "There was an error processing this request, please try again later";
+
+      throw new BadRequestException(errorMessage);
     }
   }
 
   async verifyVtpassTransaction(requestId: string) {
     const token = Buffer.from(
-      `${appConfig.VTPASS_USERNAME}:${appConfig.VTPASS_PASSWORD}`,
+      `${appConfig.VTPASS_USERNAME}:${appConfig.VTPASS_PASSWORD}`
     ).toString("base64");
     try {
       const res = await axiosClient<VTPassResponse>(
@@ -322,7 +337,7 @@ export class ProviderService {
             "api-key": appConfig.VTPASS_API_KEY,
             "secret-key": appConfig.VTPASS_SECRET_KEY,
           },
-        },
+        }
       );
       const handler = this.vtpassErrorHandler(res.code, res);
       if (!handler.status) {
@@ -332,13 +347,18 @@ export class ProviderService {
     } catch (e) {
       console.log("Error validating vtpass transaction:", e);
       // this.monitorService.recordError(e);
-      throw new BadRequestException(e.message);
+      const errorResponse = e.response?.data || {};
+      const errorMessage =
+        errorResponse.message ||
+        "There was an error processing this request, please try again later";
+
+      throw new BadRequestException(errorMessage);
     }
   }
 
   vtpassErrorHandler(
     code: string,
-    resp?: VTPassResponse,
+    resp?: VTPassResponse
   ): { message: string; status: boolean; action?: string | null } {
     switch (code) {
       case "000":

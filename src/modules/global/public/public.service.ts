@@ -25,6 +25,11 @@ import { ExchangeRateService } from "@/modules/exchange-rates/exchange-rates.ser
 import { NotificationsService } from "@/modules/notifications/notifications.service";
 import { NotificationTag } from "@/modules/notifications/entities/notification.entity";
 import { CreateWalletDto } from "@/modules/wallet/wallet.dto";
+import {
+  AccessToken,
+  AccessTokenType,
+} from "../bank-verification/entities/access-token.entity";
+import { CronJob } from "../jobs/cron/cron.job";
 
 @Injectable()
 export class PublicService {
@@ -37,8 +42,11 @@ export class PublicService {
     private readonly transactionsRepository: Repository<Transactions>,
     @InjectRepository(Webhook)
     private readonly webhookRepository: Repository<Webhook>,
+    @InjectRepository(AccessToken)
+    private readonly accessTokenRepository: Repository<AccessToken>,
     private readonly exchangeRateService: ExchangeRateService,
-    private readonly notificationsService: NotificationsService
+    private readonly notificationsService: NotificationsService,
+    private readonly cronJob: CronJob
   ) {}
 
   async transactionWebhook(transactionWebhook: TransactionWebhookDto) {
@@ -210,23 +218,34 @@ export class PublicService {
     }
   }
 
-  async getPaystackBanks() {
-    return getBanks();
-    // try {
-    //   const { status, data } = await axiosClient(
-    //     `https://api.paystack.co/bank`,
-    //     {
-    //       headers: { Authorization: `Bearer ${appConfig.PAYSTACK_SECRET_KEY}` },
-    //     }
-    //   );
+  async getBanksFromNomba() {
+    const accessToken = await this.accessTokenRepository.findOne({
+      where: { type: AccessTokenType.nomba },
+    });
 
-    //   if (!status)
-    //     throw new BadRequestException("Banks cannot be fetched at the moment");
-    //   console.log("banks", data);
-    //   return data;
-    // } catch (error) {
-    //   throw new BadRequestException(error.message);
-    // }
+    try {
+      if (accessToken) {
+        const resp = await axiosClient(
+          `${appConfig.NOMBA_BASE_URL}/v1/transfers/banks`,
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken.token}`,
+              accountId: appConfig.NOMBA_ACCOUNT_ID,
+            },
+          }
+        );
+
+        // console.log("nomba banks", resp);
+        return resp.data;
+      }
+    } catch (error) {
+      throw new BadRequestException(error.response.data.description);
+    }
+  }
+
+  async getBanks() {
+    // return getBanks();
+    return this.getBanksFromNomba();
   }
 
   // async saveWalletAddress(createWalletDto: CreateWalletDto) {
@@ -267,50 +286,79 @@ export class PublicService {
   //   return await this.walletRepository.save(wallet);
   // }
 
+  async verifyAccountNumberFromNomba(accountNumber, bankCode, bankName) {
+    var accessToken = await this.accessTokenRepository.findOne({
+      where: { type: AccessTokenType.nomba },
+    });
+
+    if (!accessToken) {
+      accessToken = await this.cronJob.generateNombaAccessToken();
+    }
+
+    try {
+      const res = await axiosClient(
+        `${appConfig.NOMBA_BASE_URL}/v1/transfers/bank/lookup`,
+        {
+          method: "POST",
+          body: {
+            accountNumber: accountNumber,
+            bankCode: bankCode,
+          },
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            accountId: appConfig.NOMBA_ACCOUNT_ID,
+            Authorization: `Bearer ${accessToken!.token}`,
+          },
+        }
+      );
+      console.log("Nomba bank lookup", res);
+      return {
+        message: "Account number verified",
+        data: {
+          bank_name: bankName,
+          account_name: res.data.accountName,
+          account_number: accountNumber,
+        },
+      };
+    } catch (e) {
+      console.log("Error loop bank details from Nomba:", e);
+      // // this.monitorService.recordError(e);
+      throw new BadRequestException(e.response.data.message);
+    }
+  }
+
+  async verifyAccountNumberFromClan(accountNumber, bankCode, bankName) {
+    try {
+      const response = await axiosClient(
+        `https://mobile.creditclan.com/webapi/v1/account/resolve`,
+        {
+          method: "POST",
+          body: {
+            bank_code: bankCode,
+            account_number: accountNumber,
+          },
+          headers: { "x-api-key": `${appConfig.CLAN_TOKEN}` },
+        }
+      );
+      if (!response.status)
+        throw new BadRequestException("Account number verification failed");
+
+      return {
+        message: "Account number verified",
+        data: { bank_name: bankName, ...response.data },
+      };
+    } catch (error) {
+      throw new BadRequestException(error.message);
+    }
+  }
+
   async verifyAccountNumber(
     bankAccountVerificationDto: BankAccountVerificationDto
   ) {
     const { accountNumber, bankCode, bankName } = bankAccountVerificationDto;
-
-    try {
-      // const response = await axiosClient(
-      //   `https://api.paystack.co/bank/resolve?account_number=${accountNumber}&bank_code=${bankCode}`,
-      //   {
-      //     headers: { Authorization: `Bearer ${appConfig.PAYSTACK_SECRET_KEY}` },
-      //   }
-      // );
-      // if (!response.status)
-      //   throw new BadRequestException("Account number verification failed");
-
-      // return {
-      //   message: "Account number verified",
-      //   data: { bank_name: bankName, ...response.data },
-      // };
-      try {
-        const response = await axiosClient(
-          `https://mobile.creditclan.com/webapi/v1/account/resolve`,
-          {
-            method: "POST",
-            body: {
-              bank_code: bankCode,
-              account_number: accountNumber,
-            },
-            headers: { "x-api-key": `${appConfig.CLAN_TOKEN}` },
-          }
-        );
-        if (!response.status)
-          throw new BadRequestException("Account number verification failed");
-
-        return {
-          message: "Account number verified",
-          data: { bank_name: bankName, ...response.data },
-        };
-      } catch (error) {
-        throw new BadRequestException(error.message);
-      }
-    } catch (error) {
-      throw new BadRequestException(error.message);
-    }
+    return this.verifyAccountNumberFromNomba(accountNumber, bankCode, bankName);
+    // return this.verifyAccountNumberFromClan(accountNumber, bankCode, bankName);
   }
 
   async testMail() {

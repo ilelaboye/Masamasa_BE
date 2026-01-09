@@ -64,7 +64,7 @@ export class PublicController {
 
   @Get("banks")
   async banks() {
-    return await this.publicService.getPaystackBanks();
+    return await this.publicService.getBanks();
   }
 
   @UsePipes(new JoiValidationPipe(BankAccountVerificationValidation))
