@@ -303,10 +303,15 @@ export class SolHDWallet {
   }
 
   async getSolBalance(connection: Connection, address: string) {
-    const pubkey = new PublicKey(address);
-    const balanceLamports = await connection.getBalance(pubkey);
-    const balanceSOL = balanceLamports / 1e9; // convert lamports to SOL
-    return balanceSOL;
+    try {
+      const pubkey = new PublicKey(address);
+      const balanceLamports = await connection.getBalance(pubkey);
+      const balanceSOL = balanceLamports / 1e9; // convert lamports to SOL
+      return balanceSOL;
+    } catch (err) {
+      console.error(`Failed to get SOL balance for ${address}:`, err);
+      return 0;
+    }
   }
 
   async getSPLTokenBalance(

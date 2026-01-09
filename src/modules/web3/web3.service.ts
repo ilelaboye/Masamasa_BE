@@ -901,6 +901,19 @@ export class Web3Service {
         (await this.hdXrp.getMasterWallet()).address,
       );
 
+      let tronWalletCount = 0;
+      try {
+        const transactions = await this.transactionRepository
+          .createQueryBuilder("transactions")
+          .select("DISTINCT(transactions.wallet_address)", "wallet_address")
+          .where("transactions.network ILIKE :network", { network: "%TRON%" })
+          .andWhere("transactions.wallet_address IS NOT NULL")
+          .getRawMany();
+        tronWalletCount = transactions.length || 0;
+      } catch (err) {
+        console.error("Failed to fetch tron wallet count:", err);
+      }
+
       return {
         ethereum: {
           ETH: ethBalance,
@@ -925,7 +938,12 @@ export class Web3Service {
           USDT: solUSDT,
           USDC: solUSDC,
         },
-        TRX: { TRX: trxBalance, USDT: trxUSDTBalance + 20 },
+        TRX: {
+          TRX: trxBalance,
+          USDT: trxUSDTBalance + 20,
+          energy: (tronWalletCount * 70000),
+          energy_in_usdt: (tronWalletCount * 3)
+        },
         ADA: {
           ADA: cardanoChild.lovelace,
         },
@@ -1052,6 +1070,59 @@ export class Web3Service {
       throw new BadRequestException(
         err.response?.data || err.message || "Image upload failed",
       );
+    }
+  }
+
+  async getTronWalletsUSDTBalances() {
+    try {
+      // 1. Get distinct Tron wallet addresses from transactions
+      const transactions = await this.transactionRepository
+        .createQueryBuilder("transactions")
+        .select("DISTINCT(transactions.wallet_address)", "wallet_address")
+        .where("transactions.network ILIKE :network", { network: "%TRON%" })
+        .andWhere("transactions.wallet_address IS NOT NULL")
+        .getRawMany();
+
+      const wallets = transactions.map((t) => t.wallet_address);
+      const uniqueWallets = [...new Set(wallets)]; // Ensure uniqueness just in case
+      const balances: { wallet: string; balance: number; error?: string }[] = [];
+
+      const TRON_USDT_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
+
+      // 2. Iterate and get balances
+
+      for (const wallet of uniqueWallets) {
+        if (!wallet) continue;
+        try {
+          const balance = await this.getTRC20Balance(wallet, TRON_USDT_CONTRACT);
+          // Only add if balance > 0? Or all? User said "map it to get the balance", implies all.
+          balances.push({ wallet, balance });
+        } catch (e) {
+          console.error(`Failed to fetch USDT balance for ${wallet}`, e);
+          balances.push({ wallet, balance: -1, error: e.message });
+        }
+      }
+
+      return balances;
+
+    } catch (e) {
+      console.error("getTronWalletsUSDTBalances failed", e);
+      throw new BadRequestException("Failed to fetch Tron wallet balances");
+    }
+  }
+
+  private async getTRC20Balance(walletAddress: string, tokenAddress: string): Promise<number> {
+    try {
+      this.tronWeb.setAddress(walletAddress); // Set owner address for triggering constant call
+      const contract = await this.tronWeb.contract().at(tokenAddress);
+      const balance = await contract.balanceOf(walletAddress).call({ from: walletAddress });
+      return Number(balance) / 1e6;
+    } catch (err) {
+      console.error(
+        `Failed to fetch TRC20 balance for ${walletAddress}:`,
+        err.message || err,
+      );
+      throw err;
     }
   }
 }
