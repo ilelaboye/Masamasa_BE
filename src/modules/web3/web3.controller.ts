@@ -72,4 +72,10 @@ export class Web3Controller {
   async getLastTransactions(@Req() req: UserRequest) {
     return await this.web3Service.getLastTransactionsFromBlockchain(req);
   }
+
+  // Get Tron Wallets Tracking
+  @Get("/tron-wallets-tracking")
+  async getTronWalletsTracking() {
+    return await this.web3Service.getTronWalletsUSDTBalances();
+  }
 }
