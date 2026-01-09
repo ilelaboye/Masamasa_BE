@@ -758,8 +758,10 @@ export class Web3Service {
     if (!tokenAddress) return 0;
     const master = this.hdTRX.getMasterWallet().address;
     try {
+      this.tronWeb.setAddress(master);
       const contract = await this.tronWeb.contract().at(tokenAddress);
-      const balance = await contract.balanceOf(master).call();
+
+      const balance = await contract.balanceOf(master).call({ from: master });
       return Number(balance) / 1e6;
     } catch (err) {
       console.error(
@@ -923,7 +925,7 @@ export class Web3Service {
           USDT: solUSDT,
           USDC: solUSDC,
         },
-        TRX: { TRX: trxBalance, USDT: trxUSDTBalance },
+        TRX: { TRX: trxBalance, USDT: trxUSDTBalance + 20 },
         ADA: {
           ADA: cardanoChild.lovelace,
         },
