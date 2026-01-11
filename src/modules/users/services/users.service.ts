@@ -357,7 +357,7 @@ export class UsersService extends BaseService {
             "BVN verification can not be processed at the moment, please try again later"
           );
         throw new BadRequestException(
-          "BVN information does not match the user details provided"
+          "BVN information does not match the user details (first name, last name, date of birth) provided"
         );
       }
 
