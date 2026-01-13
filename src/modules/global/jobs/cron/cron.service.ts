@@ -22,6 +22,7 @@ export class CronService {
   }
 
   @Cron("*/20 * * * *")
+  // @Interval(1000)
   async generateNombaAccessToken() {
     await this.cronJob.generateNombaAccessToken();
   }

@@ -1,4 +1,8 @@
-import { axiosClient, transfer, verifyTransfer } from "@/core/utils";
+import {
+  axiosClient,
+  transferWithFlutterWave,
+  verifyTransfer,
+} from "@/core/utils";
 import { AdministratorService } from "@/modules/administrator/services/administrator.service";
 import {
   PurchaseRequest,
@@ -64,7 +68,7 @@ export class CronJob {
         continue;
       }
       try {
-        const resp = await transfer({
+        const resp = await transferWithFlutterWave({
           amount: trans.amount,
           bankCode: trans.metadata.bankCode,
           accountNumber: trans.metadata.accountNumber,

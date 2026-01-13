@@ -18,7 +18,12 @@ import {
   UploadImageDto,
   WithdrawalDto,
 } from "../dto";
-import { getRequestQuery, hashResourceSync, verifyHash } from "@/core/utils";
+import {
+  axiosClient,
+  getRequestQuery,
+  hashResourceSync,
+  verifyHash,
+} from "@/core/utils";
 import { TransactionService } from "@/modules/transactions/transactions.service";
 import {
   TransactionEntityType,
@@ -30,6 +35,12 @@ import { generateMasamasaRef, paginate } from "@/core/helpers";
 import { BVNVerificationDto } from "@/modules/global/bank-verification/dto/bvn-verification.dto";
 import { BankVerificationService } from "@/modules/global/bank-verification/bank-verification.service";
 import { Notification } from "@/modules/notifications/entities/notification.entity";
+import {
+  AccessToken,
+  AccessTokenType,
+} from "@/modules/global/bank-verification/entities/access-token.entity";
+import { CronJob } from "@/modules/global/jobs/cron/cron.job";
+import { appConfig } from "@/config";
 
 @Injectable()
 export class UsersService extends BaseService {
@@ -40,8 +51,11 @@ export class UsersService extends BaseService {
     private readonly transferRepository: Repository<Transfer>,
     @InjectRepository(Notification)
     private readonly notificationRepository: Repository<Notification>,
+    @InjectRepository(AccessToken)
+    private readonly accessTokenRepository: Repository<AccessToken>,
     private readonly transactionService: TransactionService,
-    private readonly bankVerificationService: BankVerificationService
+    private readonly bankVerificationService: BankVerificationService,
+    private readonly cronJob: CronJob
   ) {
     super();
   }
@@ -281,6 +295,49 @@ export class UsersService extends BaseService {
     });
 
     return trans;
+  }
+
+  async withdrawWithNombaBank(accountNumber, bankCode, bankName) {
+    var accessToken = await this.accessTokenRepository.findOne({
+      where: { type: AccessTokenType.nomba },
+    });
+
+    if (!accessToken) {
+      accessToken = await this.cronJob.generateNombaAccessToken();
+    }
+
+    try {
+      const res = await axiosClient(
+        `${appConfig.NOMBA_BASE_URL}/v1/transfers/bank/lookup`,
+        {
+          method: "POST",
+          body: {
+            accountNumber: accountNumber,
+            bankCode: bankCode,
+          },
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            accountId: appConfig.NOMBA_ACCOUNT_ID,
+            Authorization: `Bearer ${accessToken!.token}`,
+          },
+        }
+      );
+      console.log("Nomba bank lookup", res);
+      return {
+        message: "Account number verified",
+        data: {
+          bank_name: bankName,
+          account_name: res.data.accountName,
+          account_number: accountNumber,
+        },
+      };
+    } catch (e) {
+      console.log("Error loop bank details from Nomba:", e);
+      // // this.monitorService.recordError(e);
+
+      throw new BadRequestException(e.response.data.description);
+    }
   }
 
   async withdrawal(withdrawalDto: WithdrawalDto, req: UserRequest) {

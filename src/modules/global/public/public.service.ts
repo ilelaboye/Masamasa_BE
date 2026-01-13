@@ -219,10 +219,16 @@ export class PublicService {
   }
 
   async getBanksFromNomba() {
+    console.log("getBanksFromNomba called");
     const accessToken = await this.accessTokenRepository.findOne({
       where: { type: AccessTokenType.nomba },
     });
-
+    console.log("accessToken", accessToken);
+    if (!accessToken) {
+      console.log("No access token found, generating new one");
+      const get = await this.cronJob.generateNombaAccessToken();
+      console.log("Generated access token", get);
+    }
     try {
       if (accessToken) {
         const resp = await axiosClient(
@@ -235,7 +241,7 @@ export class PublicService {
           }
         );
 
-        // console.log("nomba banks", resp);
+        console.log("nomba banks", resp);
         return resp.data;
       }
     } catch (error) {
@@ -245,7 +251,7 @@ export class PublicService {
 
   async getBanks() {
     // return getBanks();
-    return this.getBanksFromNomba();
+    return await this.getBanksFromNomba();
   }
 
   // async saveWalletAddress(createWalletDto: CreateWalletDto) {
@@ -324,7 +330,8 @@ export class PublicService {
     } catch (e) {
       console.log("Error loop bank details from Nomba:", e);
       // // this.monitorService.recordError(e);
-      throw new BadRequestException(e.response.data.message);
+
+      throw new BadRequestException(e.response.data.description);
     }
   }
 

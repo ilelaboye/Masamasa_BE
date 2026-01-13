@@ -9,10 +9,17 @@ import { Transfer } from "../transfers/transfers.entity";
 import { BankVerificationService } from "../global/bank-verification/bank-verification.service";
 import { BankVerification } from "../global/bank-verification/entities/bank-verification.entity";
 import { Notification } from "../notifications/entities/notification.entity";
+import { AccessToken } from "../global/bank-verification/entities/access-token.entity";
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, Transfer, BankVerification, Notification]),
+    TypeOrmModule.forFeature([
+      User,
+      Transfer,
+      BankVerification,
+      Notification,
+      AccessToken,
+    ]),
     EventEmitterModule.forRoot(),
   ],
   controllers: [AuthController, UsersController],

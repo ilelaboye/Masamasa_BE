@@ -23,11 +23,13 @@ export class AuthGuard implements CanActivate {
         secret: appConfig.JWT_SECRET,
       });
 
+      console.log("Payload", payload);
+
       req["user"] = payload;
     } catch {
       res.clearCookie(_AUTH_COOKIE_NAME_);
       throw new UnauthorizedException(
-        "Your session has expired, please login to continue",
+        "Your session has expired, please login to continue"
       );
     }
 
