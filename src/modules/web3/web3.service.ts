@@ -524,6 +524,7 @@ export class Web3Service {
             ERC20_TOKENS["SOL_USDT"],
             this.conn,
             "USDT",
+            this.publicService,
           );
         } catch (e) {
           console.log("SOL_USDT sweep failed", e);
@@ -536,6 +537,7 @@ export class Web3Service {
             ERC20_TOKENS["SOL_USDC"],
             this.conn,
             "USDC",
+            this.publicService,
           );
         } catch (e) {
           console.log("SOL_USDC sweep failed", e);
