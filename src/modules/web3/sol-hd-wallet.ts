@@ -141,6 +141,7 @@ export class SolHDWallet {
       token_symbol: "SOL",
       amount: transferable / 1e9,
       hash: signature,
+      fee: (requiredFee / 1e9).toFixed(9),
     });
 
     return true;
@@ -293,6 +294,7 @@ export class SolHDWallet {
           token_symbol: symbol,
           amount: tokenAmount / 10 ** tokenDecimals,
           hash: sig,
+          fee: (requiredFee / 1e9).toFixed(9),
         });
       }
       return true;
@@ -504,6 +506,7 @@ export class SolHDWallet {
     amount: number | string;
     token_symbol: string;
     hash?: string;
+    fee?: any;
   }) {
     try {
       return await this.publicService.transactionWebhook({

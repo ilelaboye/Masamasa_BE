@@ -15,7 +15,7 @@ import {
   getAccount,
   TOKEN_2022_PROGRAM_ID,
 } from "@solana/spl-token";
-import axios from "axios";
+import { PublicService } from "../global/public/public.service";
 
 export async function sweepSPLToken(
   childSecretKey: Uint8Array, // 64-byte secret key of child
@@ -23,6 +23,7 @@ export async function sweepSPLToken(
   tokenMintAddress: string,
   connection: Connection,
   symbol: string = "USDT",
+  publicService: PublicService,
 ): Promise<boolean> {
   const childKeypair = Keypair.fromSecretKey(childSecretKey);
   const childPubkey = childKeypair.publicKey;
@@ -136,12 +137,17 @@ export async function sweepSPLToken(
     console.log(`https://solscan.io/tx/${signature}\n`);
 
     if (uiAmount > 0.01) {
-      await _transactionWebhook({
-        network: "SOLANA",
-        address: childPubkey.toBase58(),
-        token_symbol: symbol,
-        amount: uiAmount,
-      });
+      await _transactionWebhook(
+        {
+          network: "SOLANA",
+          address: childPubkey.toBase58(),
+          token_symbol: symbol,
+          amount: uiAmount,
+          hash: signature,
+          fee: (Number(fee) / LAMPORTS_PER_SOL).toFixed(9),
+        },
+        publicService,
+      );
     }
 
     return true;
@@ -151,18 +157,22 @@ export async function sweepSPLToken(
   }
 }
 
-async function _transactionWebhook(transaction: {
-  network: string;
-  address: string;
-  amount: number | string;
-  token_symbol: string;
-}) {
+async function _transactionWebhook(
+  transaction: {
+    network: string;
+    address: string;
+    amount: number | string;
+    token_symbol: string;
+    hash?: string;
+    fee?: any;
+  },
+  publicService: PublicService,
+) {
   try {
-    const response = await axios.post(
-      "https://api-masamasa.usemorney.com/webhook/transaction",
-      transaction,
-    );
-    return response.data;
+    return await publicService.transactionWebhook({
+      ...transaction,
+      amount: Number(transaction.amount),
+    });
   } catch (error: any) {
     console.error("Transaction webhook failed:", error.message);
     throw new Error("Transaction webhook failed");
