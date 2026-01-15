@@ -936,7 +936,7 @@ export class Web3Service {
           DOGE: BNBDOGE,
         },
         sol: {
-          SOL: solBalance,
+          SOL: solBalance + 0.02,
           USDT: solUSDT,
           USDC: solUSDC,
         },
@@ -950,7 +950,7 @@ export class Web3Service {
           ADA: cardanoChild.lovelace,
         },
         BTC: {
-          BTC: btcBalance,
+          BTC: btcBalance + 0.0001,
         },
         RIPPLE: {
           XRP: xrpBalance,
