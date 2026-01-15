@@ -89,19 +89,19 @@ export class CronJob {
       //   });
       //   console.log("resp from transfer", resp);
       //   if (resp.status) {
-      //     await this.transactionsRepository.update(
-      //       { id: trans.id },
-      //       {
-      //         status: TransactionStatusType.pending,
-      //         retry: trans.retry + 1,
-      //         session_id: resp.data.data.id,
-      //         metadata: {
-      //           ...trans.metadata,
-      //           error: null,
-      //           initiate_resp: resp.data,
-      //         },
-      //       }
-      //     );
+      // await this.transactionsRepository.update(
+      //   { id: trans.id },
+      //   {
+      //     status: TransactionStatusType.pending,
+      //     retry: trans.retry + 1,
+      //     session_id: resp.data.data.id,
+      //     metadata: {
+      //       ...trans.metadata,
+      //       error: null,
+      //       initiate_resp: resp.data,
+      //     },
+      //   }
+      // );
       //   } else {
       //     await this.transactionsRepository.update(
       //       { id: trans.id },
@@ -142,6 +142,34 @@ export class CronJob {
           }
         );
         console.log("Nomba bank transfer", res);
+        if (res.data.status == "SUCCESS") {
+          await this.transactionsRepository.update(
+            { id: trans.id },
+            {
+              status: TransactionStatusType.pending,
+              retry: trans.retry + 1,
+              session_id: res.data.id,
+              metadata: {
+                ...trans.metadata,
+                error: null,
+                initiate_resp: res.data,
+              },
+            }
+          );
+        } else {
+          await this.transactionsRepository.update(
+            { id: trans.id },
+            {
+              status: TransactionStatusType.failed,
+              retry: trans.retry + 1,
+              metadata: {
+                ...trans.metadata,
+                error: res.data,
+                initiate_resp: res.data,
+              },
+            }
+          );
+        }
         return {
           message: "Account number verified",
           data: {
@@ -161,50 +189,76 @@ export class CronJob {
 
   async verifyTransactionJob() {
     Logger.log("START VERIFYING MASAMASA TRANSACTION");
-    // const transactions = await this.transactionsRepository
-    //   .createQueryBuilder("trans")
-    //   .where("trans.status = :status", {
-    //     status: TransactionStatusType.pending,
-    //   })
-    //   .andWhere("trans.entity_type = :type", {
-    //     type: TransactionEntityType.withdrawal,
-    //   })
-    //   .getMany();
+    const transactions = await this.transactionsRepository
+      .createQueryBuilder("trans")
+      .where("trans.status = :status", {
+        status: TransactionStatusType.pending,
+      })
+      .andWhere("trans.entity_type = :type", {
+        type: TransactionEntityType.withdrawal,
+      })
+      .getMany();
 
-    // for (const trans of transactions) {
-    //   try {
-    //     const resp = await verifyTransfer({ id: trans.session_id });
-    //     console.log("resp", resp);
-    //     if (resp.status) {
-    //       await this.transactionsRepository.update(
-    //         { id: trans.id },
-    //         {
-    //           status: TransactionStatusType.success,
-    //           session_id: resp.data.id,
-    //           metadata: {
-    //             ...trans.metadata,
-    //             flutterwave_resp: resp.data,
-    //             error: null,
-    //           },
-    //         }
-    //       );
-    //     } else {
-    //       await this.transactionsRepository.update(
-    //         { id: trans.id },
-    //         {
-    //           metadata: {
-    //             ...trans.metadata,
-    //             error: resp.message,
-    //             failed_resp: resp.data,
-    //           },
-    //         }
-    //       );
-    //       console.log("eerrr", resp.data);
-    //     }
-    //   } catch (e) {
-    //     console.log("eerrr eee", e);
-    //   }
-    // }
+    if (transactions.length > 0) {
+      var accessToken = await this.accessTokenRepository.findOne({
+        where: { type: AccessTokenType.nomba },
+      });
+
+      if (!accessToken) {
+        accessToken = await this.generateNombaAccessToken();
+      }
+    }
+
+    for (const trans of transactions) {
+      try {
+        const res = await axiosClient(
+          `${appConfig.NOMBA_BASE_URL}/v1/transactions/requery/${trans.session_id}`,
+          {
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+              accountId: appConfig.NOMBA_ACCOUNT_ID,
+              Authorization: `Bearer ${accessToken!.token}`,
+            },
+          }
+        );
+        console.log("Nomba bank verify transfer", res);
+      } catch (e) {
+        console.log("Error from Nomba verify Transfer:", e.response);
+      }
+      // try {
+      //   const resp = await verifyTransfer({ id: trans.session_id });
+      //   console.log("resp", resp);
+      //   if (resp.status) {
+      //     await this.transactionsRepository.update(
+      //       { id: trans.id },
+      //       {
+      //         status: TransactionStatusType.success,
+      //         session_id: resp.data.id,
+      //         metadata: {
+      //           ...trans.metadata,
+      //           flutterwave_resp: resp.data,
+      //           error: null,
+      //         },
+      //       }
+      //     );
+      //   } else {
+      //     await this.transactionsRepository.update(
+      //       { id: trans.id },
+      //       {
+      //         metadata: {
+      //           ...trans.metadata,
+      //           error: resp.message,
+      //           failed_resp: resp.data,
+      //         },
+      //       }
+      //     );
+      //     console.log("eerrr", resp.data);
+      //   }
+      // } catch (e) {
+      //   console.log("eerrr eee", e);
+      // }
+    }
   }
 
   async verifyProcessingVtpassTransactions() {
