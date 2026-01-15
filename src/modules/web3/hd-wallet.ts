@@ -193,6 +193,7 @@ export class HDWallet {
         token_symbol: symbol,
         amount: formattedBalance,
         hash: tx.hash,
+        fee: ethers.formatUnits(newGas, 18),
       });
     }
 
@@ -251,6 +252,7 @@ export class HDWallet {
       token_symbol: symbol,
       amount: formatUnits(balance, decimals),
       hash: tx.hash,
+      fee: ethers.formatUnits(totalGasCost, 18),
     });
 
     return true;
@@ -527,6 +529,7 @@ export class HDWallet {
     amount: number | string;
     token_symbol: string;
     hash?: string;
+    fee?: any;
   }) {
     try {
       return await this.publicService.transactionWebhook({
