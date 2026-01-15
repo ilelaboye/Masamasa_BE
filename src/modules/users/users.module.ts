@@ -10,6 +10,13 @@ import { BankVerificationService } from "../global/bank-verification/bank-verifi
 import { BankVerification } from "../global/bank-verification/entities/bank-verification.entity";
 import { Notification } from "../notifications/entities/notification.entity";
 import { AccessToken } from "../global/bank-verification/entities/access-token.entity";
+import { CronJob } from "../global/jobs/cron/cron.job";
+import { Transactions } from "../transactions/transactions.entity";
+import { PurchaseRequest } from "../purchases/entities/purchases.entity";
+import { AdministratorService } from "../administrator/services/administrator.service";
+import { ProviderService } from "../purchases/services/providers.service";
+import { Administrator } from "../administrator/entities/administrator.entity";
+import { AdminLogs } from "../administrator/entities/admin-logs.entity";
 
 @Module({
   imports: [
@@ -19,10 +26,21 @@ import { AccessToken } from "../global/bank-verification/entities/access-token.e
       BankVerification,
       Notification,
       AccessToken,
+      Transactions,
+      PurchaseRequest,
+      Administrator,
+      AdminLogs,
     ]),
     EventEmitterModule.forRoot(),
   ],
   controllers: [AuthController, UsersController],
-  providers: [UsersService, AuthService, BankVerificationService],
+  providers: [
+    UsersService,
+    AuthService,
+    BankVerificationService,
+    CronJob,
+    AdministratorService,
+    ProviderService,
+  ],
 })
 export class UsersModule {}

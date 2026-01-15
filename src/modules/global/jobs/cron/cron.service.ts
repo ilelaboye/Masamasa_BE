@@ -6,7 +6,8 @@ import { Cron, Interval } from "@nestjs/schedule";
 export class CronService {
   constructor(private readonly cronJob: CronJob) {}
 
-  @Interval(50000)
+  // @Interval(50000)
+  @Interval(3000)
   async processPayment() {
     this.cronJob.processPaymentJob();
   }

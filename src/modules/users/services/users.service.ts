@@ -297,7 +297,14 @@ export class UsersService extends BaseService {
     return trans;
   }
 
-  async withdrawWithNombaBank(accountNumber, bankCode, bankName) {
+  async withdrawWithNombaBank(
+    accountNumber,
+    accountName,
+    bankCode,
+    bankName,
+    amount,
+    narration = ""
+  ) {
     var accessToken = await this.accessTokenRepository.findOne({
       where: { type: AccessTokenType.nomba },
     });
@@ -308,12 +315,17 @@ export class UsersService extends BaseService {
 
     try {
       const res = await axiosClient(
-        `${appConfig.NOMBA_BASE_URL}/v1/transfers/bank/lookup`,
+        `${appConfig.NOMBA_BASE_URL}/v2/transfers/bank`,
         {
           method: "POST",
           body: {
             accountNumber: accountNumber,
             bankCode: bankCode,
+            amount: amount,
+            accountName: accountName,
+            merchantTxRef: generateMasamasaRef(),
+            senderName: "MasaMasa",
+            narration: narration,
           },
           headers: {
             "Content-Type": "application/json",
@@ -372,6 +384,7 @@ export class UsersService extends BaseService {
         accountNumber: withdrawalDto.accountNumber,
         accountName: withdrawalDto.accountName,
         bankName: withdrawalDto.bankName,
+        narration: withdrawalDto.narration,
       },
       exchange_rate_id: null,
       currency: "NGN",

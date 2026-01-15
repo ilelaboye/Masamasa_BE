@@ -22,6 +22,8 @@ import {
   AccessTokenType,
 } from "../../bank-verification/entities/access-token.entity";
 import { appConfig } from "@/config";
+import { UsersService } from "@/modules/users/services/users.service";
+import { generateMasamasaRef } from "@/core/helpers";
 
 @Injectable()
 export class CronJob {
@@ -34,6 +36,7 @@ export class CronJob {
     private readonly accessTokenRepository: Repository<AccessToken>,
     private readonly adminService: AdministratorService,
     private readonly providerService: ProviderService
+    // private readonly usersService: UsersService
   ) {}
 
   // Handles all notification jobs
@@ -49,6 +52,14 @@ export class CronJob {
       })
       .andWhere("trans.retry = :retry", { retry: 0 })
       .getMany();
+
+    var accessToken = await this.accessTokenRepository.findOne({
+      where: { type: AccessTokenType.nomba },
+    });
+
+    if (!accessToken) {
+      accessToken = await this.generateNombaAccessToken();
+    }
 
     for (const trans of transactions) {
       const balance = await this.adminService.getUserWalletBalance(
@@ -67,94 +78,133 @@ export class CronJob {
         );
         continue;
       }
+      // // pay with flutterwave
+      // try {
+      //   const resp = await transferWithFlutterWave({
+      //     amount: trans.amount,
+      //     bankCode: trans.metadata.bankCode,
+      //     accountNumber: trans.metadata.accountNumber,
+      //     ref: trans.masamasa_ref,
+      //     narration: "Transfer from Masamasa",
+      //   });
+      //   console.log("resp from transfer", resp);
+      //   if (resp.status) {
+      //     await this.transactionsRepository.update(
+      //       { id: trans.id },
+      //       {
+      //         status: TransactionStatusType.pending,
+      //         retry: trans.retry + 1,
+      //         session_id: resp.data.data.id,
+      //         metadata: {
+      //           ...trans.metadata,
+      //           error: null,
+      //           initiate_resp: resp.data,
+      //         },
+      //       }
+      //     );
+      //   } else {
+      //     await this.transactionsRepository.update(
+      //       { id: trans.id },
+      //       {
+      //         status: TransactionStatusType.failed,
+      //         metadata: {
+      //           ...trans.metadata,
+      //           error: resp.message,
+      //         },
+      //       }
+      //     );
+      //     console.log("eerrr", resp.data);
+      //   }
+      // } catch (e) {
+      //   console.log("eerrr eee", e);
+      // }
+
       try {
-        const resp = await transferWithFlutterWave({
-          amount: trans.amount,
-          bankCode: trans.metadata.bankCode,
-          accountNumber: trans.metadata.accountNumber,
-          ref: trans.masamasa_ref,
-          narration: "Transfer from Masamasa",
-        });
-        console.log("resp from transfer", resp);
-        if (resp.status) {
-          await this.transactionsRepository.update(
-            { id: trans.id },
-            {
-              status: TransactionStatusType.pending,
-              retry: trans.retry + 1,
-              session_id: resp.data.data.id,
-              metadata: {
-                ...trans.metadata,
-                error: null,
-                initiate_resp: resp.data,
-              },
-            }
-          );
-        } else {
-          await this.transactionsRepository.update(
-            { id: trans.id },
-            {
-              status: TransactionStatusType.failed,
-              metadata: {
-                ...trans.metadata,
-                error: resp.message,
-              },
-            }
-          );
-          console.log("eerrr", resp.data);
-        }
+        const res = await axiosClient(
+          `${appConfig.NOMBA_BASE_URL}/v1/transfers/bank`,
+          {
+            method: "POST",
+            body: {
+              accountNumber: trans.metadata.accountNumber,
+              bankCode: trans.metadata.bankCode,
+              amount: trans.amount,
+              accountName: trans.metadata.accountName,
+              merchantTxRef: generateMasamasaRef(),
+              senderName: "MasaMasa",
+              narration: trans.metadata.narration,
+            },
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+              accountId: appConfig.NOMBA_ACCOUNT_ID,
+              Authorization: `Bearer ${accessToken!.token}`,
+            },
+          }
+        );
+        console.log("Nomba bank transfer", res);
+        return {
+          message: "Account number verified",
+          data: {
+            bank_name: trans.metadata.bankName,
+            account_name: res.data.accountName,
+            account_number: trans.metadata.accountNumber,
+          },
+        };
       } catch (e) {
-        console.log("eerrr eee", e);
+        console.log("Error from Nomba Transfer:", e.response);
+        // // this.monitorService.recordError(e);
+
+        // throw new BadRequestException(e.response.data.description);
       }
     }
   }
 
   async verifyTransactionJob() {
     Logger.log("START VERIFYING MASAMASA TRANSACTION");
-    const transactions = await this.transactionsRepository
-      .createQueryBuilder("trans")
-      .where("trans.status = :status", {
-        status: TransactionStatusType.pending,
-      })
-      .andWhere("trans.entity_type = :type", {
-        type: TransactionEntityType.withdrawal,
-      })
-      .getMany();
+    // const transactions = await this.transactionsRepository
+    //   .createQueryBuilder("trans")
+    //   .where("trans.status = :status", {
+    //     status: TransactionStatusType.pending,
+    //   })
+    //   .andWhere("trans.entity_type = :type", {
+    //     type: TransactionEntityType.withdrawal,
+    //   })
+    //   .getMany();
 
-    for (const trans of transactions) {
-      try {
-        const resp = await verifyTransfer({ id: trans.session_id });
-        console.log("resp", resp);
-        if (resp.status) {
-          await this.transactionsRepository.update(
-            { id: trans.id },
-            {
-              status: TransactionStatusType.success,
-              session_id: resp.data.id,
-              metadata: {
-                ...trans.metadata,
-                flutterwave_resp: resp.data,
-                error: null,
-              },
-            }
-          );
-        } else {
-          await this.transactionsRepository.update(
-            { id: trans.id },
-            {
-              metadata: {
-                ...trans.metadata,
-                error: resp.message,
-                failed_resp: resp.data,
-              },
-            }
-          );
-          console.log("eerrr", resp.data);
-        }
-      } catch (e) {
-        console.log("eerrr eee", e);
-      }
-    }
+    // for (const trans of transactions) {
+    //   try {
+    //     const resp = await verifyTransfer({ id: trans.session_id });
+    //     console.log("resp", resp);
+    //     if (resp.status) {
+    //       await this.transactionsRepository.update(
+    //         { id: trans.id },
+    //         {
+    //           status: TransactionStatusType.success,
+    //           session_id: resp.data.id,
+    //           metadata: {
+    //             ...trans.metadata,
+    //             flutterwave_resp: resp.data,
+    //             error: null,
+    //           },
+    //         }
+    //       );
+    //     } else {
+    //       await this.transactionsRepository.update(
+    //         { id: trans.id },
+    //         {
+    //           metadata: {
+    //             ...trans.metadata,
+    //             error: resp.message,
+    //             failed_resp: resp.data,
+    //           },
+    //         }
+    //       );
+    //       console.log("eerrr", resp.data);
+    //     }
+    //   } catch (e) {
+    //     console.log("eerrr eee", e);
+    //   }
+    // }
   }
 
   async verifyProcessingVtpassTransactions() {
