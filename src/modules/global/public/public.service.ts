@@ -139,7 +139,7 @@ export class PublicService {
     //   "webhook.data.transaction.merchantTxRef",
     //   webhook.data.transaction.merchantTxRef
     // );
-    if (webhook) {
+    if (Object.entries(webhook).length > 0) {
       const transaction = await this.transactionsRepository
         .createQueryBuilder("trans")
         .where("trans.entity_type = :entityType", {
