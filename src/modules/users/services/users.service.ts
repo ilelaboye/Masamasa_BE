@@ -18,11 +18,17 @@ import {
   UploadImageDto,
   WithdrawalDto,
 } from "../dto";
-import { getRequestQuery, hashResourceSync, verifyHash } from "@/core/utils";
+import {
+  axiosClient,
+  getRequestQuery,
+  hashResourceSync,
+  verifyHash,
+} from "@/core/utils";
 import { TransactionService } from "@/modules/transactions/transactions.service";
 import {
   TransactionEntityType,
   TransactionModeType,
+  Transactions,
   TransactionStatusType,
 } from "@/modules/transactions/transactions.entity";
 import { Transfer } from "@/modules/transfers/transfers.entity";
@@ -30,6 +36,12 @@ import { generateMasamasaRef, paginate } from "@/core/helpers";
 import { BVNVerificationDto } from "@/modules/global/bank-verification/dto/bvn-verification.dto";
 import { BankVerificationService } from "@/modules/global/bank-verification/bank-verification.service";
 import { Notification } from "@/modules/notifications/entities/notification.entity";
+import {
+  AccessToken,
+  AccessTokenType,
+} from "@/modules/global/bank-verification/entities/access-token.entity";
+import { CronJob } from "@/modules/global/jobs/cron/cron.job";
+import { appConfig } from "@/config";
 
 @Injectable()
 export class UsersService extends BaseService {
@@ -40,8 +52,13 @@ export class UsersService extends BaseService {
     private readonly transferRepository: Repository<Transfer>,
     @InjectRepository(Notification)
     private readonly notificationRepository: Repository<Notification>,
+    @InjectRepository(AccessToken)
+    private readonly accessTokenRepository: Repository<AccessToken>,
+    @InjectRepository(Transactions)
+    private readonly transactionsRepository: Repository<Transactions>,
     private readonly transactionService: TransactionService,
-    private readonly bankVerificationService: BankVerificationService
+    private readonly bankVerificationService: BankVerificationService,
+    private readonly cronJob: CronJob
   ) {
     super();
   }
@@ -283,6 +300,61 @@ export class UsersService extends BaseService {
     return trans;
   }
 
+  // async withdrawWithNombaBank(
+  //   accountNumber,
+  //   accountName,
+  //   bankCode,
+  //   bankName,
+  //   amount,
+  //   narration = ""
+  // ) {
+  //   var accessToken = await this.accessTokenRepository.findOne({
+  //     where: { type: AccessTokenType.nomba },
+  //   });
+
+  //   if (!accessToken) {
+  //     accessToken = await this.cronJob.generateNombaAccessToken();
+  //   }
+
+  //   try {
+  //     const res = await axiosClient(
+  //       `${appConfig.NOMBA_BASE_URL}/v2/transfers/bank`,
+  //       {
+  //         method: "POST",
+  //         body: {
+  //           accountNumber: accountNumber,
+  //           bankCode: bankCode,
+  //           amount: amount,
+  //           accountName: accountName,
+  //           merchantTxRef: generateMasamasaRef(),
+  //           senderName: "MasaMasa",
+  //           narration: narration,
+  //         },
+  //         headers: {
+  //           "Content-Type": "application/json",
+  //           Accept: "application/json",
+  //           accountId: appConfig.NOMBA_ACCOUNT_ID,
+  //           Authorization: `Bearer ${accessToken!.token}`,
+  //         },
+  //       }
+  //     );
+  //     console.log("Nomba bank lookup", res);
+  //     return {
+  //       message: "Account number verified",
+  //       data: {
+  //         bank_name: bankName,
+  //         account_name: res.data.accountName,
+  //         account_number: accountNumber,
+  //       },
+  //     };
+  //   } catch (e) {
+  //     console.log("Error loop bank details from Nomba:", e);
+  //     // // this.monitorService.recordError(e);
+
+  //     throw new BadRequestException(e.response.data.description);
+  //   }
+  // }
+
   async withdrawal(withdrawalDto: WithdrawalDto, req: UserRequest) {
     const user = await this.userRepository
       .createQueryBuilder("user")
@@ -315,6 +387,7 @@ export class UsersService extends BaseService {
         accountNumber: withdrawalDto.accountNumber,
         accountName: withdrawalDto.accountName,
         bankName: withdrawalDto.bankName,
+        narration: withdrawalDto.narration,
       },
       exchange_rate_id: null,
       currency: "NGN",
@@ -324,6 +397,68 @@ export class UsersService extends BaseService {
       coin_exchange_rate: 0,
       status: TransactionStatusType.processing,
     });
+
+    var accessToken = await this.accessTokenRepository.findOne({
+      where: { type: AccessTokenType.nomba },
+    });
+
+    if (!accessToken) {
+      accessToken = await this.cronJob.generateNombaAccessToken();
+    }
+
+    try {
+      const res = await axiosClient(
+        `${appConfig.NOMBA_BASE_URL}/v1/transfers/bank`,
+        {
+          method: "POST",
+          body: {
+            accountNumber: trans.metadata.accountNumber,
+            bankCode: trans.metadata.bankCode,
+            amount: trans.amount,
+            accountName: trans.metadata.accountName,
+            merchantTxRef: trans.masamasa_ref,
+            senderName: "MasaMasa",
+            narration: withdrawalDto.narration,
+          },
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            accountId: appConfig.NOMBA_ACCOUNT_ID,
+            Authorization: `Bearer ${accessToken!.token}`,
+          },
+        }
+      );
+
+      console.log("Nomba bank transfer", res.data);
+      if (res.data.status == "SUCCESS") {
+        console.log("Nomba transfer initiated successfully");
+        await this.transactionsRepository.update(
+          { id: trans.id },
+          {
+            retry: trans.retry + 1,
+            session_id: res.data.id,
+          }
+        );
+      } else {
+        await this.transactionsRepository.update(
+          { id: trans.id },
+          {
+            status: TransactionStatusType.failed,
+            retry: trans.retry + 1,
+            metadata: {
+              ...trans.metadata,
+              error: res.data,
+              initiate_resp: res.data,
+            },
+          }
+        );
+      }
+    } catch (e) {
+      console.log("Error from Nomba Transfer:", e.response);
+      // // this.monitorService.recordError(e);
+
+      throw new BadRequestException(e.response.data.description);
+    }
 
     return trans;
   }

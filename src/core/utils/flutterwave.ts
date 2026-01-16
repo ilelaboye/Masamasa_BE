@@ -5,7 +5,7 @@ const Flutterwave = require("flutterwave-node-v3");
 
 const flw = new Flutterwave(appConfig.FLW_PUBLIC_KEY, appConfig.FLW_SECRET_KEY);
 
-export async function transfer({
+export async function transferWithFlutterWave({
   amount,
   bankCode,
   accountNumber,

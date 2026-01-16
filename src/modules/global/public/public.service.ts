@@ -126,6 +126,46 @@ export class PublicService {
     }
   }
 
+  async nombaTransferWebhook(webhook) {
+    console.log(
+      "webhook.data.transaction.merchantTxRef",
+      webhook.data.transaction.merchantTxRef
+    );
+    const transaction = await this.transactionsRepository
+      .createQueryBuilder("trans")
+      .where("trans.entity_type = :entityType", {
+        entityType: TransactionEntityType.withdrawal,
+      })
+      .andWhere("trans.masamasa_ref = :ref", {
+        ref: webhook.data.transaction.merchantTxRef,
+      })
+      .getOne();
+    // return transaction;
+    console.log("Nomba webhook transaction", transaction);
+    if (transaction) {
+      if (webhook.event_type == "payout_success") {
+        this.transactionsRepository.update(
+          { id: transaction.id },
+          {
+            status: TransactionStatusType.success,
+            metadata: { ...transaction.metadata, nomba_resp: webhook.data },
+          }
+        );
+      } else if (
+        webhook.event_type == "payout_failed" ||
+        webhook.event_type == "payout_refund"
+      ) {
+        this.transactionsRepository.update(
+          { id: transaction.id },
+          {
+            status: TransactionStatusType.failed,
+            metadata: { ...transaction.metadata, nomba_resp: webhook.data },
+          }
+        );
+      }
+    }
+  }
+
   async getPrice(symbol): Promise<{ status: boolean; price: any }> {
     // try {
     //   const price = await axios.get(
@@ -210,23 +250,40 @@ export class PublicService {
     }
   }
 
-  async getPaystackBanks() {
-    return getBanks();
-    // try {
-    //   const { status, data } = await axiosClient(
-    //     `https://api.paystack.co/bank`,
-    //     {
-    //       headers: { Authorization: `Bearer ${appConfig.PAYSTACK_SECRET_KEY}` },
-    //     }
-    //   );
+  async getBanksFromNomba() {
+    console.log("getBanksFromNomba called");
+    const accessToken = await this.accessTokenRepository.findOne({
+      where: { type: AccessTokenType.nomba },
+    });
+    console.log("accessToken", accessToken);
+    if (!accessToken) {
+      console.log("No access token found, generating new one");
+      const get = await this.cronJob.generateNombaAccessToken();
+      console.log("Generated access token", get);
+    }
+    try {
+      if (accessToken) {
+        const resp = await axiosClient(
+          `${appConfig.NOMBA_BASE_URL}/v1/transfers/banks`,
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken.token}`,
+              accountId: appConfig.NOMBA_ACCOUNT_ID,
+            },
+          }
+        );
 
-    //   if (!status)
-    //     throw new BadRequestException("Banks cannot be fetched at the moment");
-    //   console.log("banks", data);
-    //   return data;
-    // } catch (error) {
-    //   throw new BadRequestException(error.message);
-    // }
+        console.log("nomba banks", resp);
+        return resp.data;
+      }
+    } catch (error) {
+      throw new BadRequestException(error.response.data.description);
+    }
+  }
+
+  async getBanks() {
+    // return getBanks();
+    return await this.getBanksFromNomba();
   }
 
   // async saveWalletAddress(createWalletDto: CreateWalletDto) {
@@ -266,6 +323,74 @@ export class PublicService {
   //   console.log("done", wallet);
   //   return await this.walletRepository.save(wallet);
   // }
+
+  async verifyAccountNumberFromNomba(accountNumber, bankCode, bankName) {
+    var accessToken = await this.accessTokenRepository.findOne({
+      where: { type: AccessTokenType.nomba },
+    });
+
+    if (!accessToken) {
+      accessToken = await this.cronJob.generateNombaAccessToken();
+    }
+
+    try {
+      const res = await axiosClient(
+        `${appConfig.NOMBA_BASE_URL}/v1/transfers/bank/lookup`,
+        {
+          method: "POST",
+          body: {
+            accountNumber: accountNumber,
+            bankCode: bankCode,
+          },
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            accountId: appConfig.NOMBA_ACCOUNT_ID,
+            Authorization: `Bearer ${accessToken!.token}`,
+          },
+        }
+      );
+      console.log("Nomba bank lookup", res);
+      return {
+        message: "Account number verified",
+        data: {
+          bank_name: bankName,
+          account_name: res.data.accountName,
+          account_number: accountNumber,
+        },
+      };
+    } catch (e) {
+      console.log("Error loop bank details from Nomba:", e);
+      // // this.monitorService.recordError(e);
+
+      throw new BadRequestException(e.response.data.description);
+    }
+  }
+
+  async verifyAccountNumberFromClan(accountNumber, bankCode, bankName) {
+    try {
+      const response = await axiosClient(
+        `https://mobile.creditclan.com/webapi/v1/account/resolve`,
+        {
+          method: "POST",
+          body: {
+            bank_code: bankCode,
+            account_number: accountNumber,
+          },
+          headers: { "x-api-key": `${appConfig.CLAN_TOKEN}` },
+        }
+      );
+      if (!response.status)
+        throw new BadRequestException("Account number verification failed");
+
+      return {
+        message: "Account number verified",
+        data: { bank_name: bankName, ...response.data },
+      };
+    } catch (error) {
+      throw new BadRequestException(error.message);
+    }
+  }
 
   async verifyAccountNumber(
     bankAccountVerificationDto: BankAccountVerificationDto

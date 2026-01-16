@@ -1,8 +1,9 @@
-import { successResponse } from "@/core/utils";
+import { successResponse, verifyNombaWebhook } from "@/core/utils";
 import { JoiValidationPipe } from "@/pipes/joi.validation.pipe";
 import { CacheInterceptor } from "@nestjs/cache-manager";
 import {
   Body,
+  Headers,
   Controller,
   Get,
   Param,
@@ -55,6 +56,26 @@ export class PublicController {
   async flutterwaveTransferWebhook(@Body() webhook) {
     console.log("FLUTTERWAVE TRANSFER WEBHOOK", webhook);
     return await this.publicService.flutterwaveTransferWebhook(webhook);
+  }
+
+  @Post("webhook/nomba/transfer")
+  async nombaTransferWebhook(
+    @Body() webhook,
+    @Headers("nomba-signature") signature: string,
+    @Headers("nomba-sig-value") sigValue: string,
+    @Headers("nomba-signature-algorithm") algorithm: string,
+    @Headers("nomba-signature-version") version: string,
+    @Headers("nomba-timestamp") timestamp: string
+  ) {
+    // MASA3GNKTdmJsv001768505755079
+    console.log("NOMBA TRANSFER WEBHOOK", webhook);
+    console.log("NOMBA TRANSFER WEBHOOK signature", signature);
+    console.log("NOMBA TRANSFER WEBHOOK sigValue", sigValue);
+    console.log("NOMBA TRANSFER WEBHOOK algorithm", algorithm);
+    console.log("NOMBA TRANSFER WEBHOOK version", version);
+    console.log("NOMBA TRANSFER WEBHOOK timestamp", timestamp);
+    verifyNombaWebhook(webhook, signature, timestamp);
+    return await this.publicService.nombaTransferWebhook(webhook);
   }
 
   @Post("webhook/transaction")

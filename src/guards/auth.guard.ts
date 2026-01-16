@@ -23,6 +23,8 @@ export class AuthGuard implements CanActivate {
         secret: appConfig.JWT_SECRET,
       });
 
+      console.log("Payload", payload);
+
       req["user"] = payload;
     } catch {
       res.clearCookie(_AUTH_COOKIE_NAME_);
