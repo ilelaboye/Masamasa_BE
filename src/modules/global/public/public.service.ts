@@ -135,41 +135,43 @@ export class PublicService {
   }
 
   async nombaTransferWebhook(webhook) {
-    console.log(
-      "webhook.data.transaction.merchantTxRef",
-      webhook.data.transaction.merchantTxRef
-    );
-    const transaction = await this.transactionsRepository
-      .createQueryBuilder("trans")
-      .where("trans.entity_type = :entityType", {
-        entityType: TransactionEntityType.withdrawal,
-      })
-      .andWhere("trans.masamasa_ref = :ref", {
-        ref: webhook.data.transaction.merchantTxRef,
-      })
-      .getOne();
-    // return transaction;
-    console.log("Nomba webhook transaction", transaction);
-    if (transaction) {
-      if (webhook.event_type == "payout_success") {
-        this.transactionsRepository.update(
-          { id: transaction.id },
-          {
-            status: TransactionStatusType.success,
-            metadata: { ...transaction.metadata, nomba_resp: webhook.data },
-          }
-        );
-      } else if (
-        webhook.event_type == "payout_failed" ||
-        webhook.event_type == "payout_refund"
-      ) {
-        this.transactionsRepository.update(
-          { id: transaction.id },
-          {
-            status: TransactionStatusType.failed,
-            metadata: { ...transaction.metadata, nomba_resp: webhook.data },
-          }
-        );
+    // console.log(
+    //   "webhook.data.transaction.merchantTxRef",
+    //   webhook.data.transaction.merchantTxRef
+    // );
+    if (webhook) {
+      const transaction = await this.transactionsRepository
+        .createQueryBuilder("trans")
+        .where("trans.entity_type = :entityType", {
+          entityType: TransactionEntityType.withdrawal,
+        })
+        .andWhere("trans.masamasa_ref = :ref", {
+          ref: webhook.data.transaction.merchantTxRef,
+        })
+        .getOne();
+      // return transaction;
+      console.log("Nomba webhook transaction", transaction);
+      if (transaction) {
+        if (webhook.event_type == "payout_success") {
+          this.transactionsRepository.update(
+            { id: transaction.id },
+            {
+              status: TransactionStatusType.success,
+              metadata: { ...transaction.metadata, nomba_resp: webhook.data },
+            }
+          );
+        } else if (
+          webhook.event_type == "payout_failed" ||
+          webhook.event_type == "payout_refund"
+        ) {
+          this.transactionsRepository.update(
+            { id: transaction.id },
+            {
+              status: TransactionStatusType.failed,
+              metadata: { ...transaction.metadata, nomba_resp: webhook.data },
+            }
+          );
+        }
       }
     }
   }
