@@ -129,7 +129,7 @@ export class CronJob {
               bankCode: trans.metadata.bankCode,
               amount: trans.amount,
               accountName: trans.metadata.accountName,
-              merchantTxRef: generateMasamasaRef(),
+              merchantTxRef: trans.masamasa_ref,
               senderName: "MasaMasa",
               narration: trans.metadata.narration,
             },
@@ -141,8 +141,10 @@ export class CronJob {
             },
           }
         );
-        console.log("Nomba bank transfer", res);
+
+        console.log("Nomba bank transfer", res.data);
         if (res.data.status == "SUCCESS") {
+          console.log("Nomba transfer initiated successfully");
           await this.transactionsRepository.update(
             { id: trans.id },
             {
@@ -212,7 +214,7 @@ export class CronJob {
     for (const trans of transactions) {
       try {
         const res = await axiosClient(
-          `${appConfig.NOMBA_BASE_URL}/v1/transactions/requery/${trans.session_id}`,
+          `${appConfig.NOMBA_BASE_URL}/v1/transactions/accounts/single?orderReference=${trans.session_id}`,
           {
             headers: {
               "Content-Type": "application/json",
@@ -222,9 +224,9 @@ export class CronJob {
             },
           }
         );
-        console.log("Nomba bank verify transfer", res);
+        console.log("Nomba bank verify transfer", res.data);
       } catch (e) {
-        console.log("Error from Nomba verify Transfer:", e.response);
+        console.log("Error from Nomba verify Transfer:", e.response.data);
       }
       // try {
       //   const resp = await verifyTransfer({ id: trans.session_id });

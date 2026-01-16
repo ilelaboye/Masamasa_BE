@@ -91,4 +91,5 @@ export const appConfig = {
   NOMBA_PRIVATE_KEY: process.env.NOMBA_PRIVATE_KEY || "",
   NOMBA_ACCOUNT_ID: process.env.NOMBA_ACCOUNT_ID || "",
   NOMBA_BASE_URL: process.env.NOMBA_BASE_URL || "https://api.nomba.com",
+  NOMBA_WEBHOOK_SECRET: process.env.NOMBA_WEBHOOK_SECRET || "",
 };

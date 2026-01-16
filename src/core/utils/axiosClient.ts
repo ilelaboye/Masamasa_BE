@@ -23,7 +23,7 @@ export async function axiosClient<T = any>(
     });
     return response.data;
   } catch (error) {
-    console.log("axios error", error);
+    // console.log("axios error", error);
     // const errorResponse = error.response?.data || {};
     // const errorMessage =
     //   errorResponse.message ||

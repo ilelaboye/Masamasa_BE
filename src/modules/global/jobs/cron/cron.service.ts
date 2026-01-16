@@ -7,15 +7,15 @@ export class CronService {
   constructor(private readonly cronJob: CronJob) {}
 
   // @Interval(50000)
-  @Interval(3000)
-  async processPayment() {
-    this.cronJob.processPaymentJob();
-  }
+  // @Interval(10000)
+  // async processPayment() {
+  //   this.cronJob.processPaymentJob();
+  // }
 
-  @Interval(6000)
-  async verifyTransactions() {
-    this.cronJob.verifyTransactionJob();
-  }
+  // @Interval(6000)
+  // async verifyTransactions() {
+  //   this.cronJob.verifyTransactionJob();
+  // }
 
   @Interval(6000)
   async verifyProcessingVtpassTransactions() {
