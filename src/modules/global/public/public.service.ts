@@ -25,6 +25,11 @@ import { ExchangeRateService } from "@/modules/exchange-rates/exchange-rates.ser
 import { NotificationsService } from "@/modules/notifications/notifications.service";
 import { NotificationTag } from "@/modules/notifications/entities/notification.entity";
 import { CreateWalletDto } from "@/modules/wallet/wallet.dto";
+import {
+  AccessToken,
+  AccessTokenType,
+} from "../bank-verification/entities/access-token.entity";
+import { CronJob } from "../jobs/cron/cron.job";
 
 @Injectable()
 export class PublicService {
@@ -37,8 +42,11 @@ export class PublicService {
     private readonly transactionsRepository: Repository<Transactions>,
     @InjectRepository(Webhook)
     private readonly webhookRepository: Repository<Webhook>,
+    @InjectRepository(AccessToken)
+    private readonly accessTokenRepository: Repository<AccessToken>,
     private readonly exchangeRateService: ExchangeRateService,
-    private readonly notificationsService: NotificationsService
+    private readonly notificationsService: NotificationsService,
+    private readonly cronJob: CronJob
   ) {}
 
   async transactionWebhook(transactionWebhook: TransactionWebhookDto) {
@@ -396,46 +404,8 @@ export class PublicService {
     bankAccountVerificationDto: BankAccountVerificationDto
   ) {
     const { accountNumber, bankCode, bankName } = bankAccountVerificationDto;
-
-    try {
-      // const response = await axiosClient(
-      //   `https://api.paystack.co/bank/resolve?account_number=${accountNumber}&bank_code=${bankCode}`,
-      //   {
-      //     headers: { Authorization: `Bearer ${appConfig.PAYSTACK_SECRET_KEY}` },
-      //   }
-      // );
-      // if (!response.status)
-      //   throw new BadRequestException("Account number verification failed");
-
-      // return {
-      //   message: "Account number verified",
-      //   data: { bank_name: bankName, ...response.data },
-      // };
-      try {
-        const response = await axiosClient(
-          `https://mobile.creditclan.com/webapi/v1/account/resolve`,
-          {
-            method: "POST",
-            body: {
-              bank_code: bankCode,
-              account_number: accountNumber,
-            },
-            headers: { "x-api-key": `${appConfig.CLAN_TOKEN}` },
-          }
-        );
-        if (!response.status)
-          throw new BadRequestException("Account number verification failed");
-
-        return {
-          message: "Account number verified",
-          data: { bank_name: bankName, ...response.data },
-        };
-      } catch (error) {
-        throw new BadRequestException(error.message);
-      }
-    } catch (error) {
-      throw new BadRequestException(error.message);
-    }
+    return this.verifyAccountNumberFromNomba(accountNumber, bankCode, bankName);
+    // return this.verifyAccountNumberFromClan(accountNumber, bankCode, bankName);
   }
 
   async testMail() {
