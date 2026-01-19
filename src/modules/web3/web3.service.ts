@@ -15,6 +15,7 @@ import { getAssociatedTokenAddress, getAccount } from "@solana/spl-token";
 import { Bip32PrivateKey } from "@emurgo/cardano-serialization-lib-nodejs";
 import { CardanoHDWallet } from "./ada-hd-wallet";
 import { BtcHDWallet } from "./btc-hd-wallet";
+import { DogeHDWallet } from "./doge-hd-wallet";
 import { XrpHDWallet } from "./xrp-hd-wallet";
 import base58 from "bs58";
 import { sweepSPLToken } from "./Sol";
@@ -46,6 +47,7 @@ export class Web3Service {
   private tronWeb: any;
   private hdADA: CardanoHDWallet;
   private hdBTC: BtcHDWallet;
+  private hdDoge: DogeHDWallet;
   private hdXrp: XrpHDWallet;
   constructor(
     @InjectRepository(Wallet)
@@ -80,6 +82,11 @@ export class Web3Service {
     );
     this.hdBTC = new BtcHDWallet(
       appConfig.BTC_MASTER_MNEMONIC,
+      false,
+      this.publicService,
+    );
+    this.hdDoge = new DogeHDWallet(
+      appConfig.MASTER_MNEMONIC,
       false,
       this.publicService,
     );
@@ -157,6 +164,10 @@ export class Web3Service {
       const existWalletXRP = await this.walletRepository.findOne({
         where: { wallet_address: xrpWalletAddress },
       });
+      const dogeChild = this.hdDoge.generateAddress(Number(userId));
+      const existWalletDOGE = await this.walletRepository.findOne({
+        where: { wallet_address: dogeChild },
+      });
 
       if (!existWalletBTC) {
         const btc = this.walletRepository.create({
@@ -208,14 +219,14 @@ export class Web3Service {
         await this.walletRepository.save(trx);
       }
 
-      if (!existWalletXRP) {
-        const xrp = this.walletRepository.create({
+      if (!existWalletDOGE) {
+        const doge = this.walletRepository.create({
           user: req.user,
-          network: "RIPPLE",
-          currency: "XRP",
-          wallet_address: xrpWalletAddress,
+          network: "DOGE",
+          currency: "DOGE",
+          wallet_address: dogeChild,
         });
-        await this.walletRepository.save(xrp);
+        await this.walletRepository.save(doge);
       }
 
       return {
@@ -225,6 +236,7 @@ export class Web3Service {
         ada: cardanoChild,
         btc: btcChild,
         xrp: xrpWalletAddress,
+        doge: dogeChild,
       };
     } catch (err: any) {
       console.error(err);
@@ -318,6 +330,36 @@ export class Web3Service {
       console.error("XRP Tracking failed:", err.message);
     }
 
+    try {
+      // DOGE TRACKING
+      const dogeAddress = this.hdDoge.generateAddress(req.user.id);
+      const onChainDoge = await this.hdDoge.getChildTransactionHistory(req.user.id, 10);
+
+      const dbDogeTransactions = await this.transactionRepository
+        .createQueryBuilder("transactions")
+        .where("transactions.user_id = :userId AND transactions.network = :network", {
+          userId: req.user.id,
+          network: "DOGE"
+        })
+        .getMany();
+
+      const existingHashes = dbDogeTransactions.map(tx => tx.metadata?.hash || tx.metadata?.txID);
+
+      const unmatchedDoge = onChainDoge.filter(tx => !existingHashes.includes(tx.txID));
+
+      for (const tx of unmatchedDoge) {
+        await this.publicService.transactionWebhook({
+          network: "DOGE",
+          address: dogeAddress,
+          amount: tx.amount,
+          token_symbol: "DOGE",
+          hash: tx.txID
+        });
+      }
+    } catch (err) {
+      console.error("DOGE Tracking failed:", err.message);
+    }
+
     return { transactions: true };
   }
 
@@ -346,6 +388,7 @@ export class Web3Service {
         BASE_BTC: "0x0555e30da8f98308edb960aa94c0db47230d2b9c", // BASE BTC
         BASE_BNB: "0xf7158362807485ae32b6e0b40fd613c70629e9be",
         BNB_USDT: "0x55d398326f99059fF775485246999027B3197955", // BSC USDT
+        BNB_ADA: "0x3EE2200Efb3400fAbB9AacF31297cBdD1d435D47",
         BNB_USDC: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", // BSC USDT
         BNB_RIPPLE: "0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE", // BSC XRP
         BNB_DOGE: "0xbA2aE424d960c26247Dd6c32edC70B295c744C43", // BSC DOGE
@@ -452,6 +495,17 @@ export class Web3Service {
           );
         } catch (e) {
           console.log("BNB_USDC sweep failed", e);
+        }
+        try {
+          await this.hd.sweepToken(
+            childWallet2,
+            masterWallet,
+            ERC20_TOKENS["BNB_ADA"],
+            "BINANCE CHAIN",
+            "ADA",
+          );
+        } catch (e) {
+          console.log("BNB_ADA sweep failed", e);
         }
 
         try {
@@ -592,6 +646,15 @@ export class Web3Service {
         } catch (e) {
           console.log("XRP sweep failed", e);
         }
+
+        try {
+          await this.hdDoge.sweepDOGE(
+            Number(req.user.id),
+            this.hdDoge.generateAddress(0),
+          );
+        } catch (e) {
+          console.log("DOGE sweep failed", e);
+        }
       }
     } catch (err: any) {
       console.error(`Failed to for user ${req.user.id}:`, err);
@@ -611,6 +674,7 @@ export class Web3Service {
         BASE_BTC: "0x0555e30da8f98308edb960aa94c0db47230d2b9c", // BASE BTC
         BASE_BNB: "0xf7158362807485ae32b6e0b40fd613c70629e9be",
         BNB_USDT: "0x55d398326f99059fF775485246999027B3197955", // BSC USDT
+        BNB_ADA: "0x3EE2200Efb3400fAbB9AacF31297cBdD1d435D47",
         BNB_USDC: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", // BSC USDC
         BNB_RIPPLE: "0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE", // BSC XRP
         BNB_DOGE: "0xbA2aE424d960c26247Dd6c32edC70B295c744C43", // BSC DOGE
@@ -680,6 +744,15 @@ export class Web3Service {
 
       if (network === "RIPPLE" || network === "XRP") {
         const txHash = await this.hdXrp.withdrawXRP(payload.to, amount, payload.destinationTag);
+        return { success: true, txHash };
+      }
+
+      if (network === "DOGE") {
+        const txHash = await this.hdDoge.withdrawDOGE(
+          this.hdDoge.generateAddress(0),
+          payload.to,
+          amount,
+        );
         return { success: true, txHash };
       }
 
@@ -799,6 +872,7 @@ export class Web3Service {
       BASE_BTC: "0x0555e30da8f98308edb960aa94c0db47230d2b9c", // BASE BTC
       BASE_BNB: "0xf7158362807485ae32b6e0b40fd613c70629e9be",
       BNB_USDT: "0x55d398326f99059fF775485246999027B3197955", // BSC USDT
+      BNB_ADA: "0x3EE2200Efb3400fAbB9AacF31297cBdD1d435D47",
       BNB_USDC: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", // BSC USDT
       BNB_RIPPLE: "0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE", // BSC XRP
       BNB_DOGE: "0xbA2aE424d960c26247Dd6c32edC70B295c744C43", // BSC DOGE
@@ -866,6 +940,10 @@ export class Web3Service {
         masterWallet,
         ERC20_TOKENS["BNB_DOGE"],
       );
+      const BNBADA = await this.hd.getERC20Balance(
+        masterWallet,
+        ERC20_TOKENS["BNB_ADA"],
+      );
 
       //SOL
       const solUSDT = await this.hdSol.getSPLTokenBalance(
@@ -902,6 +980,9 @@ export class Web3Service {
       const xrpBalance = await this.hdXrp.getBalance(
         (await this.hdXrp.getMasterWallet()).address,
       );
+      const dogeBalance = await this.hdDoge.getBalance(
+        this.hdDoge.generateAddress(0),
+      );
 
       let tronWalletCount = 0;
       try {
@@ -934,6 +1015,7 @@ export class Web3Service {
           BTC: BNBBTC,
           RIPPLE: BNBRIPPLE,
           DOGE: BNBDOGE,
+          ADA: BNBADA,
         },
         sol: {
           SOL: solBalance + 0.02,
@@ -954,6 +1036,9 @@ export class Web3Service {
         },
         RIPPLE: {
           XRP: xrpBalance,
+        },
+        DOGE: {
+          DOGE: dogeBalance,
         },
       };
     } catch (err: any) {
@@ -1012,6 +1097,9 @@ export class Web3Service {
 
         // Ripple
         this.hdXrp.getHistoryByUserId(userId, limit),
+
+        // Doge
+        this.hdDoge.getChildTransactionHistory(userId, limit),
       ]);
 
       const flatHistory = histories.flat();
@@ -1036,7 +1124,9 @@ export class Web3Service {
                   ? "TRON"
                   : tx.token_symbol === "XRP"
                     ? "RIPPLE"
-                    : ""),
+                    : tx.token_symbol === "DOGE"
+                      ? "DOGE"
+                      : ""),
         txID: tx.txID || tx.hash || "",
       }));
 
