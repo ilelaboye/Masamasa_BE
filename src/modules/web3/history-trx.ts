@@ -2,6 +2,7 @@ import axios from "axios";
 import * as bip39 from "bip39";
 import { hdkey } from "ethereumjs-wallet";
 import { PublicService } from "../global/public/public.service";
+import { appConfig } from "@/config";
 const TronWeb = require("tronweb");
 
 export class TronHDWallet {
