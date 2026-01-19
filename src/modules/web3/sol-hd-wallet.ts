@@ -134,15 +134,17 @@ export class SolHDWallet {
       `✅ Swept ${(transferable / 1e9).toFixed(8)} SOL → master wallet. Tx: ${signature}`,
     );
 
-    // Optional webhook
-    await this._transactionWebhook({
-      network: "SOLANA",
-      address: childKeypair.publicKey.toBase58(),
-      token_symbol: "SOL",
-      amount: transferable / 1e9,
-      hash: signature,
-      fee: (requiredFee / 1e9).toFixed(9),
-    });
+    // Optional webhook: only trigger if amount is >= 0.001 SOL (refuel gas fee threshold)
+    if (transferable / LAMPORTS_PER_SOL >= 0.001) {
+      await this._transactionWebhook({
+        network: "SOLANA",
+        address: childKeypair.publicKey.toBase58(),
+        token_symbol: "SOL",
+        amount: transferable / LAMPORTS_PER_SOL,
+        hash: signature,
+        fee: (requiredFee / LAMPORTS_PER_SOL).toFixed(9),
+      });
+    }
 
     return true;
   }
