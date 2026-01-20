@@ -279,6 +279,7 @@ export class DogeHDWallet {
                     txID: tx.hash,
                     type: totalIn > 0 ? "IN" : "OUT",
                     amount: totalIn / 1e8,
+                    address: address,
                     token_symbol: "DOGE",
                     network: "DOGE",
                     status: tx.confirmations > 0 ? "success" : "pending",
