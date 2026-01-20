@@ -393,6 +393,9 @@ export class Web3Service {
         BNB_RIPPLE: "0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE", // BSC XRP
         BNB_DOGE: "0xbA2aE424d960c26247Dd6c32edC70B295c744C43", // BSC DOGE
         BNB_BTC: "0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c", // BSC BTC
+        BNB_ETH: "0x2170Ed0880ac9A755fd29B2688956BD959F933F8",
+        ETH_USDT: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        ETH_USDC: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
         SOL_USDT: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
         SOL_USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
         TRON_USDT: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
@@ -500,6 +503,17 @@ export class Web3Service {
           await this.hd.sweepToken(
             childWallet2,
             masterWallet,
+            ERC20_TOKENS["BNB_ETH"],
+            "BINANCE CHAIN",
+            "ETH",
+          );
+        } catch (e) {
+          console.log("BNB_ETH sweep failed", e);
+        }
+        try {
+          await this.hd.sweepToken(
+            childWallet2,
+            masterWallet,
             ERC20_TOKENS["BNB_ADA"],
             "BINANCE CHAIN",
             "ADA",
@@ -563,11 +577,35 @@ export class Web3Service {
           console.log(e);
         }
         try {
+          await this.hd.sweepToken(
+            childWallet5,
+            masterWalletETH,
+            ERC20_TOKENS["ETH_USDT"],
+            "ETHEREUM",
+            "USDT",
+          );
+        } catch (e) {
+          console.log("ETH_USDT sweep failed", e);
+        }
+        try {
+          await this.hd.sweepToken(
+            childWallet5,
+            masterWalletETH,
+            ERC20_TOKENS["ETH_USDC"],
+            "ETHEREUM",
+            "USDC",
+          );
+        } catch (e) {
+          console.log("ETH_USDC sweep failed", e);
+        }
+
+        try {
           //ETH
           await this.hd.sweep(childWallet5, masterWalletETH, "ETHEREUM", "ETH");
         } catch (e) {
           console.log(e);
         }
+
         // //BASE ERC20 tokens
         const childKeySol = Buffer.from(childWallet4.secretKey).toString("hex");
 
@@ -679,6 +717,9 @@ export class Web3Service {
         BNB_RIPPLE: "0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE", // BSC XRP
         BNB_DOGE: "0xbA2aE424d960c26247Dd6c32edC70B295c744C43", // BSC DOGE
         BNB_BTC: "0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c", // BSC BTC
+        BNB_ETH: "0x2170Ed0880ac9A755fd29B2688956BD959F933F8",
+        ETH_USDT: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        ETH_USDC: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
         SOL_USDT: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
         SOL_USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
         TRON_USDT: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
@@ -765,6 +806,8 @@ export class Web3Service {
         network === "BNB"
       ) {
         provider = this.provider;
+      } else if (network === "ETHEREUM" || network === "ETH") {
+        provider = this.providerETH;
       } else {
         provider = this.providerBase; // default to Base
       }
@@ -877,6 +920,9 @@ export class Web3Service {
       BNB_RIPPLE: "0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE", // BSC XRP
       BNB_DOGE: "0xbA2aE424d960c26247Dd6c32edC70B295c744C43", // BSC DOGE
       BNB_BTC: "0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c", // BSC BTC
+      BNB_ETH: "0x2170Ed0880ac9A755fd29B2688956BD959F933F8",
+      ETH_USDT: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+      ETH_USDC: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
       SOL_USDT: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
       SOL_USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
       TRON_USDT: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
@@ -895,6 +941,14 @@ export class Web3Service {
 
       const baseBalance = await this.hd.getETHBalance(masterWalletBase);
       const ethBalance = await this.hd.getETHBalance(masterWalletETH);
+      const ETHUSDT = await this.hd.getERC20Balance(
+        masterWalletETH,
+        ERC20_TOKENS["ETH_USDT"],
+      );
+      const ETHUSDC = await this.hd.getERC20Balance(
+        masterWalletETH,
+        ERC20_TOKENS["ETH_USDC"],
+      );
       const bnbBalance = await this.hd.getETHBalance(masterWallet);
       const solBalance = await this.hdSol.getSolBalance(
         this.conn,
@@ -943,6 +997,10 @@ export class Web3Service {
       const BNBADA = await this.hd.getERC20Balance(
         masterWallet,
         ERC20_TOKENS["BNB_ADA"],
+      );
+      const BNBETH = await this.hd.getERC20Balance(
+        masterWallet,
+        ERC20_TOKENS["BNB_ETH"],
       );
 
       //SOL
@@ -1000,6 +1058,8 @@ export class Web3Service {
       return {
         ethereum: {
           ETH: ethBalance,
+          USDT: ETHUSDT,
+          USDC: ETHUSDC,
         },
         base: {
           ETH: baseBalance,
@@ -1013,6 +1073,7 @@ export class Web3Service {
           USDT: BNBUSDT,
           USDC: BNBUSDC,
           BTC: BNBBTC,
+          ETH: BNBETH,
           RIPPLE: BNBRIPPLE,
           DOGE: BNBDOGE,
           ADA: BNBADA,
