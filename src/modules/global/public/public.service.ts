@@ -174,6 +174,8 @@ export class PublicService {
         }
       }
     }
+
+    return true;
   }
 
   async getPrice(symbol): Promise<{ status: boolean; price: any }> {
