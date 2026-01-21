@@ -47,7 +47,7 @@ export class AuthService extends BaseService {
     private readonly userRepository: Repository<User>,
     private readonly dataSource: DataSource,
     private readonly jwtService: JwtService,
-    private readonly cacheService: CacheService
+    private readonly cacheService: CacheService,
   ) {
     super();
   }
@@ -84,7 +84,7 @@ export class AuthService extends BaseService {
 
     if (!fetch) {
       throw new NotAcceptableException(
-        "User with this login details was not found, please try again"
+        "User with this login details was not found, please try again",
       );
     }
     // if(loginStaffDto.google_id ){
@@ -92,19 +92,19 @@ export class AuthService extends BaseService {
     if (!fetch.google_id && loginStaffDto.google_id) {
       await this.userRepository.update(
         { id: fetch.id },
-        { google_id: loginStaffDto.google_id }
+        { google_id: loginStaffDto.google_id },
       );
     } else if (fetch.google_id && loginStaffDto.google_id) {
       if (fetch.google_id !== loginStaffDto.google_id) {
         throw new NotAcceptableException(
-          "Google mail does not match our records, please try again"
+          "Google mail does not match our records, please try again",
         );
       }
     } else {
       const verified = await verifyHash(loginStaffDto.password, fetch.password);
       if (!verified)
         throw new NotAcceptableException(
-          "Incorrect details given, please try again"
+          "Incorrect details given, please try again",
         );
     }
 
@@ -118,7 +118,7 @@ export class AuthService extends BaseService {
 
     await this.userRepository.update(
       { id: fetch.id },
-      { device_id, notification_token }
+      { device_id, notification_token },
     );
 
     const user = {
@@ -131,7 +131,7 @@ export class AuthService extends BaseService {
 
     if (!user.email_verified_at) {
       throw new BadRequestException(
-        "Email address not verified. Please verify your email to proceed."
+        "Email address not verified. Please verify your email to proceed.",
       );
     }
 
@@ -147,7 +147,7 @@ export class AuthService extends BaseService {
     const user = await this.userRepository
       .createQueryBuilder("user")
       .addSelect("user.remember_token")
-      .where("user.email = :email", { email })
+      .where("user.email = :email", { email: email.toLowerCase() })
       .getOne();
     if (!user) {
       throw new BadRequestException("User with this email does not exist.");
@@ -170,8 +170,8 @@ export class AuthService extends BaseService {
 
     if (type == TokenType.email_verification) {
       await this.userRepository.update(
-        { email },
-        { email_verified_at: new Date(), remember_token: null }
+        { email: email.toLowerCase() },
+        { email_verified_at: new Date(), remember_token: null },
       );
     }
 
@@ -193,7 +193,7 @@ export class AuthService extends BaseService {
     const rememberToken = generateRandomNumberString(6);
     await this.userRepository.update(
       { email },
-      { remember_token: rememberToken }
+      { remember_token: rememberToken },
     );
 
     return { message: "Verification token sent successful." };
@@ -231,7 +231,7 @@ export class AuthService extends BaseService {
         });
         if (existingPhone) {
           throw new BadRequestException(
-            "User with this phone number already exist."
+            "User with this phone number already exist.",
           );
         }
       }
@@ -275,7 +275,7 @@ export class AuthService extends BaseService {
               firstName: capitalizeString(user.first_name),
               token: rememberToken,
             },
-          }
+          },
         );
         // sendMailJetWithTemplate(
         //   {
@@ -309,10 +309,12 @@ export class AuthService extends BaseService {
   }
 
   async forgotPassword({ email }: ForgotPasswordDto, resend = false) {
-    const user = await this.userRepository.findOne({ where: { email } });
+    const user = await this.userRepository.findOne({
+      where: { email: email.toLowerCase() },
+    });
     if (!user)
       throw new NotAcceptableException(
-        "Email provided is not recognized, please try again"
+        "Email provided is not recognized, please try again",
       );
 
     //Check if sent less than 5mins ago
@@ -322,7 +324,10 @@ export class AuthService extends BaseService {
     //   );
 
     const remember_token = generateRandomNumberString(6);
-    this.userRepository.update({ email }, { remember_token });
+    this.userRepository.update(
+      { email: email.toLowerCase() },
+      { remember_token },
+    );
 
     sendZohoMailWithTemplate(
       {
@@ -338,7 +343,7 @@ export class AuthService extends BaseService {
           firstName: capitalizeString(user.first_name),
           token: remember_token,
         },
-      }
+      },
     );
 
     // sendMailJetWithTemplate(
@@ -362,7 +367,7 @@ export class AuthService extends BaseService {
     this.cacheService.set(
       `${user.email}_forgot_password`,
       remember_token,
-      _THROTTLE_TTL_
+      _THROTTLE_TTL_,
     );
 
     return {
@@ -373,8 +378,13 @@ export class AuthService extends BaseService {
   }
 
   async resetPassword(resetPasswordDto: ResetPasswordDto) {
-    const { email, password, token, password_confirmation } = resetPasswordDto;
-
+    const {
+      email: emailData,
+      password,
+      token,
+      password_confirmation,
+    } = resetPasswordDto;
+    var email = emailData.toLowerCase();
     const user = await this.userRepository
       .createQueryBuilder("user")
       .addSelect("user.remember_token")
@@ -382,24 +392,24 @@ export class AuthService extends BaseService {
       .getOne();
     if (!user)
       throw new NotAcceptableException(
-        "Invalid email and token, please try again."
+        "Invalid email and token, please try again.",
       );
 
     if (user.remember_token != token) {
       throw new NotAcceptableException(
-        "Incorrect token, please request for another one."
+        "Incorrect token, please request for another one.",
       );
     }
 
     if (password != password_confirmation) {
       throw new NotAcceptableException(
-        "Password and confirm password does not match"
+        "Password and confirm password does not match",
       );
     }
 
     await this.userRepository.update(
       { id: user.id },
-      { password: await hashResource(password), remember_token: null }
+      { password: await hashResource(password), remember_token: null },
     );
     const { first_name, last_name, id } = user;
 

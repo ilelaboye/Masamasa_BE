@@ -61,4 +61,7 @@ export class WithdrawalDto {
 
   @ApiProperty({ example: "0001" })
   bankCode: string;
+
+  @ApiProperty({ example: "withdrawal" })
+  narration: string;
 }
