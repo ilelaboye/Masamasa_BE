@@ -47,7 +47,7 @@ export class PublicService {
     private readonly exchangeRateService: ExchangeRateService,
     private readonly notificationsService: NotificationsService,
     private readonly cronJob: CronJob
-  ) {}
+  ) { }
 
   async transactionWebhook(transactionWebhook: TransactionWebhookDto) {
     const { address, network, amount, token_symbol, hash } = transactionWebhook;
@@ -233,7 +233,7 @@ export class PublicService {
         {
           params: {
             vs_currency: "usd",
-            ids: "bitcoin,ethereum,binancecoin,solana,tether,usd-coin,cardano,doge,ripple",
+            ids: "bitcoin,ethereum,binancecoin,solana,tether,usd-coin,cardano,dogecoin,ripple",
             order: "market_cap_desc",
             per_page: 100,
             page: 1,
@@ -245,7 +245,8 @@ export class PublicService {
       // Transform response into your desired format
       const data = {};
       response.data.forEach((coin) => {
-        data[coin.id] = {
+        const id = coin.id === "dogecoin" ? "doge" : coin.id;
+        data[id] = {
           usd: coin.current_price,
           change_24h: coin.price_change_percentage_24h,
           direction: coin.price_change_percentage_24h >= 0 ? "up" : "down",
