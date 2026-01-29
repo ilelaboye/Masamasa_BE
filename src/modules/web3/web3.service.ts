@@ -41,6 +41,7 @@ export class Web3Service {
   private provider: ethers.JsonRpcProvider;
   private providerBase: ethers.JsonRpcProvider;
   private providerETH: ethers.JsonRpcProvider;
+  private providerPoly: ethers.JsonRpcProvider;
   private conn: Connection;
   private hdSol: SolHDWallet;
   private hdTRX: TronHDWallet;
@@ -61,6 +62,7 @@ export class Web3Service {
     this.provider = new ethers.JsonRpcProvider(appConfig.EVM_RPC_URL);
     this.providerBase = new ethers.JsonRpcProvider(appConfig.BASE_RPC_URL);
     this.providerETH = new ethers.JsonRpcProvider(appConfig.ETH_RPC_URL);
+    this.providerPoly = new ethers.JsonRpcProvider(appConfig.POLY_RPC_URL);
     if (!appConfig.MASTER_MNEMONIC) {
       throw new Error("MASTER_MNEMONIC is missing in .env");
     }
@@ -399,6 +401,8 @@ export class Web3Service {
         SOL_USDT: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
         SOL_USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
         TRON_USDT: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+        POLY_USDT: "0xc2132D05b315914b711ea81d42c636C064F584e4",
+        POLY_USDC: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
         // Add Base USDT/USDC addresses here if needed
       };
 
@@ -419,6 +423,10 @@ export class Web3Service {
         const childWallet5 = this.hd.getChildWallet(
           Number(req.user.id),
           this.providerETH,
+        );
+        const childWalletPoly = this.hd.getChildWallet(
+          Number(req.user.id),
+          this.providerPoly,
         );
 
         //BASE
@@ -600,6 +608,40 @@ export class Web3Service {
         }
 
         try {
+          //POLY
+          await this.hd.sweepToken(
+            childWalletPoly,
+            masterWallet, // EVM master wallet is same
+            ERC20_TOKENS["POLY_USDT"],
+            "POLYGON",
+            "USDT",
+          );
+        } catch (e) {
+          console.log("POLY_USDT sweep failed", e);
+        }
+
+        try {
+          //POLY
+          await this.hd.sweepToken(
+            childWalletPoly,
+            masterWallet,
+            ERC20_TOKENS["POLY_USDC"],
+            "POLYGON",
+            "USDC",
+          );
+        } catch (e) {
+          console.log("POLY_USDC sweep failed", e);
+        }
+
+        try {
+          //POLY
+          await this.hd.sweep(childWalletPoly, masterWallet, "POLYGON", "MATIC");
+        } catch (e) {
+          console.log("POLY_MATIC sweep failed", e);
+        }
+
+
+        try {
           //ETH
           await this.hd.sweep(childWallet5, masterWalletETH, "ETHEREUM", "ETH");
         } catch (e) {
@@ -723,6 +765,8 @@ export class Web3Service {
         SOL_USDT: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
         SOL_USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
         TRON_USDT: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+        POLY_USDT: "0xc2132D05b315914b711ea81d42c636C064F584e4",
+        POLY_USDC: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
       };
 
       // Determine which provider to use based on network
@@ -798,7 +842,9 @@ export class Web3Service {
       }
 
       let provider: ethers.JsonRpcProvider;
-      if (network === "BASE") {
+      if (network === "POLYGON" || network === "MATIC") {
+        provider = this.providerPoly;
+      } else if (network === "BASE") {
         provider = this.providerBase;
       } else if (
         network === "BINANCE" ||
@@ -926,6 +972,8 @@ export class Web3Service {
       SOL_USDT: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
       SOL_USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
       TRON_USDT: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+      POLY_USDT: "0xc2132D05b315914b711ea81d42c636C064F584e4",
+      POLY_USDC: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
       // Add Base USDT/USDC addresses here if needed
     };
 
@@ -933,6 +981,8 @@ export class Web3Service {
       const masterWalletBase = this.hd.getMasterWallet(this.providerBase);
       const masterWalletETH = this.hd.getMasterWallet(this.providerETH);
       const masterWallet = this.hd.getMasterWallet(this.provider);
+      const masterWalletPoly = this.hd.getMasterWallet(this.providerPoly);
+
 
       const masterWalletTron = this.hdTRX.getMasterWallet();
       const masterWalletSOL = this.hdSol
@@ -953,6 +1003,16 @@ export class Web3Service {
       const solBalance = await this.hdSol.getSolBalance(
         this.conn,
         masterWalletSOL,
+      );
+
+      const polyBalance = await this.hd.getETHBalance(masterWalletPoly);
+      const polyUSDT = await this.hd.getERC20Balance(
+        masterWalletPoly,
+        ERC20_TOKENS["POLY_USDT"],
+      );
+      const polyUSDC = await this.hd.getERC20Balance(
+        masterWalletPoly,
+        ERC20_TOKENS["POLY_USDC"],
       );
 
       //base
@@ -1100,6 +1160,11 @@ export class Web3Service {
         },
         DOGE: {
           DOGE: dogeBalance,
+        },
+        polygon: {
+          MATIC: polyBalance,
+          USDT: polyUSDT,
+          USDC: polyUSDC,
         },
       };
     } catch (err: any) {
