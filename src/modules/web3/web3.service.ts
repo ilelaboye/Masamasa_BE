@@ -635,7 +635,7 @@ export class Web3Service {
 
         try {
           //POLY
-          await this.hd.sweep(childWalletPoly, masterWallet, "POLYGON", "MATIC");
+          await this.hd.sweep(childWalletPoly, masterWallet, "POLYGON", "POL");
         } catch (e) {
           console.log("POLY_MATIC sweep failed", e);
         }
