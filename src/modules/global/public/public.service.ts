@@ -233,7 +233,7 @@ export class PublicService {
         {
           params: {
             vs_currency: "usd",
-            ids: "bitcoin,ethereum,binancecoin,solana,tether,usd-coin,cardano,dogecoin,ripple",
+            ids: "bitcoin,ethereum,binancecoin,solana,tether,usd-coin,cardano,dogecoin,ripple,polygon-ecosystem-token",
             order: "market_cap_desc",
             per_page: 100,
             page: 1,
@@ -245,7 +245,9 @@ export class PublicService {
       // Transform response into your desired format
       const data = {};
       response.data.forEach((coin) => {
-        const id = coin.id === "dogecoin" ? "doge" : coin.id;
+        let id = coin.id;
+        if (coin.id === "dogecoin") id = "doge";
+        if (coin.id === "polygon-ecosystem-token") id = "pol";
         data[id] = {
           usd: coin.current_price,
           change_24h: coin.price_change_percentage_24h,
