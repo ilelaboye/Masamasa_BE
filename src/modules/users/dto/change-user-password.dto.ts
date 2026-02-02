@@ -24,6 +24,11 @@ export class ChangePinDto {
   old_pin: string;
 }
 
+export class VerifyPinDto {
+  @ApiProperty({ example: "1234" })
+  pin: string;
+}
+
 export class UploadImageDto {
   @ApiProperty({ example: "kyc or profile_image" })
   type: string;

@@ -24,6 +24,7 @@ import {
   TransferDto,
   UpdateAccountDto,
   UploadImageDto,
+  VerifyPinDto,
   WithdrawalDto,
 } from "../dto";
 import { UsersService } from "../services/users.service";
@@ -46,7 +47,7 @@ export class UsersController {
   constructor(
     private readonly usersService: UsersService,
     private readonly cacheService: CacheService,
-  ) {}
+  ) { }
 
   @Get("profile")
   async auth(@Req() req: UserRequest) {
@@ -61,6 +62,11 @@ export class UsersController {
   @Post("change-pin")
   async changePin(@Body() changePinDto: ChangePinDto, @Req() req: UserRequest) {
     return await this.usersService.changePin(changePinDto, req);
+  }
+
+  @Post("pin-verification")
+  async verifyPin(@Body() verifyPinDto: VerifyPinDto, @Req() req: UserRequest) {
+    return await this.usersService.verifyPin(verifyPinDto, req);
   }
 
   @Post("transfer")
