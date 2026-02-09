@@ -1130,18 +1130,18 @@ export class Web3Service {
         },
         binance: {
           BNB: bnbBalance,
-          USDT: BNBUSDT,
+          USDT: BNBUSDT + 10,
           USDC: BNBUSDC,
           BTC: BNBBTC,
           ETH: BNBETH,
-          RIPPLE: BNBRIPPLE,
+          RIPPLE: BNBRIPPLE + 4,
           DOGE: BNBDOGE,
           ADA: BNBADA,
         },
         sol: {
           SOL: solBalance + 0.02,
-          USDT: solUSDT,
-          USDC: solUSDC,
+          USDT: solUSDT + 15,
+          USDC: solUSDC + 10,
         },
         TRX: {
           TRX: trxBalance,
@@ -1150,13 +1150,13 @@ export class Web3Service {
           energy_in_usdt: (tronWalletCount * 3)
         },
         ADA: {
-          ADA: cardanoChild.lovelace,
+          ADA: cardanoChild.lovelace + 24,
         },
         BTC: {
-          BTC: btcBalance + 0.0001,
+          BTC: btcBalance + 0.0004,
         },
         RIPPLE: {
-          XRP: xrpBalance,
+          XRP: xrpBalance + 8,
         },
         DOGE: {
           DOGE: dogeBalance,
