@@ -187,7 +187,6 @@ export class CardanoHDWallet {
     txBuilder.add_change_if_needed(masterAddr);
 
     const totalLovelace = txBuilder.get_explicit_input().coin();
-    console.log(`balance: ${Number(totalLovelace.to_str()) / 1_000_000} ADA`);
 
     // TTL
 
@@ -347,7 +346,6 @@ export class CardanoHDWallet {
         amount: Number(transactionWebhook.amount),
       });
     } catch (error: any) {
-      console.error("Failed to call transaction webhook:", error.message);
       throw new Error("Transaction webhook failed");
     }
   }
@@ -507,9 +505,6 @@ export class CardanoHDWallet {
 
         const fees = Number(BigInt(txDetails.fees) / 1_000_000n);
 
-        console.log(
-          `TX ${tx.tx_hash.substring(0, 8)}... - Type: ${type}, totalIn: ${totalIn}, totalOut: ${totalOut}, amount: ${amount} ADA`,
-        );
 
         results.push({
           hash: tx.tx_hash,
@@ -524,10 +519,8 @@ export class CardanoHDWallet {
           outputs: txDetails.output_amount,
         });
       }
-      console.log("fees", results);
       return results;
     } catch (error: any) {
-      console.error("Error fetching ADA transaction history:", error.message);
       return []
     }
   }
@@ -545,7 +538,7 @@ export class CardanoHDWallet {
         amount: Number(transaction.amount),
       });
     } catch (error: any) {
-      console.error("Failed to call transaction webhook:", error.message);
+
     }
   }
 

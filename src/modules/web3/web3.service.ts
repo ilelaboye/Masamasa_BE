@@ -50,6 +50,7 @@ export class Web3Service {
   private hdBTC: BtcHDWallet;
   private hdDoge: DogeHDWallet;
   private hdXrp: XrpHDWallet;
+  private currentPolyRpcIndex: number = 0; // Track current Polygon RPC endpoint
   constructor(
     @InjectRepository(Wallet)
     private readonly walletRepository: Repository<Wallet>,
@@ -62,7 +63,15 @@ export class Web3Service {
     this.provider = new ethers.JsonRpcProvider(appConfig.EVM_RPC_URL);
     this.providerBase = new ethers.JsonRpcProvider(appConfig.BASE_RPC_URL);
     this.providerETH = new ethers.JsonRpcProvider(appConfig.ETH_RPC_URL);
-    this.providerPoly = new ethers.JsonRpcProvider(appConfig.POLY_RPC_URL);
+
+    // Configure Polygon provider without gas station plugin to avoid "Batch size too large" errors
+    const polygonNetwork = ethers.Network.from({
+      name: "matic",
+      chainId: 137,
+    });
+    this.providerPoly = new ethers.JsonRpcProvider(appConfig.POLY_RPC_URL, polygonNetwork, {
+      staticNetwork: polygonNetwork,
+    });
     if (!appConfig.MASTER_MNEMONIC) {
       throw new Error("MASTER_MNEMONIC is missing in .env");
     }
@@ -105,6 +114,24 @@ export class Web3Service {
         this.publicService,
       );
     }
+  }
+
+  // -----------------------------
+  // HELPER: Rotate Polygon RPC Provider on SSL/Connection Errors
+  // -----------------------------
+  private rotatePolygonProvider(): void {
+    this.currentPolyRpcIndex = (this.currentPolyRpcIndex + 1) % appConfig.POLY_RPC_URLS.length;
+    const newRpcUrl = appConfig.POLY_RPC_URLS[this.currentPolyRpcIndex];
+
+
+    const polygonNetwork = ethers.Network.from({
+      name: "matic",
+      chainId: 137,
+    });
+
+    this.providerPoly = new ethers.JsonRpcProvider(newRpcUrl, polygonNetwork, {
+      staticNetwork: polygonNetwork,
+    });
   }
 
   // -----------------------------
@@ -255,29 +282,31 @@ export class Web3Service {
   // -----------------------------
   async walletsTracking(req) {
     await this.initHDWallet();
-    const masterWalletBase = this.hd.getMasterWallet(this.providerBase);
-    const masterWallet = this.hd.getMasterWallet(this.provider);
 
     const masterWalletTron = this.hdTRX.getMasterWallet();
+
+    // Extract userId - support both HTTP request (req.user.id) and CRON call ({ user: { id: X } })
+    const userId = req.user?.id || req.user;
+
     const w = await this.walletRepository.findOne({
-      where: { user: req.user.id },
+      where: { user: userId },
     });
 
     if (!w) return false;
-    const tronChildWallet = this.hdTRX.getChildAddress(req.user.id);
+    const tronChildWallet = this.hdTRX.getChildAddress(userId);
 
 
     try {
       // TRON TRACKING - using hash matching like ADA/XRP
       const onChainTron = await this.hdTRX.getChildTRC20History(
-        req.user.id,
+        userId,
         "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
       );
 
       const dbTronTransactions = await this.transactionRepository
         .createQueryBuilder("transactions")
         .where("transactions.user_id = :userId AND transactions.network = :network", {
-          userId: req.user.id,
+          userId: userId,
           network: "Tron"
         })
         .getMany();
@@ -302,15 +331,14 @@ export class Web3Service {
     try {
       // XRP TRACKING
       const xrpMasterAddress = await this.hdXrp.getMasterAddress();
-      const xrpDestinationTag = 44011 + Number(req.user.id);
+      const xrpDestinationTag = 44011 + Number(userId);
 
-      const onChainXrp = await this.hdXrp.getHistoryByUserId(req.user.id, 10);
+      const onChainXrp = await this.hdXrp.getHistoryByUserId(userId, 10);
 
-      console.log("onChainXrp", onChainXrp, xrpMasterAddress);
       const dbXrpTransactions = await this.transactionRepository
         .createQueryBuilder("transactions")
         .where("transactions.user_id = :userId AND transactions.network = :network", {
-          userId: req.user.id,
+          userId: userId,
           network: "RIPPLE"
         })
         .getMany();
@@ -331,37 +359,6 @@ export class Web3Service {
     } catch (err) {
       console.error("XRP Tracking failed:", err.message);
     }
-
-    try {
-      // DOGE TRACKING
-      const dogeAddress = this.hdDoge.generateAddress(req.user.id);
-      const onChainDoge = await this.hdDoge.getChildTransactionHistory(req.user.id, 10);
-
-      const dbDogeTransactions = await this.transactionRepository
-        .createQueryBuilder("transactions")
-        .where("transactions.user_id = :userId AND transactions.network = :network", {
-          userId: req.user.id,
-          network: "DOGE"
-        })
-        .getMany();
-
-      const existingHashes = dbDogeTransactions.map(tx => tx.metadata?.hash || tx.metadata?.txID);
-
-      const unmatchedDoge = onChainDoge.filter(tx => !existingHashes.includes(tx.txID));
-
-      for (const tx of unmatchedDoge) {
-        await this.publicService.transactionWebhook({
-          network: "DOGE",
-          address: dogeAddress,
-          amount: tx.amount,
-          token_symbol: "DOGE",
-          hash: tx.txID
-        });
-      }
-    } catch (err) {
-      console.error("DOGE Tracking failed:", err.message);
-    }
-
     return { transactions: true };
   }
 
@@ -370,6 +367,7 @@ export class Web3Service {
     const masterWalletBase = this.hd.getMasterWallet(this.providerBase);
     const masterWalletETH = this.hd.getMasterWallet(this.providerETH);
     const masterWallet = this.hd.getMasterWallet(this.provider);
+    const masterWalletPoly = this.hd.getMasterWallet(this.providerPoly); // Polygon master wallet
 
     const masterWalletTron = this.hdTRX.getMasterWallet();
     const masterWalletSOL = this.hdSol.getMasterKeypair().publicKey.toBase58();
@@ -401,7 +399,7 @@ export class Web3Service {
         SOL_USDT: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
         SOL_USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
         TRON_USDT: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
-        POLY_USDT: "0xc2132D05b315914b711ea81d42c636C064F584e4",
+        POLY_USDT: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F",
         POLY_USDC: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
         // Add Base USDT/USDC addresses here if needed
       };
@@ -424,7 +422,7 @@ export class Web3Service {
           Number(req.user.id),
           this.providerETH,
         );
-        const childWalletPoly = this.hd.getChildWallet(
+        let childWalletPoly = this.hd.getChildWallet(
           Number(req.user.id),
           this.providerPoly,
         );
@@ -433,7 +431,6 @@ export class Web3Service {
         try {
           await this.hdBTC.sweepBTC(req.user.id, this.hdBTC.generateAddress(0));
         } catch {
-          console.log("BTC sweep failed");
         }
 
         try {
@@ -445,7 +442,6 @@ export class Web3Service {
             "USDT",
           );
         } catch (e) {
-          console.log("BASE_USDT sweep failed", e);
         }
 
         try {
@@ -457,7 +453,6 @@ export class Web3Service {
             "USDC",
           );
         } catch (e) {
-          console.log("BASE_USDC sweep failed", e);
         }
 
         try {
@@ -469,7 +464,6 @@ export class Web3Service {
             "BTC",
           );
         } catch (e) {
-          console.log("BASE_BTC sweep failed", e);
         }
 
         try {
@@ -481,7 +475,6 @@ export class Web3Service {
             "BNB",
           );
         } catch (e) {
-          console.log("BASE_BNB sweep failed", e);
         }
         //bsc erc20 tokens
         try {
@@ -493,7 +486,6 @@ export class Web3Service {
             "USDT",
           );
         } catch (e) {
-          console.log("BNB_USDT sweep failed", e);
         }
 
         try {
@@ -505,7 +497,6 @@ export class Web3Service {
             "USDC",
           );
         } catch (e) {
-          console.log("BNB_USDC sweep failed", e);
         }
         try {
           await this.hd.sweepToken(
@@ -516,7 +507,6 @@ export class Web3Service {
             "ETH",
           );
         } catch (e) {
-          console.log("BNB_ETH sweep failed", e);
         }
         try {
           await this.hd.sweepToken(
@@ -527,7 +517,6 @@ export class Web3Service {
             "ADA",
           );
         } catch (e) {
-          console.log("BNB_ADA sweep failed", e);
         }
 
         try {
@@ -539,7 +528,6 @@ export class Web3Service {
             "XRP",
           );
         } catch (e) {
-          console.log("BNB_RIPPLE sweep failed", e);
         }
 
         try {
@@ -551,7 +539,6 @@ export class Web3Service {
             "DOGE",
           );
         } catch (e) {
-          console.log("BNB_DOGE sweep failed", e);
         }
 
         try {
@@ -563,15 +550,12 @@ export class Web3Service {
             "BTC",
           );
         } catch (e) {
-          console.log("BNB_BTC sweep failed", e);
         }
-        console.log("Complete token sweep");
 
         try {
           //BASE
           await this.hd.sweep(childWallet, masterWalletBase, "BASE", "ETH");
         } catch (e) {
-          console.log(e);
         }
         try {
           //BSC
@@ -582,7 +566,6 @@ export class Web3Service {
             "BNB",
           );
         } catch (e) {
-          console.log(e);
         }
         try {
           await this.hd.sweepToken(
@@ -593,7 +576,6 @@ export class Web3Service {
             "USDT",
           );
         } catch (e) {
-          console.log("ETH_USDT sweep failed", e);
         }
         try {
           await this.hd.sweepToken(
@@ -604,40 +586,86 @@ export class Web3Service {
             "USDC",
           );
         } catch (e) {
-          console.log("ETH_USDC sweep failed", e);
         }
+
+        // POLY_USDT with retry logic and provider rotation
+        const maxRetries = 3;
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          try {
+            await this.hd.sweepToken(
+              childWalletPoly,
+              masterWalletPoly,
+              ERC20_TOKENS["POLY_USDT"],
+              "POLYGON",
+              "USDT",
+            );
+            break; // Success, exit retry loop
+          } catch (e: any) {
+            const isSSLError = e?.code === 'EPROTO' || e?.message?.includes('SSL') || e?.message?.includes('TLS');
+            const isRPCError = e?.code === 'UNKNOWN_ERROR' || e?.error?.message?.includes('INTERNAL_ERROR') || e?.error?.message?.includes('queued');
+            const shouldRetry = (isSSLError || isRPCError);
+            const isLastAttempt = attempt === maxRetries;
+
+
+            if (shouldRetry && !isLastAttempt) {
+              // Rotate to next RPC endpoint and retry
+              this.rotatePolygonProvider();
+              // Recreate child and master wallets with new provider
+              childWalletPoly = this.hd.getChildWallet(
+                Number(req.user.id),
+                this.providerPoly,
+              );
+              const masterWalletPoly = this.hd.getMasterWallet(this.providerPoly);
+              // Exponential backoff: wait before retry
+              const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+              await new Promise(resolve => setTimeout(resolve, backoffMs));
+            } else {
+              break; // Not an SSL error or last attempt, stop retrying
+            }
+          }
+        }
+
+        // POLY_USDC with retry logic and provider rotation
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          try {
+            await this.hd.sweepToken(
+              childWalletPoly,
+              masterWalletPoly,
+              ERC20_TOKENS["POLY_USDC"],
+              "POLYGON",
+              "USDC",
+            );
+            break; // Success, exit retry loop
+          } catch (e: any) {
+            const isSSLError = e?.code === 'EPROTO' || e?.message?.includes('SSL') || e?.message?.includes('TLS');
+            const isRPCError = e?.code === 'UNKNOWN_ERROR' || e?.error?.message?.includes('INTERNAL_ERROR') || e?.error?.message?.includes('queued');
+            const shouldRetry = (isSSLError || isRPCError);
+            const isLastAttempt = attempt === maxRetries;
+
+
+            if (shouldRetry && !isLastAttempt) {
+              // Rotate to next RPC endpoint and retry
+              this.rotatePolygonProvider();
+              // Recreate child and master wallets with new provider
+              childWalletPoly = this.hd.getChildWallet(
+                Number(req.user.id),
+                this.providerPoly,
+              );
+              const masterWalletPoly = this.hd.getMasterWallet(this.providerPoly);
+              // Exponential backoff: wait before retry
+              const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+              await new Promise(resolve => setTimeout(resolve, backoffMs));
+            } else {
+              break; // Not an SSL error or last attempt, stop retrying
+            }
+          }
+        }
+
 
         try {
           //POLY
-          await this.hd.sweepToken(
-            childWalletPoly,
-            masterWallet, // EVM master wallet is same
-            ERC20_TOKENS["POLY_USDT"],
-            "POLYGON",
-            "USDT",
-          );
+          await this.hd.sweep(childWalletPoly, masterWalletPoly, "POLYGON", "POL");
         } catch (e) {
-          console.log("POLY_USDT sweep failed", e);
-        }
-
-        try {
-          //POLY
-          await this.hd.sweepToken(
-            childWalletPoly,
-            masterWallet,
-            ERC20_TOKENS["POLY_USDC"],
-            "POLYGON",
-            "USDC",
-          );
-        } catch (e) {
-          console.log("POLY_USDC sweep failed", e);
-        }
-
-        try {
-          //POLY
-          await this.hd.sweep(childWalletPoly, masterWallet, "POLYGON", "POL");
-        } catch (e) {
-          console.log("POLY_MATIC sweep failed", e);
         }
 
 
@@ -645,7 +673,6 @@ export class Web3Service {
           //ETH
           await this.hd.sweep(childWallet5, masterWalletETH, "ETHEREUM", "ETH");
         } catch (e) {
-          console.log(e);
         }
 
         // //BASE ERC20 tokens
@@ -661,7 +688,6 @@ export class Web3Service {
             this.publicService,
           );
         } catch (e) {
-          console.log("SOL_USDT sweep failed", e);
         }
 
         try {
@@ -674,9 +700,7 @@ export class Web3Service {
             this.publicService,
           );
         } catch (e) {
-          console.log("SOL_USDC sweep failed", e);
         }
-        console.log("Complete token sweep sol");
         try {
           await this.hdSol.sweepSOL(
             {
@@ -688,7 +712,6 @@ export class Web3Service {
             req.user.id,
           );
         } catch (e) {
-          console.log("SOL sweep failed", e);
         }
 
         // trc20
@@ -701,7 +724,6 @@ export class Web3Service {
             "https://api.trongrid.io",
           );
         } catch (e) {
-          console.log("TRON sweep failed", e);
         }
         // ada
         try {
@@ -712,7 +734,6 @@ export class Web3Service {
             true,
           );
         } catch (e) {
-          console.log("ADA sweep failed", e);
         }
 
         // btc
@@ -724,10 +745,9 @@ export class Web3Service {
             (await this.hdXrp.getMasterWallet()).address,
           );
         } catch (e) {
-          console.log("XRP sweep failed", e);
         }
-
         try {
+
           await this.hdDoge.sweepDOGE(
             Number(req.user.id),
             this.hdDoge.generateAddress(0),
@@ -737,11 +757,9 @@ export class Web3Service {
         }
       }
     } catch (err: any) {
-      console.error(`Failed to for user ${req.user.id}:`, err);
       return false;
     }
 
-    console.log("Sweep completed for user", req.user.id);
     return true;
   }
 
@@ -765,7 +783,7 @@ export class Web3Service {
         SOL_USDT: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
         SOL_USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
         TRON_USDT: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
-        POLY_USDT: "0xc2132D05b315914b711ea81d42c636C064F584e4",
+        POLY_USDT: "0xc2132D05D315baB42D07663593c5a01c7f603880",
         POLY_USDC: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
       };
 
@@ -972,7 +990,7 @@ export class Web3Service {
       SOL_USDT: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
       SOL_USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
       TRON_USDT: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
-      POLY_USDT: "0xc2132D05b315914b711ea81d42c636C064F584e4",
+      POLY_USDT: "0xc2132D05D315baB42D07663593c5a01c7f603880",
       POLY_USDC: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
       // Add Base USDT/USDC addresses here if needed
     };
@@ -1168,7 +1186,6 @@ export class Web3Service {
         },
       };
     } catch (err: any) {
-      console.log(err);
       throw new BadRequestException(err.message || "Failed to fetch balances");
     }
   }

@@ -37,7 +37,7 @@ export class CronJob {
     // private readonly adminService: AdministratorService,
     private readonly providerService: ProviderService
     // private readonly usersService: UsersService
-  ) {}
+  ) { }
 
   // Handles all notification jobs
   // async processPaymentJob() {

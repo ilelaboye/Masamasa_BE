@@ -128,7 +128,6 @@ export class XrpHDWallet {
 
             const transactions = response.result.transactions;
             const results: any[] = [];
-            console.log("transactions", transactions);
 
             for (const txObj of transactions) {
                 if (results.length >= limit) break;

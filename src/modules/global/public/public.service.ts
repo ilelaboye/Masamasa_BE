@@ -55,7 +55,6 @@ export class PublicService {
     const find = await this.webhookRepository.findOne({
       where: { hash: hash },
     });
-    console.log("find webhook", find);
     if (find) {
       throw new BadRequestException("Webhook already processed");
     }

@@ -231,7 +231,6 @@ export class TronHDWallet {
     limit: number = 3,
   ): Promise<any[]> {
     const childAddress = this.getChildAddress(childIndex);
-    console.log(childAddress);
 
     const url = `https://api.trongrid.io/v1/accounts/${childAddress}/transactions/trc20?limit=${limit}&contract_address=${tokenAddress}`;
 
