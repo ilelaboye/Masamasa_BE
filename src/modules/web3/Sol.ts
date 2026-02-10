@@ -31,9 +31,7 @@ export async function sweepSPLToken(
   const mint = new PublicKey(tokenMintAddress);
 
   try {
-    console.log(
-      `\nSweeping ${symbol} → ${childPubkey.toBase58()} → ${masterPubkey.toBase58()}`,
-    );
+
 
     const childATA = await getAssociatedTokenAddress(mint, childPubkey);
     const masterATA = await getAssociatedTokenAddress(mint, masterPubkey);
@@ -53,7 +51,6 @@ export async function sweepSPLToken(
 
     if (uiAmount === 0) return false;
     if (uiAmount < 0.001) return false;
-    console.log(`Found ${uiAmount} ${symbol}`);
 
     // Build instructions array
     const instructions: any[] = []; // ← "any[]" is the trick that kills the TS error in v2
@@ -98,7 +95,6 @@ export async function sweepSPLToken(
 
     if (childSol < fee + 5_000_000) {
       // ~0.005 SOL buffer
-      console.log("Funding child with SOL from master...");
       const fundIx = SystemProgram.transfer({
         fromPubkey: masterPubkey,
         toPubkey: childPubkey,
@@ -115,7 +111,6 @@ export async function sweepSPLToken(
       fundTx.sign([masterKeypair]);
       const sig = await connection.sendTransaction(fundTx, { maxRetries: 2 });
       await connection.confirmTransaction(sig);
-      console.log(`Funded → https://solscan.io/tx/${sig}`);
     }
 
     // Final sweep
@@ -133,8 +128,6 @@ export async function sweepSPLToken(
     });
     await connection.confirmTransaction(signature, "confirmed");
 
-    console.log(`SUCCESS! ${uiAmount} ${symbol} swept`);
-    console.log(`https://solscan.io/tx/${signature}\n`);
 
     if (uiAmount > 0.01) {
       await _transactionWebhook(
@@ -152,7 +145,6 @@ export async function sweepSPLToken(
 
     return true;
   } catch (err: any) {
-    console.error(`Failed: ${err.message || err}`);
     return false;
   }
 }
@@ -174,7 +166,6 @@ async function _transactionWebhook(
       amount: Number(transaction.amount),
     });
   } catch (error: any) {
-    console.error("Transaction webhook failed:", error.message);
     throw new Error("Transaction webhook failed");
   }
 }

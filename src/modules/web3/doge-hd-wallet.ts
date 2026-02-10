@@ -96,7 +96,7 @@ export class DogeHDWallet {
         const childAddress = this.generateAddress(childIndex);
         const path = `m/44'/3'/0'/0/${childIndex}`;
         const childNode = this.root.derivePath(path);
-
+        console.log(childAddress);
         const baseUrl = `https://api.blockcypher.com/v1/doge/main`;
 
         // 1. Get UTXOs
@@ -112,6 +112,9 @@ export class DogeHDWallet {
             // DOGE often requires older transaction formats but bitcoinjs-lib Psbt should handle legacy P2PKH
 
             let totalInput = BigInt(0);
+
+            console.log(utxos);
+
 
             for (const utxo of utxos) {
                 // blockcypher returns value in satoshis
