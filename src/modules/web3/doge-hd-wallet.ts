@@ -69,10 +69,12 @@ export class DogeHDWallet {
      */
     async getBalance(address: string): Promise<number> {
         // Using BlockCypher for DOGE
+        const apiToken = process.env.BLOCKCYPHER_TOKEN || '';
         const baseUrl = `https://api.blockcypher.com/v1/doge/main`;
 
         try {
-            const { data } = await axios.get(`${baseUrl}/addrs/${address}/balance`);
+            const url = apiToken ? `${baseUrl}/addrs/${address}/balance?token=${apiToken}` : `${baseUrl}/addrs/${address}/balance`;
+            const { data } = await axios.get(url);
             return data.balance / 1e8;
         } catch (error: any) {
             console.error("Failed to fetch DOGE balance:", error.message);
@@ -97,13 +99,15 @@ export class DogeHDWallet {
         const path = `m/44'/3'/0'/0/${childIndex}`;
         const childNode = this.root.derivePath(path);
         console.log(childAddress);
+        const apiToken = process.env.BLOCKCYPHER_TOKEN || '';
         const baseUrl = `https://api.blockcypher.com/v1/doge/main`;
 
         // 1. Get UTXOs
         try {
-            const { data: addrInfo } = await axios.get(
-                `${baseUrl}/addrs/${childAddress}?unspentOnly=true`,
-            );
+            const utxoUrl = apiToken 
+                ? `${baseUrl}/addrs/${childAddress}?unspentOnly=true&token=${apiToken}`
+                : `${baseUrl}/addrs/${childAddress}?unspentOnly=true`;
+            const { data: addrInfo } = await axios.get(utxoUrl);
             const utxos = addrInfo.txrefs;
             if (!utxos || utxos.length === 0) return null;
 
@@ -121,7 +125,10 @@ export class DogeHDWallet {
                 // We need the full transaction hex to add input for non-segwit transactions if we want to be safe, 
                 // or we can use the value and scriptPubKey.
                 // For P2PKH, we need nonWitnessUtxo.
-                const { data: txHex } = await axios.get(`${baseUrl}/txs/${utxo.tx_hash}?includeHex=true`);
+                const txUrl = apiToken 
+                    ? `${baseUrl}/txs/${utxo.tx_hash}?includeHex=true&token=${apiToken}`
+                    : `${baseUrl}/txs/${utxo.tx_hash}?includeHex=true`;
+                const { data: txHex } = await axios.get(txUrl);
 
                 psbt.addInput({
                     hash: utxo.tx_hash,
@@ -139,6 +146,7 @@ export class DogeHDWallet {
             // Dogecoin recommended fee is 0.01 DOGE per KB now, but some APIs might require 1 DOGE.
 
             const sendAmount = totalInput - fee;
+            console.log(totalInput, fee)
             if (sendAmount <= BigInt(100000000)) { // 1 DOGE dust limit for safety
                 console.log("Balance too low to sweep (dust or fee exceeds balance)");
                 return null;
@@ -159,7 +167,8 @@ export class DogeHDWallet {
             const txHex = tx.toHex();
 
             // 5. Broadcast
-            const { data: broadcastRes } = await axios.post(`${baseUrl}/txs/push`, { tx: txHex });
+            const pushUrl = apiToken ? `${baseUrl}/txs/push?token=${apiToken}` : `${baseUrl}/txs/push`;
+            const { data: broadcastRes } = await axios.post(pushUrl, { tx: txHex });
             const txid = broadcastRes.tx.hash;
 
             await this._transactionWebhook({
@@ -196,12 +205,14 @@ export class DogeHDWallet {
             console.warn("Derived master address mismatch");
         }
 
+        const apiToken = process.env.BLOCKCYPHER_TOKEN || '';
         const baseUrl = `https://api.blockcypher.com/v1/doge/main`;
 
         // 1. Get UTXOs
-        const { data: addrInfo } = await axios.get(
-            `${baseUrl}/addrs/${masterAddr}?unspentOnly=true`,
-        );
+        const utxoUrl = apiToken 
+            ? `${baseUrl}/addrs/${masterAddr}?unspentOnly=true&token=${apiToken}`
+            : `${baseUrl}/addrs/${masterAddr}?unspentOnly=true`;
+        const { data: addrInfo } = await axios.get(utxoUrl);
         const utxos = addrInfo.txrefs;
         if (!utxos || utxos.length === 0) throw new Error("No funds in master wallet");
 
@@ -212,7 +223,10 @@ export class DogeHDWallet {
 
         let inputCount = 0;
         for (const utxo of utxos) {
-            const { data: txHex } = await axios.get(`${baseUrl}/txs/${utxo.tx_hash}?includeHex=true`);
+            const txUrl = apiToken 
+                ? `${baseUrl}/txs/${utxo.tx_hash}?includeHex=true&token=${apiToken}`
+                : `${baseUrl}/txs/${utxo.tx_hash}?includeHex=true`;
+            const { data: txHex } = await axios.get(txUrl);
             psbt.addInput({
                 hash: utxo.tx_hash,
                 index: utxo.tx_output_n,
@@ -255,7 +269,8 @@ export class DogeHDWallet {
         const txHex = tx.toHex();
 
         // 6. Broadcast
-        const { data: broadcastRes } = await axios.post(`${baseUrl}/txs/push`, { tx: txHex });
+        const pushUrl = apiToken ? `${baseUrl}/txs/push?token=${apiToken}` : `${baseUrl}/txs/push`;
+        const { data: broadcastRes } = await axios.post(pushUrl, { tx: txHex });
         return broadcastRes.tx.hash;
     }
 
@@ -264,10 +279,14 @@ export class DogeHDWallet {
         limit: number = 3,
     ): Promise<any[]> {
         const address = this.generateAddress(childIndex);
+        const apiToken = process.env.BLOCKCYPHER_TOKEN || '';
         const baseUrl = `https://api.blockcypher.com/v1/doge/main`;
 
         try {
-            const { data } = await axios.get(`${baseUrl}/addrs/${address}/full?limit=${limit}`);
+            const historyUrl = apiToken 
+                ? `${baseUrl}/addrs/${address}/full?limit=${limit}&token=${apiToken}`
+                : `${baseUrl}/addrs/${address}/full?limit=${limit}`;
+            const { data } = await axios.get(historyUrl);
             if (!data.txs) return [];
 
             return data.txs.map((tx: any) => {

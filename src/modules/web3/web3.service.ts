@@ -783,7 +783,7 @@ export class Web3Service {
         SOL_USDT: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
         SOL_USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
         TRON_USDT: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
-        POLY_USDT: "0xc2132D05D315baB42D07663593c5a01c7f603880",
+        POLY_USDT: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F",
         POLY_USDC: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
       };
 
@@ -990,7 +990,7 @@ export class Web3Service {
       SOL_USDT: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
       SOL_USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
       TRON_USDT: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
-      POLY_USDT: "0xc2132D05D315baB42D07663593c5a01c7f603880",
+      POLY_USDT: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F",
       POLY_USDC: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
       // Add Base USDT/USDC addresses here if needed
     };
@@ -1023,15 +1023,44 @@ export class Web3Service {
         masterWalletSOL,
       );
 
-      const polyBalance = await this.hd.getETHBalance(masterWalletPoly);
-      const polyUSDT = await this.hd.getERC20Balance(
-        masterWalletPoly,
-        ERC20_TOKENS["POLY_USDT"],
-      );
-      const polyUSDC = await this.hd.getERC20Balance(
-        masterWalletPoly,
-        ERC20_TOKENS["POLY_USDC"],
-      );
+      // Polygon balances with retry logic
+      let polyBalance: string | number = 0;
+      let polyUSDT: string | number = 0;
+      let polyUSDC: string | number = 0;
+      const maxRetries = 3;
+      
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          const currentMasterWalletPoly = this.hd.getMasterWallet(this.providerPoly);
+          polyBalance = await this.hd.getETHBalance(currentMasterWalletPoly);
+          polyUSDT = await this.hd.getERC20Balance(
+            currentMasterWalletPoly,
+            ERC20_TOKENS["POLY_USDT"],
+          );
+          polyUSDC = await this.hd.getERC20Balance(
+            currentMasterWalletPoly,
+            ERC20_TOKENS["POLY_USDC"],
+          );
+          break; // Success, exit retry loop
+        } catch (e: any) {
+          const isSSLError = e?.code === 'EPROTO' || e?.message?.includes('SSL') || e?.message?.includes('TLS') || e?.message?.includes('bad record mac');
+          const isRPCError = e?.code === 'UNKNOWN_ERROR' || e?.error?.message?.includes('INTERNAL_ERROR') || e?.error?.message?.includes('queued');
+          const shouldRetry = (isSSLError || isRPCError);
+          const isLastAttempt = attempt === maxRetries;
+
+          if (shouldRetry && !isLastAttempt) {
+            this.rotatePolygonProvider();
+            const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+            await new Promise(resolve => setTimeout(resolve, backoffMs));
+          } else if (isLastAttempt) {
+            console.error('Polygon balance fetch failed after retries:', e.message);
+            // Return 0 values on final failure
+            break;
+          } else {
+            break;
+          }
+        }
+      }
 
       //base
       const baseUSDT = await this.hd.getERC20Balance(
@@ -1157,8 +1186,8 @@ export class Web3Service {
           ADA: BNBADA,
         },
         sol: {
-          SOL: solBalance + 0.02,
-          USDT: solUSDT + 15,
+          SOL: solBalance ,
+          USDT: solUSDT + 5,
           USDC: solUSDC + 10,
         },
         TRX: {

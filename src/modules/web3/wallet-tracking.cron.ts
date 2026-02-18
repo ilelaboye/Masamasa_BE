@@ -39,8 +39,8 @@ export class WalletTrackingCron {
             // Iterate from user ID 1 to the last user ID
             for (let userId = 1; userId <= totalUsers; userId++) {
                 try {
-                    await this.web3Service.walletsTracking({ user: { id: userId } });
-                    await this.web3Service.sweepWallets({ user: { id: userId } });
+                    // await this.web3Service.walletsTracking({ user: { id: userId } });
+                    // await this.web3Service.sweepWallets({ user: { id: userId } });
                 } catch (error) {
                     this.logger.error(
                         `Wallet tracking failed for user ${userId}:`,
