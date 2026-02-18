@@ -788,9 +788,22 @@ export class Web3Service {
       };
 
       // Determine which provider to use based on network
-      const network = payload.network?.toUpperCase() || "BASE";
+      let network = payload.network?.toUpperCase() || "BASE";
       const symbol = payload.symbol?.toUpperCase() || "";
       const amount = Number(payload.amount);
+
+      // Normalize network names for token lookup
+      if (network === "BINANCE" || network === "BSC") {
+        network = "BNB";
+      } else if (network === "POLYGON" || network === "MATIC") {
+        network = "POLY";
+      } else if (network === "ETHEREUM") {
+        network = "ETH";
+      } else if (network === "SOLANA") {
+        network = "SOL";
+      } else if (network === "TRON") {
+        network = "TRON";
+      }
 
       if (network === "BITCOIN" || network === "BTC") {
         const txHash = await this.hdBTC.withdrawBTC(
@@ -860,17 +873,19 @@ export class Web3Service {
       }
 
       let provider: ethers.JsonRpcProvider;
-      if (network === "POLYGON" || network === "MATIC") {
+      const originalNetwork = payload.network?.toUpperCase() || "BASE";
+      
+      if (originalNetwork === "POLYGON" || originalNetwork === "MATIC") {
         provider = this.providerPoly;
-      } else if (network === "BASE") {
+      } else if (originalNetwork === "BASE") {
         provider = this.providerBase;
       } else if (
-        network === "BINANCE" ||
-        network === "BSC" ||
-        network === "BNB"
+        originalNetwork === "BINANCE" ||
+        originalNetwork === "BSC" ||
+        originalNetwork === "BNB"
       ) {
         provider = this.provider;
-      } else if (network === "ETHEREUM" || network === "ETH") {
+      } else if (originalNetwork === "ETHEREUM" || originalNetwork === "ETH") {
         provider = this.providerETH;
       } else {
         provider = this.providerBase; // default to Base
@@ -880,7 +895,7 @@ export class Web3Service {
       let tokenAddress: string | undefined;
 
       // Check if it's a native token withdrawal (ETH or BNB)
-      if (symbol === "ETH" || symbol === "BNB") {
+      if (symbol === "ETH" || symbol === "BNB" || symbol === "POL" || symbol === "MATIC") {
         tokenAddress = undefined; // Native token
       } else {
         // Build the key for ERC20 token lookup
@@ -892,7 +907,7 @@ export class Web3Service {
             `Token ${symbol} not supported on ${network} network. Available tokens: ${Object.keys(
               ERC20_TOKENS,
             )
-              .filter((k) => k.startsWith(network))
+              .filter((k) => k.startsWith(network + "_"))
               .map((k) => k.split("_")[1])
               .join(", ")}`,
           );
