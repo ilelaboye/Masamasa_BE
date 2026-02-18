@@ -139,6 +139,7 @@ export class DogeHDWallet {
             // Dogecoin recommended fee is 0.01 DOGE per KB now, but some APIs might require 1 DOGE.
 
             const sendAmount = totalInput - fee;
+            console.log(totalInput, fee)
             if (sendAmount <= BigInt(100000000)) { // 1 DOGE dust limit for safety
                 console.log("Balance too low to sweep (dust or fee exceeds balance)");
                 return null;
