@@ -753,7 +753,6 @@ export class Web3Service {
             this.hdDoge.generateAddress(0),
           );
         } catch (e) {
-          console.log("DOGE sweep failed", e);
         }
       }
     } catch (err: any) {

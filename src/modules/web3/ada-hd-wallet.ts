@@ -81,6 +81,7 @@ export class CardanoHDWallet {
   ): Promise<string> {
     const network = mainnet ? "mainnet" : "preprod";
     const childAddress = this.generateAddress(childIndex, mainnet);
+    console.log(childAddress, "childAddress")
     const { paymentPrv, paymentPub } = this.deriveKeypair(childIndex);
     const paymentKeyHash = paymentPub.to_raw_key().hash();
 
@@ -236,101 +237,122 @@ export class CardanoHDWallet {
     blockfrostApiKey: string,
     mainnet = true,
   ): Promise<string> {
-    const network = mainnet ? "mainnet" : "preprod";
-    const masterIdx = 0;
-    const masterAddress = this.generateAddress(masterIdx, mainnet);
-    const { paymentPrv, paymentPub } = this.deriveKeypair(masterIdx);
-    const paymentKeyHash = paymentPub.to_raw_key().hash();
+    try {
+      console.log(`[ADA] Withdrawing ${amountADA} ADA to ${toAddressBech32}`);
+      const network = mainnet ? "mainnet" : "preprod";
+      const masterIdx = 0;
+      const masterAddress = this.generateAddress(masterIdx, mainnet);
+      const { paymentPrv, paymentPub } = this.deriveKeypair(masterIdx);
+      const paymentKeyHash = paymentPub.to_raw_key().hash();
 
-    const { data: utxos } = await axios.get(
-      `https://cardano-${network}.blockfrost.io/api/v0/addresses/${masterAddress}/utxos`,
-      { headers: { project_id: blockfrostApiKey } },
-    );
-
-    if (utxos.length === 0) throw new Error("No funds in master wallet");
-
-    const pp = await this.fetchProtocolParams(network, blockfrostApiKey);
-
-    const config = TransactionBuilderConfigBuilder.new()
-      .fee_algo(
-        LinearFee.new(BigNum.from_str(pp.minFeeA), BigNum.from_str(pp.minFeeB)),
-      )
-      .coins_per_utxo_byte(BigNum.from_str(pp.coinsPerUtxoByte))
-      .pool_deposit(BigNum.from_str(pp.poolDeposit))
-      .key_deposit(BigNum.from_str(pp.keyDeposit))
-      .max_value_size(5000)
-      .max_tx_size(16384)
-      .ex_unit_prices(
-        ExUnitPrices.new(
-          UnitInterval.new(BigNum.from_str("577"), BigNum.from_str("10000")),
-          UnitInterval.new(BigNum.from_str("721"), BigNum.from_str("10000000")),
-        ),
-      )
-      .build();
-
-    const txBuilder = TransactionBuilder.new(config);
-    const amountLovelace = BigInt(Math.floor(amountADA * 1_000_000));
-
-    // Add outputs first (v8+ style)
-    const masterAddr = Address.from_bech32(masterAddress);
-    const destinationAddr = Address.from_bech32(toAddressBech32);
-
-    txBuilder.add_output(
-      TransactionOutput.new(
-        destinationAddr,
-        Value.new(BigNum.from_str(amountLovelace.toString())),
-      ),
-    );
-
-    // Add inputs to cover amount + estimated fee
-    let accumulated = 0n;
-    for (const utxo of utxos) {
-      const input = TransactionInput.new(
-        TransactionHash.from_hex(utxo.txid || utxo.tx_hash),
-        utxo.output_index,
+      const { data: utxos } = await axios.get(
+        `https://cardano-${network}.blockfrost.io/api/v0/addresses/${masterAddress}/utxos`,
+        { headers: { project_id: blockfrostApiKey } },
       );
-      const lovelace =
-        utxo.amount.find((a: any) => a.unit === "lovelace")?.quantity ?? "0";
-      const val = Value.new(BigNum.from_str(lovelace));
 
-      // If UTXO has multiassets, we need to add them too if we want to keep them or just ignore if sweeping ADA only
-      // For withdrawal, we just need to cover the cost.
-      txBuilder.add_key_input(paymentKeyHash, input, val);
-      accumulated += BigInt(lovelace);
-      if (accumulated > amountLovelace + 2_000_000n) break; // roughly cover fee
-    }
+      if (utxos.length === 0) throw new Error("No funds in master wallet");
+      console.log(`[ADA] Found ${utxos.length} UTXOs`);
 
-    if (accumulated < amountLovelace)
-      throw new Error("Insufficient ADA balance in master wallet");
+      const pp = await this.fetchProtocolParams(network, blockfrostApiKey);
 
-    // Add change
-    txBuilder.add_change_if_needed(masterAddr);
+      const config = TransactionBuilderConfigBuilder.new()
+        .fee_algo(
+          LinearFee.new(BigNum.from_str(pp.minFeeA), BigNum.from_str(pp.minFeeB)),
+        )
+        .coins_per_utxo_byte(BigNum.from_str(pp.coinsPerUtxoByte))
+        .pool_deposit(BigNum.from_str(pp.poolDeposit))
+        .key_deposit(BigNum.from_str(pp.keyDeposit))
+        .max_value_size(5000)
+        .max_tx_size(16384)
+        .ex_unit_prices(
+          ExUnitPrices.new(
+            UnitInterval.new(BigNum.from_str("577"), BigNum.from_str("10000")),
+            UnitInterval.new(BigNum.from_str("721"), BigNum.from_str("10000000")),
+          ),
+        )
+        .build();
 
-    const txBody = txBuilder.build();
-    const txHash = TransactionHash.from_bytes(txBody.to_bytes());
+      const txBuilder = TransactionBuilder.new(config);
+      const amountLovelace = BigInt(Math.floor(amountADA * 1_000_000));
 
-    const witnesses = TransactionWitnessSet.new();
-    const vkeys = Vkeywitnesses.new();
-    const sk = paymentPrv.to_raw_key();
-    const vk = sk.to_public();
-    const sig = sk.sign(txHash.to_bytes());
-    vkeys.add(Vkeywitness.new(Vkey.new(vk), sig));
-    witnesses.set_vkeys(vkeys);
+      // Add outputs first (v8+ style)
+      const masterAddr = Address.from_bech32(masterAddress);
+      const destinationAddr = Address.from_bech32(toAddressBech32);
 
-    const signedTx = Transaction.new(txBody, witnesses);
+      txBuilder.add_output(
+        TransactionOutput.new(
+          destinationAddr,
+          Value.new(BigNum.from_str(amountLovelace.toString())),
+        ),
+      );
 
-    const { data } = await axios.post(
-      `https://cardano-${network}.blockfrost.io/api/v0/tx/submit`,
-      Buffer.from(signedTx.to_bytes()),
-      {
-        headers: {
-          project_id: blockfrostApiKey,
-          "Content-Type": "application/cbor",
+      // Add inputs to cover amount + estimated fee
+      let accumulated = 0n;
+      for (const utxo of utxos) {
+        const input = TransactionInput.new(
+          TransactionHash.from_hex(utxo.txid || utxo.tx_hash),
+          utxo.output_index,
+        );
+        const lovelace =
+          utxo.amount.find((a: any) => a.unit === "lovelace")?.quantity ?? "0";
+        const val = Value.new(BigNum.from_str(lovelace));
+
+        txBuilder.add_key_input(paymentKeyHash, input, val);
+        accumulated += BigInt(lovelace);
+        if (accumulated > amountLovelace + 2_000_000n) break;
+      }
+
+      console.log(`[ADA] Accumulated: ${Number(accumulated) / 1_000_000} ADA`);
+      if (accumulated < amountLovelace)
+        throw new Error(`Insufficient ADA. Have: ${Number(accumulated) / 1_000_000}, Need: ${amountADA}`);
+
+      // Set TTL
+      let currentSlot = 1250000000;
+      try {
+        currentSlot = await this.getCurrentSlot(network, blockfrostApiKey);
+      } catch { }
+      txBuilder.set_ttl(currentSlot + 1000);
+
+      // Add change
+      txBuilder.add_change_if_needed(masterAddr);
+
+      console.log(`[ADA] Building and signing transaction...`);
+      const txBody = txBuilder.build();
+      const txHashBytes = blake2b(txBody.to_bytes(), undefined, 32);
+      const txHash = TransactionHash.from_bytes(txHashBytes);
+
+      const witnesses = TransactionWitnessSet.new();
+      const vkeys = Vkeywitnesses.new();
+      const sk = paymentPrv.to_raw_key();
+      const vk = sk.to_public();
+      const sig = sk.sign(txHash.to_bytes());
+      vkeys.add(Vkeywitness.new(Vkey.new(vk), sig));
+      witnesses.set_vkeys(vkeys);
+
+      const signedTx = Transaction.new(txBody, witnesses);
+
+      console.log(`[ADA] Submitting to Blockfrost...`);
+      const { data } = await axios.post(
+        `https://cardano-${network}.blockfrost.io/api/v0/tx/submit`,
+        Buffer.from(signedTx.to_bytes()),
+        {
+          headers: {
+            project_id: blockfrostApiKey,
+            "Content-Type": "application/cbor",
+          },
         },
-      },
-    );
+      );
 
-    return data;
+      console.log(`[ADA] Success! TX: ${data}`);
+      return data;
+    } catch (error: any) {
+      console.error(`[ADA] Withdrawal failed:`, {
+        message: error?.message,
+        response: error?.response?.data,
+        status: error?.response?.status,
+      });
+      throw error;
+    }
   }
 
   private async _transactionWebhook(transactionWebhook: {
