@@ -13,6 +13,7 @@ export const WithdrawTokenValidation = Joi.object({
   to: Joi.string().required(),
   network: Joi.string().required(),
   symbol: Joi.string().required(),
+  destinationTag:Joi.string(),
 });
 
 export const TokenBalanceValidation = Joi.object({
