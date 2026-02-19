@@ -14,6 +14,7 @@ import { appConfig } from "@/config";
 import {
   getAssociatedTokenAddress,
   createTransferInstruction,
+  createAssociatedTokenAccountInstruction,
 } from "@solana/spl-token";
 import axios from "axios";
 import base58 from "bs58";
@@ -375,11 +376,26 @@ export class SolHDWallet {
     );
     const toAta = await getAssociatedTokenAddress(mintPubkey, destPubkey);
 
-    // Note: We assume the destination ATA is already created for simplicity in withdrawal
-    // In a production environment, you might need to check and create it if missing.
+    // Check if destination ATA exists, create if not
+    const transaction = new Transaction();
+    
+    const accountInfo = await connection.getAccountInfo(toAta);
+    if (!accountInfo) {
+      // ATA doesn't exist, need to create it
+      console.log(`Creating ATA for recipient: ${toAta.toBase58()}`);
+      transaction.add(
+        createAssociatedTokenAccountInstruction(
+          masterKp.publicKey, // payer
+          toAta, // associated token account
+          destPubkey, // owner
+          mintPubkey, // mint
+        )
+      );
+    }
+
     const amountTokens = Math.floor(amount * 1_000_000); // Assuming 6 decimals like USDC/USDT
 
-    const transaction = new Transaction().add(
+    transaction.add(
       createTransferInstruction(
         fromAta,
         toAta,
