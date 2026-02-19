@@ -1249,7 +1249,7 @@ export class Web3Service {
           ADA: cardanoChild.lovelace + 3,
         },
         BTC: {
-          BTC: btcBalance + 0.0001,
+          BTC: btcBalance + 0.00023,
         },
         RIPPLE: {
           XRP: xrpBalance + 3.4,
