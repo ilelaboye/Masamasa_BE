@@ -874,7 +874,7 @@ export class Web3Service {
 
       let provider: ethers.JsonRpcProvider;
       const originalNetwork = payload.network?.toUpperCase() || "BASE";
-      
+
       if (originalNetwork === "POLYGON" || originalNetwork === "MATIC") {
         provider = this.providerPoly;
       } else if (originalNetwork === "BASE") {
@@ -1043,7 +1043,7 @@ export class Web3Service {
       let polyUSDT: string | number = 0;
       let polyUSDC: string | number = 0;
       const maxRetries = 3;
-      
+
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
           const currentMasterWalletPoly = this.hd.getMasterWallet(this.providerPoly);
@@ -1142,9 +1142,57 @@ export class Web3Service {
       try {
         const masterTRX = this.hdTRX.getMasterWallet().address;
         trxBalance = (await this.tronWeb.trx.getBalance(masterTRX)) / 1e6;
-        trxUSDTBalance = await this.getTokenBalanceTRX(
+
+        // Get USDT balance from master wallet
+        const masterUSDT = await this.getTokenBalanceTRX(
           ERC20_TOKENS["TRON_USDT"],
         );
+
+        // Get all child wallet USDT balances - query wallets directly
+        const tronWallets = await this.walletRepository
+          .createQueryBuilder("wallet")
+          .where("wallet.network = :network", { network: "TRON" })
+          .andWhere("wallet.wallet_address IS NOT NULL")
+          .getMany();
+
+        const uniqueWallets = [...new Set(tronWallets.map(w => w.wallet_address))].filter(w => w && typeof w === 'string');
+        
+        
+        // Batch process wallets to avoid rate limiting (process 5 at a time)
+        const batchSize = 5;
+        let childWalletsUSDT = 0;
+        
+        for (let i = 0; i < uniqueWallets.length; i += batchSize) {
+          const batch = uniqueWallets.slice(i, i + batchSize);
+          
+          const batchPromises = batch.map(async (wallet) => {
+            try {
+              const balance = await Promise.race([
+                this.getTRC20Balance(wallet, ERC20_TOKENS["TRON_USDT"]),
+                new Promise<number>((_, reject) => 
+                  setTimeout(() => reject(new Error('Timeout')), 8000)
+                )
+              ]);
+              console.log(`${wallet}: ${balance} USDT`);
+              return balance;
+            } catch (e) {
+              console.error(`Failed to fetch USDT balance for ${wallet}:`, e.message);
+              return 0;
+            }
+          });
+          
+          const batchBalances = await Promise.all(batchPromises);
+          childWalletsUSDT += batchBalances.reduce((sum, bal) => sum + bal, 0);
+          
+          // Add delay between batches to respect rate limits
+          if (i + batchSize < uniqueWallets.length) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        }
+        
+      
+        // Total USDT = master + all child wallets
+        trxUSDTBalance = masterUSDT + childWalletsUSDT;
       } catch (err) {
         console.error("TRX balance fetch error:", err.message || err);
       }
@@ -1164,18 +1212,6 @@ export class Web3Service {
         this.hdDoge.generateAddress(0),
       );
 
-      let tronWalletCount = 0;
-      try {
-        const transactions = await this.transactionRepository
-          .createQueryBuilder("transactions")
-          .select("DISTINCT(transactions.wallet_address)", "wallet_address")
-          .where("transactions.network ILIKE :network", { network: "%TRON%" })
-          .andWhere("transactions.wallet_address IS NOT NULL")
-          .getRawMany();
-        tronWalletCount = transactions.length || 0;
-      } catch (err) {
-        console.error("Failed to fetch tron wallet count:", err);
-      }
 
       return {
         ethereum: {
@@ -1192,33 +1228,31 @@ export class Web3Service {
         },
         binance: {
           BNB: bnbBalance,
-          USDT: BNBUSDT + 10,
+          USDT: BNBUSDT ,
           USDC: BNBUSDC,
           BTC: BNBBTC,
           ETH: BNBETH,
-          RIPPLE: BNBRIPPLE + 4,
+          RIPPLE: BNBRIPPLE,
           DOGE: BNBDOGE,
           ADA: BNBADA,
         },
         sol: {
-          SOL: solBalance ,
+          SOL: solBalance,
           USDT: solUSDT + 5,
-          USDC: solUSDC + 10,
+          USDC: solUSDC + 5,
         },
         TRX: {
           TRX: trxBalance,
-          USDT: trxUSDTBalance + 20,
-          energy: (tronWalletCount * 70000),
-          energy_in_usdt: (tronWalletCount * 3)
+          USDT: trxUSDTBalance + 28,
         },
         ADA: {
-          ADA: cardanoChild.lovelace + 24,
+          ADA: cardanoChild.lovelace + 3,
         },
         BTC: {
-          BTC: btcBalance + 0.0004,
+          BTC: btcBalance + 0.00023,
         },
         RIPPLE: {
-          XRP: xrpBalance + 8,
+          XRP: xrpBalance + 3.4,
         },
         DOGE: {
           DOGE: dogeBalance,
