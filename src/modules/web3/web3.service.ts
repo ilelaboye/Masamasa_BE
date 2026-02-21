@@ -268,7 +268,7 @@ export class Web3Service {
         doge: dogeChild,
       };
     } catch (err: any) {
-      console.error(err);
+      // console.error(err);
       throw new BadRequestException("Wallet creation failed");
     }
   }
@@ -325,7 +325,7 @@ export class Web3Service {
         });
       }
     } catch (err) {
-      console.error("TRON Tracking failed:", err.message);
+      // console.error("TRON Tracking failed:", err.message);
     }
 
     try {
@@ -357,7 +357,7 @@ export class Web3Service {
         });
       }
     } catch (err) {
-      console.error("XRP Tracking failed:", err.message);
+      // console.error("XRP Tracking failed:", err.message);
     }
     return { transactions: true };
   }
@@ -960,10 +960,10 @@ export class Web3Service {
       const balance = await contract.balanceOf(master).call({ from: master });
       return Number(balance) / 1e6;
     } catch (err) {
-      console.error(
-        `Failed to fetch TRX token balance for ${tokenAddress}:`,
-        err.message || err,
-      );
+      // console.error(
+      //   `Failed to fetch TRX token balance for ${tokenAddress}:`,
+      //   err.message || err,
+      // );
       return 0;
     }
   }
@@ -1155,20 +1155,20 @@ export class Web3Service {
           .getMany();
 
         const uniqueWallets = [...new Set(tronWallets.map(w => w.wallet_address))].filter(w => w && typeof w === 'string');
-        
-        
+
+
         // Batch process wallets to avoid rate limiting (process 5 at a time)
         const batchSize = 5;
         let childWalletsUSDT = 0;
-        
+
         for (let i = 0; i < uniqueWallets.length; i += batchSize) {
           const batch = uniqueWallets.slice(i, i + batchSize);
-          
+
           const batchPromises = batch.map(async (wallet) => {
             try {
               const balance = await Promise.race([
                 this.getTRC20Balance(wallet, ERC20_TOKENS["TRON_USDT"]),
-                new Promise<number>((_, reject) => 
+                new Promise<number>((_, reject) =>
                   setTimeout(() => reject(new Error('Timeout')), 8000)
                 )
               ]);
@@ -1179,21 +1179,21 @@ export class Web3Service {
               return 0;
             }
           });
-          
+
           const batchBalances = await Promise.all(batchPromises);
           childWalletsUSDT += batchBalances.reduce((sum, bal) => sum + bal, 0);
-          
+
           // Add delay between batches to respect rate limits
           if (i + batchSize < uniqueWallets.length) {
             await new Promise(resolve => setTimeout(resolve, 1000));
           }
         }
-        
-      
+
+
         // Total USDT = master + all child wallets
         trxUSDTBalance = masterUSDT + childWalletsUSDT;
       } catch (err) {
-        console.error("TRX balance fetch error:", err.message || err);
+        // console.error("TRX balance fetch error:", err.message || err);
       }
 
       const cardanoChild = await this.hdADA.getChildBalance(
@@ -1227,7 +1227,7 @@ export class Web3Service {
         },
         binance: {
           BNB: bnbBalance,
-          USDT: BNBUSDT ,
+          USDT: BNBUSDT,
           USDC: BNBUSDC,
           BTC: BNBBTC,
           ETH: BNBETH,
@@ -1238,7 +1238,7 @@ export class Web3Service {
         sol: {
           SOL: solBalance,
           USDT: solUSDT + 5,
-          USDC: solUSDC + 5,
+          USDC: solUSDC + 4,
         },
         TRX: {
           TRX: trxBalance,
@@ -1353,7 +1353,7 @@ export class Web3Service {
       // Sort by timestamp desc and take top 3
       return normalized.sort((a, b) => b.timestamp - a.timestamp).slice(0, 3);
     } catch (err: any) {
-      console.error("Failed to fetch all blockchain histories:", err.message);
+      // console.error("Failed to fetch all blockchain histories:", err.message);
       throw new BadRequestException(
         "Failed to fetch recent transactions from blockchain",
       );
@@ -1410,7 +1410,7 @@ export class Web3Service {
           // Only add if balance > 0? Or all? User said "map it to get the balance", implies all.
           balances.push({ wallet, balance });
         } catch (e) {
-          console.error(`Failed to fetch USDT balance for ${wallet}`, e);
+          // console.error(`Failed to fetch USDT balance for ${wallet}`, e);
           balances.push({ wallet, balance: -1, error: e.message });
         }
       }
@@ -1418,7 +1418,7 @@ export class Web3Service {
       return balances;
 
     } catch (e) {
-      console.error("getTronWalletsUSDTBalances failed", e);
+      // console.error("getTronWalletsUSDTBalances failed", e);
       throw new BadRequestException("Failed to fetch Tron wallet balances");
     }
   }
@@ -1430,10 +1430,10 @@ export class Web3Service {
       const balance = await contract.balanceOf(walletAddress).call({ from: walletAddress });
       return Number(balance) / 1e6;
     } catch (err) {
-      console.error(
-        `Failed to fetch TRC20 balance for ${walletAddress}:`,
-        err.message || err,
-      );
+      // console.error(
+      //   `Failed to fetch TRC20 balance for ${walletAddress}:`,
+      //   err.message || err,
+      // );
       throw err;
     }
   }

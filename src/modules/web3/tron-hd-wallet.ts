@@ -5,6 +5,18 @@ import { hdkey } from "ethereumjs-wallet";
 import { PublicService } from "../global/public/public.service";
 const TronWeb = require("tronweb");
 
+const TRON_TIMEOUT_MS = 10_000; // 10 seconds
+
+/** Wraps any promise with a hard timeout to avoid ETIMEDOUT hanging the server */
+function withTimeout<T>(promise: Promise<T>, ms = TRON_TIMEOUT_MS): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`Tron call timed out after ${ms}ms`)), ms),
+    ),
+  ]);
+}
+
 export class TronHDWallet {
   private masterSeed: Buffer;
   private tronWeb: any;
@@ -73,7 +85,7 @@ export class TronHDWallet {
     const address = child.address;
 
     // 1. Get TRX balance
-    const balance = await tronWeb.trx.getBalance(address);
+    const balance = await withTimeout(tronWeb.trx.getBalance(address)) as any;
     if (balance <= 0) return null;
 
     // TRON transfer fee is always ~15 TRX bandwidth/energy if not frozen
@@ -87,14 +99,12 @@ export class TronHDWallet {
     const sendAmount = balance - FEE;
 
     // 2. Send TRX sweep
-    const tx = await tronWeb.transactionBuilder.sendTrx(
-      masterAddressBase58,
-      sendAmount,
-      address,
-    );
+    const tx = await withTimeout(
+      tronWeb.transactionBuilder.sendTrx(masterAddressBase58, sendAmount, address),
+    ) as any;
 
-    const signedTx = await tronWeb.trx.sign(tx, child.privateKey);
-    const receipt = await tronWeb.trx.sendRawTransaction(signedTx);
+    const signedTx = await withTimeout(tronWeb.trx.sign(tx, child.privateKey)) as any;
+    const receipt = await withTimeout(tronWeb.trx.sendRawTransaction(signedTx)) as any;
 
     console.log("TRX Sweep Tx:", receipt);
 
@@ -153,7 +163,7 @@ export class TronHDWallet {
 
     if (tokenBalance === 0) return null;
     // 4. Check TRX balance to pay fees
-    const trxBalance = await tronWebChild.trx.getBalance(childAddress);
+    const trxBalance = await withTimeout(tronWebChild.trx.getBalance(childAddress)) as any;
 
     // Estimate needed fee for TRC20 transfer
     const FEE_ESTIMATE = 30 * 1_000_000; // 30 TRX in SUN as buffer
@@ -188,17 +198,14 @@ export class TronHDWallet {
     const master = this.getMasterWallet();
     const amountSun = Math.floor(amountTRX * 1_000_000);
 
-    const transaction = await this.tronWeb.transactionBuilder.sendTrx(
-      toAddress,
-      amountSun,
-      master.address,
-    );
+    const transaction = await withTimeout(
+      this.tronWeb.transactionBuilder.sendTrx(toAddress, amountSun, master.address),
+    ) as any;
 
-    const signedTx = await this.tronWeb.trx.sign(
-      transaction,
-      master.privateKey,
-    );
-    const receipt = await this.tronWeb.trx.sendRawTransaction(signedTx);
+    const signedTx = await withTimeout(
+      this.tronWeb.trx.sign(transaction, master.privateKey),
+    ) as any;
+    const receipt = await withTimeout(this.tronWeb.trx.sendRawTransaction(signedTx)) as any;
 
     if (!receipt.result) {
       throw new Error(`TRX withdrawal failed: ${JSON.stringify(receipt)}`);
@@ -237,6 +244,7 @@ export class TronHDWallet {
     try {
       const { data } = await axios.get(url, {
         headers: { "TRON-PRO-API-KEY": appConfig.TRX_API_KEY },
+        timeout: TRON_TIMEOUT_MS,
       });
 
       if (!data || !data.data) return [];
@@ -276,6 +284,7 @@ export class TronHDWallet {
     try {
       const { data } = await axios.get(url, {
         headers: { "TRON-PRO-API-KEY": appConfig.TRX_API_KEY },
+        timeout: TRON_TIMEOUT_MS,
       });
 
       if (!data || !data.data) return [];

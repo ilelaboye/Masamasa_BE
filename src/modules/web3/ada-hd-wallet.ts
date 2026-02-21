@@ -81,7 +81,6 @@ export class CardanoHDWallet {
   ): Promise<string> {
     const network = mainnet ? "mainnet" : "preprod";
     const childAddress = this.generateAddress(childIndex, mainnet);
-    console.log(childAddress, "childAddress")
     const { paymentPrv, paymentPub } = this.deriveKeypair(childIndex);
     const paymentKeyHash = paymentPub.to_raw_key().hash();
 
