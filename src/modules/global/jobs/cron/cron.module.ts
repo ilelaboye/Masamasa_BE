@@ -39,4 +39,4 @@ import { BankVerification } from "../../bank-verification/entities/bank-verifica
     BankVerificationService,
   ],
 })
-export class CronModule {}
+export class CronModule { }

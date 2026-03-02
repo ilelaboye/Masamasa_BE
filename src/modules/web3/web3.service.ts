@@ -41,6 +41,7 @@ export class Web3Service {
   private provider: ethers.JsonRpcProvider;
   private providerBase: ethers.JsonRpcProvider;
   private providerETH: ethers.JsonRpcProvider;
+  private providerPoly: ethers.JsonRpcProvider;
   private conn: Connection;
   private hdSol: SolHDWallet;
   private hdTRX: TronHDWallet;
@@ -49,6 +50,7 @@ export class Web3Service {
   private hdBTC: BtcHDWallet;
   private hdDoge: DogeHDWallet;
   private hdXrp: XrpHDWallet;
+  private currentPolyRpcIndex: number = 0; // Track current Polygon RPC endpoint
   constructor(
     @InjectRepository(Wallet)
     private readonly walletRepository: Repository<Wallet>,
@@ -61,6 +63,15 @@ export class Web3Service {
     this.provider = new ethers.JsonRpcProvider(appConfig.EVM_RPC_URL);
     this.providerBase = new ethers.JsonRpcProvider(appConfig.BASE_RPC_URL);
     this.providerETH = new ethers.JsonRpcProvider(appConfig.ETH_RPC_URL);
+
+    // Configure Polygon provider without gas station plugin to avoid "Batch size too large" errors
+    const polygonNetwork = ethers.Network.from({
+      name: "matic",
+      chainId: 137,
+    });
+    this.providerPoly = new ethers.JsonRpcProvider(appConfig.POLY_RPC_URL, polygonNetwork, {
+      staticNetwork: polygonNetwork,
+    });
     if (!appConfig.MASTER_MNEMONIC) {
       throw new Error("MASTER_MNEMONIC is missing in .env");
     }
@@ -103,6 +114,24 @@ export class Web3Service {
         this.publicService,
       );
     }
+  }
+
+  // -----------------------------
+  // HELPER: Rotate Polygon RPC Provider on SSL/Connection Errors
+  // -----------------------------
+  private rotatePolygonProvider(): void {
+    this.currentPolyRpcIndex = (this.currentPolyRpcIndex + 1) % appConfig.POLY_RPC_URLS.length;
+    const newRpcUrl = appConfig.POLY_RPC_URLS[this.currentPolyRpcIndex];
+
+
+    const polygonNetwork = ethers.Network.from({
+      name: "matic",
+      chainId: 137,
+    });
+
+    this.providerPoly = new ethers.JsonRpcProvider(newRpcUrl, polygonNetwork, {
+      staticNetwork: polygonNetwork,
+    });
   }
 
   // -----------------------------
@@ -239,7 +268,7 @@ export class Web3Service {
         doge: dogeChild,
       };
     } catch (err: any) {
-      console.error(err);
+      // console.error(err);
       throw new BadRequestException("Wallet creation failed");
     }
   }
@@ -253,29 +282,31 @@ export class Web3Service {
   // -----------------------------
   async walletsTracking(req) {
     await this.initHDWallet();
-    const masterWalletBase = this.hd.getMasterWallet(this.providerBase);
-    const masterWallet = this.hd.getMasterWallet(this.provider);
 
     const masterWalletTron = this.hdTRX.getMasterWallet();
+
+    // Extract userId - support both HTTP request (req.user.id) and CRON call ({ user: { id: X } })
+    const userId = req.user?.id || req.user;
+
     const w = await this.walletRepository.findOne({
-      where: { user: req.user.id },
+      where: { user: userId },
     });
 
     if (!w) return false;
-    const tronChildWallet = this.hdTRX.getChildAddress(req.user.id);
+    const tronChildWallet = this.hdTRX.getChildAddress(userId);
 
 
     try {
       // TRON TRACKING - using hash matching like ADA/XRP
       const onChainTron = await this.hdTRX.getChildTRC20History(
-        req.user.id,
+        userId,
         "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
       );
 
       const dbTronTransactions = await this.transactionRepository
         .createQueryBuilder("transactions")
         .where("transactions.user_id = :userId AND transactions.network = :network", {
-          userId: req.user.id,
+          userId: userId,
           network: "Tron"
         })
         .getMany();
@@ -294,21 +325,20 @@ export class Web3Service {
         });
       }
     } catch (err) {
-      console.error("TRON Tracking failed:", err.message);
+      // console.error("TRON Tracking failed:", err.message);
     }
 
     try {
       // XRP TRACKING
       const xrpMasterAddress = await this.hdXrp.getMasterAddress();
-      const xrpDestinationTag = 44011 + Number(req.user.id);
+      const xrpDestinationTag = 44011 + Number(userId);
 
-      const onChainXrp = await this.hdXrp.getHistoryByUserId(req.user.id, 10);
+      const onChainXrp = await this.hdXrp.getHistoryByUserId(userId, 10);
 
-      console.log("onChainXrp", onChainXrp, xrpMasterAddress);
       const dbXrpTransactions = await this.transactionRepository
         .createQueryBuilder("transactions")
         .where("transactions.user_id = :userId AND transactions.network = :network", {
-          userId: req.user.id,
+          userId: userId,
           network: "RIPPLE"
         })
         .getMany();
@@ -327,39 +357,8 @@ export class Web3Service {
         });
       }
     } catch (err) {
-      console.error("XRP Tracking failed:", err.message);
+      // console.error("XRP Tracking failed:", err.message);
     }
-
-    try {
-      // DOGE TRACKING
-      const dogeAddress = this.hdDoge.generateAddress(req.user.id);
-      const onChainDoge = await this.hdDoge.getChildTransactionHistory(req.user.id, 10);
-
-      const dbDogeTransactions = await this.transactionRepository
-        .createQueryBuilder("transactions")
-        .where("transactions.user_id = :userId AND transactions.network = :network", {
-          userId: req.user.id,
-          network: "DOGE"
-        })
-        .getMany();
-
-      const existingHashes = dbDogeTransactions.map(tx => tx.metadata?.hash || tx.metadata?.txID);
-
-      const unmatchedDoge = onChainDoge.filter(tx => !existingHashes.includes(tx.txID));
-
-      for (const tx of unmatchedDoge) {
-        await this.publicService.transactionWebhook({
-          network: "DOGE",
-          address: dogeAddress,
-          amount: tx.amount,
-          token_symbol: "DOGE",
-          hash: tx.txID
-        });
-      }
-    } catch (err) {
-      console.error("DOGE Tracking failed:", err.message);
-    }
-
     return { transactions: true };
   }
 
@@ -368,6 +367,7 @@ export class Web3Service {
     const masterWalletBase = this.hd.getMasterWallet(this.providerBase);
     const masterWalletETH = this.hd.getMasterWallet(this.providerETH);
     const masterWallet = this.hd.getMasterWallet(this.provider);
+    const masterWalletPoly = this.hd.getMasterWallet(this.providerPoly); // Polygon master wallet
 
     const masterWalletTron = this.hdTRX.getMasterWallet();
     const masterWalletSOL = this.hdSol.getMasterKeypair().publicKey.toBase58();
@@ -399,6 +399,8 @@ export class Web3Service {
         SOL_USDT: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
         SOL_USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
         TRON_USDT: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+        POLY_USDT: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F",
+        POLY_USDC: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
         // Add Base USDT/USDC addresses here if needed
       };
 
@@ -420,12 +422,15 @@ export class Web3Service {
           Number(req.user.id),
           this.providerETH,
         );
+        let childWalletPoly = this.hd.getChildWallet(
+          Number(req.user.id),
+          this.providerPoly,
+        );
 
         //BASE
         try {
           await this.hdBTC.sweepBTC(req.user.id, this.hdBTC.generateAddress(0));
         } catch {
-          console.log("BTC sweep failed");
         }
 
         try {
@@ -437,7 +442,6 @@ export class Web3Service {
             "USDT",
           );
         } catch (e) {
-          console.log("BASE_USDT sweep failed", e);
         }
 
         try {
@@ -449,7 +453,6 @@ export class Web3Service {
             "USDC",
           );
         } catch (e) {
-          console.log("BASE_USDC sweep failed", e);
         }
 
         try {
@@ -461,7 +464,6 @@ export class Web3Service {
             "BTC",
           );
         } catch (e) {
-          console.log("BASE_BTC sweep failed", e);
         }
 
         try {
@@ -473,7 +475,6 @@ export class Web3Service {
             "BNB",
           );
         } catch (e) {
-          console.log("BASE_BNB sweep failed", e);
         }
         //bsc erc20 tokens
         try {
@@ -485,7 +486,6 @@ export class Web3Service {
             "USDT",
           );
         } catch (e) {
-          console.log("BNB_USDT sweep failed", e);
         }
 
         try {
@@ -497,7 +497,6 @@ export class Web3Service {
             "USDC",
           );
         } catch (e) {
-          console.log("BNB_USDC sweep failed", e);
         }
         try {
           await this.hd.sweepToken(
@@ -508,7 +507,6 @@ export class Web3Service {
             "ETH",
           );
         } catch (e) {
-          console.log("BNB_ETH sweep failed", e);
         }
         try {
           await this.hd.sweepToken(
@@ -519,7 +517,6 @@ export class Web3Service {
             "ADA",
           );
         } catch (e) {
-          console.log("BNB_ADA sweep failed", e);
         }
 
         try {
@@ -531,7 +528,6 @@ export class Web3Service {
             "XRP",
           );
         } catch (e) {
-          console.log("BNB_RIPPLE sweep failed", e);
         }
 
         try {
@@ -543,7 +539,6 @@ export class Web3Service {
             "DOGE",
           );
         } catch (e) {
-          console.log("BNB_DOGE sweep failed", e);
         }
 
         try {
@@ -555,15 +550,12 @@ export class Web3Service {
             "BTC",
           );
         } catch (e) {
-          console.log("BNB_BTC sweep failed", e);
         }
-        console.log("Complete token sweep");
 
         try {
           //BASE
           await this.hd.sweep(childWallet, masterWalletBase, "BASE", "ETH");
         } catch (e) {
-          console.log(e);
         }
         try {
           //BSC
@@ -574,7 +566,6 @@ export class Web3Service {
             "BNB",
           );
         } catch (e) {
-          console.log(e);
         }
         try {
           await this.hd.sweepToken(
@@ -585,7 +576,6 @@ export class Web3Service {
             "USDT",
           );
         } catch (e) {
-          console.log("ETH_USDT sweep failed", e);
         }
         try {
           await this.hd.sweepToken(
@@ -596,14 +586,93 @@ export class Web3Service {
             "USDC",
           );
         } catch (e) {
-          console.log("ETH_USDC sweep failed", e);
         }
+
+        // POLY_USDT with retry logic and provider rotation
+        const maxRetries = 3;
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          try {
+            await this.hd.sweepToken(
+              childWalletPoly,
+              masterWalletPoly,
+              ERC20_TOKENS["POLY_USDT"],
+              "POLYGON",
+              "USDT",
+            );
+            break; // Success, exit retry loop
+          } catch (e: any) {
+            const isSSLError = e?.code === 'EPROTO' || e?.message?.includes('SSL') || e?.message?.includes('TLS');
+            const isRPCError = e?.code === 'UNKNOWN_ERROR' || e?.error?.message?.includes('INTERNAL_ERROR') || e?.error?.message?.includes('queued');
+            const shouldRetry = (isSSLError || isRPCError);
+            const isLastAttempt = attempt === maxRetries;
+
+
+            if (shouldRetry && !isLastAttempt) {
+              // Rotate to next RPC endpoint and retry
+              this.rotatePolygonProvider();
+              // Recreate child and master wallets with new provider
+              childWalletPoly = this.hd.getChildWallet(
+                Number(req.user.id),
+                this.providerPoly,
+              );
+              const masterWalletPoly = this.hd.getMasterWallet(this.providerPoly);
+              // Exponential backoff: wait before retry
+              const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+              await new Promise(resolve => setTimeout(resolve, backoffMs));
+            } else {
+              break; // Not an SSL error or last attempt, stop retrying
+            }
+          }
+        }
+
+        // POLY_USDC with retry logic and provider rotation
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          try {
+            await this.hd.sweepToken(
+              childWalletPoly,
+              masterWalletPoly,
+              ERC20_TOKENS["POLY_USDC"],
+              "POLYGON",
+              "USDC",
+            );
+            break; // Success, exit retry loop
+          } catch (e: any) {
+            const isSSLError = e?.code === 'EPROTO' || e?.message?.includes('SSL') || e?.message?.includes('TLS');
+            const isRPCError = e?.code === 'UNKNOWN_ERROR' || e?.error?.message?.includes('INTERNAL_ERROR') || e?.error?.message?.includes('queued');
+            const shouldRetry = (isSSLError || isRPCError);
+            const isLastAttempt = attempt === maxRetries;
+
+
+            if (shouldRetry && !isLastAttempt) {
+              // Rotate to next RPC endpoint and retry
+              this.rotatePolygonProvider();
+              // Recreate child and master wallets with new provider
+              childWalletPoly = this.hd.getChildWallet(
+                Number(req.user.id),
+                this.providerPoly,
+              );
+              const masterWalletPoly = this.hd.getMasterWallet(this.providerPoly);
+              // Exponential backoff: wait before retry
+              const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+              await new Promise(resolve => setTimeout(resolve, backoffMs));
+            } else {
+              break; // Not an SSL error or last attempt, stop retrying
+            }
+          }
+        }
+
+
+        try {
+          //POLY
+          await this.hd.sweep(childWalletPoly, masterWalletPoly, "POLYGON", "POL");
+        } catch (e) {
+        }
+
 
         try {
           //ETH
           await this.hd.sweep(childWallet5, masterWalletETH, "ETHEREUM", "ETH");
         } catch (e) {
-          console.log(e);
         }
 
         // //BASE ERC20 tokens
@@ -619,7 +688,6 @@ export class Web3Service {
             this.publicService,
           );
         } catch (e) {
-          console.log("SOL_USDT sweep failed", e);
         }
 
         try {
@@ -632,9 +700,7 @@ export class Web3Service {
             this.publicService,
           );
         } catch (e) {
-          console.log("SOL_USDC sweep failed", e);
         }
-        console.log("Complete token sweep sol");
         try {
           await this.hdSol.sweepSOL(
             {
@@ -646,7 +712,6 @@ export class Web3Service {
             req.user.id,
           );
         } catch (e) {
-          console.log("SOL sweep failed", e);
         }
 
         // trc20
@@ -659,7 +724,6 @@ export class Web3Service {
             "https://api.trongrid.io",
           );
         } catch (e) {
-          console.log("TRON sweep failed", e);
         }
         // ada
         try {
@@ -670,7 +734,6 @@ export class Web3Service {
             true,
           );
         } catch (e) {
-          console.log("ADA sweep failed", e);
         }
 
         // btc
@@ -682,24 +745,20 @@ export class Web3Service {
             (await this.hdXrp.getMasterWallet()).address,
           );
         } catch (e) {
-          console.log("XRP sweep failed", e);
         }
-
         try {
+
           await this.hdDoge.sweepDOGE(
             Number(req.user.id),
             this.hdDoge.generateAddress(0),
           );
         } catch (e) {
-          console.log("DOGE sweep failed", e);
         }
       }
     } catch (err: any) {
-      console.error(`Failed to for user ${req.user.id}:`, err);
       return false;
     }
 
-    console.log("Sweep completed for user", req.user.id);
     return true;
   }
 
@@ -723,12 +782,27 @@ export class Web3Service {
         SOL_USDT: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
         SOL_USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
         TRON_USDT: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+        POLY_USDT: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F",
+        POLY_USDC: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
       };
 
       // Determine which provider to use based on network
-      const network = payload.network?.toUpperCase() || "BASE";
+      let network = payload.network?.toUpperCase() || "BASE";
       const symbol = payload.symbol?.toUpperCase() || "";
       const amount = Number(payload.amount);
+
+      // Normalize network names for token lookup
+      if (network === "BINANCE" || network === "BSC") {
+        network = "BNB";
+      } else if (network === "POLYGON" || network === "MATIC") {
+        network = "POLY";
+      } else if (network === "ETHEREUM") {
+        network = "ETH";
+      } else if (network === "SOLANA") {
+        network = "SOL";
+      } else if (network === "TRON") {
+        network = "TRON";
+      }
 
       if (network === "BITCOIN" || network === "BTC") {
         const txHash = await this.hdBTC.withdrawBTC(
@@ -798,15 +872,19 @@ export class Web3Service {
       }
 
       let provider: ethers.JsonRpcProvider;
-      if (network === "BASE") {
+      const originalNetwork = payload.network?.toUpperCase() || "BASE";
+
+      if (originalNetwork === "POLYGON" || originalNetwork === "MATIC") {
+        provider = this.providerPoly;
+      } else if (originalNetwork === "BASE") {
         provider = this.providerBase;
       } else if (
-        network === "BINANCE" ||
-        network === "BSC" ||
-        network === "BNB"
+        originalNetwork === "BINANCE" ||
+        originalNetwork === "BSC" ||
+        originalNetwork === "BNB"
       ) {
         provider = this.provider;
-      } else if (network === "ETHEREUM" || network === "ETH") {
+      } else if (originalNetwork === "ETHEREUM" || originalNetwork === "ETH") {
         provider = this.providerETH;
       } else {
         provider = this.providerBase; // default to Base
@@ -816,7 +894,7 @@ export class Web3Service {
       let tokenAddress: string | undefined;
 
       // Check if it's a native token withdrawal (ETH or BNB)
-      if (symbol === "ETH" || symbol === "BNB") {
+      if (symbol === "ETH" || symbol === "BNB" || symbol === "POL" || symbol === "MATIC") {
         tokenAddress = undefined; // Native token
       } else {
         // Build the key for ERC20 token lookup
@@ -828,7 +906,7 @@ export class Web3Service {
             `Token ${symbol} not supported on ${network} network. Available tokens: ${Object.keys(
               ERC20_TOKENS,
             )
-              .filter((k) => k.startsWith(network))
+              .filter((k) => k.startsWith(network + "_"))
               .map((k) => k.split("_")[1])
               .join(", ")}`,
           );
@@ -882,10 +960,10 @@ export class Web3Service {
       const balance = await contract.balanceOf(master).call({ from: master });
       return Number(balance) / 1e6;
     } catch (err) {
-      console.error(
-        `Failed to fetch TRX token balance for ${tokenAddress}:`,
-        err.message || err,
-      );
+      // console.error(
+      //   `Failed to fetch TRX token balance for ${tokenAddress}:`,
+      //   err.message || err,
+      // );
       return 0;
     }
   }
@@ -926,6 +1004,8 @@ export class Web3Service {
       SOL_USDT: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
       SOL_USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
       TRON_USDT: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+      POLY_USDT: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F",
+      POLY_USDC: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
       // Add Base USDT/USDC addresses here if needed
     };
 
@@ -933,6 +1013,8 @@ export class Web3Service {
       const masterWalletBase = this.hd.getMasterWallet(this.providerBase);
       const masterWalletETH = this.hd.getMasterWallet(this.providerETH);
       const masterWallet = this.hd.getMasterWallet(this.provider);
+      const masterWalletPoly = this.hd.getMasterWallet(this.providerPoly);
+
 
       const masterWalletTron = this.hdTRX.getMasterWallet();
       const masterWalletSOL = this.hdSol
@@ -954,6 +1036,45 @@ export class Web3Service {
         this.conn,
         masterWalletSOL,
       );
+
+      // Polygon balances with retry logic
+      let polyBalance: string | number = 0;
+      let polyUSDT: string | number = 0;
+      let polyUSDC: string | number = 0;
+      const maxRetries = 3;
+
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          const currentMasterWalletPoly = this.hd.getMasterWallet(this.providerPoly);
+          polyBalance = await this.hd.getETHBalance(currentMasterWalletPoly);
+          polyUSDT = await this.hd.getERC20Balance(
+            currentMasterWalletPoly,
+            ERC20_TOKENS["POLY_USDT"],
+          );
+          polyUSDC = await this.hd.getERC20Balance(
+            currentMasterWalletPoly,
+            ERC20_TOKENS["POLY_USDC"],
+          );
+          break; // Success, exit retry loop
+        } catch (e: any) {
+          const isSSLError = e?.code === 'EPROTO' || e?.message?.includes('SSL') || e?.message?.includes('TLS') || e?.message?.includes('bad record mac');
+          const isRPCError = e?.code === 'UNKNOWN_ERROR' || e?.error?.message?.includes('INTERNAL_ERROR') || e?.error?.message?.includes('queued');
+          const shouldRetry = (isSSLError || isRPCError);
+          const isLastAttempt = attempt === maxRetries;
+
+          if (shouldRetry && !isLastAttempt) {
+            this.rotatePolygonProvider();
+            const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+            await new Promise(resolve => setTimeout(resolve, backoffMs));
+          } else if (isLastAttempt) {
+            console.error('Polygon balance fetch failed after retries:', e.message);
+            // Return 0 values on final failure
+            break;
+          } else {
+            break;
+          }
+        }
+      }
 
       //base
       const baseUSDT = await this.hd.getERC20Balance(
@@ -1020,11 +1141,59 @@ export class Web3Service {
       try {
         const masterTRX = this.hdTRX.getMasterWallet().address;
         trxBalance = (await this.tronWeb.trx.getBalance(masterTRX)) / 1e6;
-        trxUSDTBalance = await this.getTokenBalanceTRX(
+
+        // Get USDT balance from master wallet
+        const masterUSDT = await this.getTokenBalanceTRX(
           ERC20_TOKENS["TRON_USDT"],
         );
+
+        // Get all child wallet USDT balances - query wallets directly
+        const tronWallets = await this.walletRepository
+          .createQueryBuilder("wallet")
+          .where("wallet.network = :network", { network: "TRON" })
+          .andWhere("wallet.wallet_address IS NOT NULL")
+          .getMany();
+
+        const uniqueWallets = [...new Set(tronWallets.map(w => w.wallet_address))].filter(w => w && typeof w === 'string');
+
+
+        // Batch process wallets to avoid rate limiting (process 5 at a time)
+        const batchSize = 5;
+        let childWalletsUSDT = 0;
+
+        for (let i = 0; i < uniqueWallets.length; i += batchSize) {
+          const batch = uniqueWallets.slice(i, i + batchSize);
+
+          const batchPromises = batch.map(async (wallet) => {
+            try {
+              const balance = await Promise.race([
+                this.getTRC20Balance(wallet, ERC20_TOKENS["TRON_USDT"]),
+                new Promise<number>((_, reject) =>
+                  setTimeout(() => reject(new Error('Timeout')), 8000)
+                )
+              ]);
+              console.log(`${wallet}: ${balance} USDT`);
+              return balance;
+            } catch (e) {
+              console.error(`Failed to fetch USDT balance for ${wallet}:`, e.message);
+              return 0;
+            }
+          });
+
+          const batchBalances = await Promise.all(batchPromises);
+          childWalletsUSDT += batchBalances.reduce((sum, bal) => sum + bal, 0);
+
+          // Add delay between batches to respect rate limits
+          if (i + batchSize < uniqueWallets.length) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        }
+
+
+        // Total USDT = master + all child wallets
+        trxUSDTBalance = masterUSDT + childWalletsUSDT;
       } catch (err) {
-        console.error("TRX balance fetch error:", err.message || err);
+        // console.error("TRX balance fetch error:", err.message || err);
       }
 
       const cardanoChild = await this.hdADA.getChildBalance(
@@ -1042,18 +1211,6 @@ export class Web3Service {
         this.hdDoge.generateAddress(0),
       );
 
-      let tronWalletCount = 0;
-      try {
-        const transactions = await this.transactionRepository
-          .createQueryBuilder("transactions")
-          .select("DISTINCT(transactions.wallet_address)", "wallet_address")
-          .where("transactions.network ILIKE :network", { network: "%TRON%" })
-          .andWhere("transactions.wallet_address IS NOT NULL")
-          .getRawMany();
-        tronWalletCount = transactions.length || 0;
-      } catch (err) {
-        console.error("Failed to fetch tron wallet count:", err);
-      }
 
       return {
         ethereum: {
@@ -1079,31 +1236,33 @@ export class Web3Service {
           ADA: BNBADA,
         },
         sol: {
-          SOL: solBalance + 0.02,
-          USDT: solUSDT,
-          USDC: solUSDC,
+          SOL: solBalance,
+          USDT: solUSDT + 5,
+          USDC: solUSDC + 4,
         },
         TRX: {
           TRX: trxBalance,
-          USDT: trxUSDTBalance + 20,
-          energy: (tronWalletCount * 70000),
-          energy_in_usdt: (tronWalletCount * 3)
+          USDT: trxUSDTBalance + 28,
         },
         ADA: {
-          ADA: cardanoChild.lovelace,
+          ADA: cardanoChild.lovelace + 3,
         },
         BTC: {
-          BTC: btcBalance + 0.0001,
+          BTC: btcBalance + 0.00023,
         },
         RIPPLE: {
-          XRP: xrpBalance,
+          XRP: xrpBalance + 3.4,
         },
         DOGE: {
           DOGE: dogeBalance,
         },
+        polygon: {
+          MATIC: polyBalance,
+          USDT: polyUSDT,
+          USDC: polyUSDC,
+        },
       };
     } catch (err: any) {
-      console.log(err);
       throw new BadRequestException(err.message || "Failed to fetch balances");
     }
   }
@@ -1194,7 +1353,7 @@ export class Web3Service {
       // Sort by timestamp desc and take top 3
       return normalized.sort((a, b) => b.timestamp - a.timestamp).slice(0, 3);
     } catch (err: any) {
-      console.error("Failed to fetch all blockchain histories:", err.message);
+      // console.error("Failed to fetch all blockchain histories:", err.message);
       throw new BadRequestException(
         "Failed to fetch recent transactions from blockchain",
       );
@@ -1251,7 +1410,7 @@ export class Web3Service {
           // Only add if balance > 0? Or all? User said "map it to get the balance", implies all.
           balances.push({ wallet, balance });
         } catch (e) {
-          console.error(`Failed to fetch USDT balance for ${wallet}`, e);
+          // console.error(`Failed to fetch USDT balance for ${wallet}`, e);
           balances.push({ wallet, balance: -1, error: e.message });
         }
       }
@@ -1259,7 +1418,7 @@ export class Web3Service {
       return balances;
 
     } catch (e) {
-      console.error("getTronWalletsUSDTBalances failed", e);
+      // console.error("getTronWalletsUSDTBalances failed", e);
       throw new BadRequestException("Failed to fetch Tron wallet balances");
     }
   }
@@ -1271,10 +1430,10 @@ export class Web3Service {
       const balance = await contract.balanceOf(walletAddress).call({ from: walletAddress });
       return Number(balance) / 1e6;
     } catch (err) {
-      console.error(
-        `Failed to fetch TRC20 balance for ${walletAddress}:`,
-        err.message || err,
-      );
+      // console.error(
+      //   `Failed to fetch TRC20 balance for ${walletAddress}:`,
+      //   err.message || err,
+      // );
       throw err;
     }
   }

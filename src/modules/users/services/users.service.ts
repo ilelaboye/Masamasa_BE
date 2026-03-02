@@ -16,6 +16,7 @@ import {
   TransferDto,
   UpdateAccountDto,
   UploadImageDto,
+  VerifyPinDto,
   WithdrawalDto,
 } from "../dto";
 import {
@@ -142,6 +143,35 @@ export class UsersService extends BaseService {
     );
 
     return { ...user, hasPin: fetch.pin ? true : false };
+  }
+
+  async verifyPin(verifyPinDto: VerifyPinDto, req: UserRequest) {
+    const { user } = req;
+
+    if (!verifyPinDto.pin || !/^\d{4}$/.test(verifyPinDto.pin)) {
+      throw new BadRequestException("Invalid pin, pin must be 4-digit");
+    }
+
+    const fetch = await this.userRepository
+      .createQueryBuilder("user")
+      .addSelect("user.pin")
+      .where("user.id = :id", { id: user.id })
+      .getOne();
+
+    if (!fetch) {
+      throw new BadRequestException("User not found");
+    }
+
+    if (!fetch.pin) {
+      throw new BadRequestException("PIN has not been set");
+    }
+
+    const verified = await verifyHash(verifyPinDto.pin, fetch.pin);
+    if (!verified) {
+      throw new BadRequestException("Incorrect pin");
+    }
+
+    return { message: "PIN verified successfully" };
   }
 
   async changePassword(

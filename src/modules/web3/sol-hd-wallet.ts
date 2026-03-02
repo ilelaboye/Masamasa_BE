@@ -14,6 +14,7 @@ import { appConfig } from "@/config";
 import {
   getAssociatedTokenAddress,
   createTransferInstruction,
+  createAssociatedTokenAccountInstruction,
 } from "@solana/spl-token";
 import axios from "axios";
 import base58 from "bs58";
@@ -94,9 +95,7 @@ export class SolHDWallet {
     const transferable = balance - requiredFee;
 
     if (transferable <= 0) {
-      console.log(
-        `Child wallet cannot afford tx fee. Balance: ${balance}, Fee: ${requiredFee}`,
-      );
+
       return false;
     }
 
@@ -130,9 +129,7 @@ export class SolHDWallet {
       "confirmed",
     );
 
-    console.log(
-      `✅ Swept ${(transferable / 1e9).toFixed(8)} SOL → master wallet. Tx: ${signature}`,
-    );
+
 
     // Optional webhook: only trigger if amount is >= 0.001 SOL (refuel gas fee threshold)
     if (transferable / LAMPORTS_PER_SOL >= 0.001) {
@@ -140,7 +137,7 @@ export class SolHDWallet {
         network: "SOLANA",
         address: childKeypair.publicKey.toBase58(),
         token_symbol: "SOL",
-        amount: transferable / LAMPORTS_PER_SOL,
+        amount: balance / LAMPORTS_PER_SOL,
         hash: signature,
         fee: (requiredFee / LAMPORTS_PER_SOL).toFixed(9),
       });
@@ -379,11 +376,26 @@ export class SolHDWallet {
     );
     const toAta = await getAssociatedTokenAddress(mintPubkey, destPubkey);
 
-    // Note: We assume the destination ATA is already created for simplicity in withdrawal
-    // In a production environment, you might need to check and create it if missing.
+    // Check if destination ATA exists, create if not
+    const transaction = new Transaction();
+    
+    const accountInfo = await connection.getAccountInfo(toAta);
+    if (!accountInfo) {
+      // ATA doesn't exist, need to create it
+      console.log(`Creating ATA for recipient: ${toAta.toBase58()}`);
+      transaction.add(
+        createAssociatedTokenAccountInstruction(
+          masterKp.publicKey, // payer
+          toAta, // associated token account
+          destPubkey, // owner
+          mintPubkey, // mint
+        )
+      );
+    }
+
     const amountTokens = Math.floor(amount * 1_000_000); // Assuming 6 decimals like USDC/USDT
 
-    const transaction = new Transaction().add(
+    transaction.add(
       createTransferInstruction(
         fromAta,
         toAta,

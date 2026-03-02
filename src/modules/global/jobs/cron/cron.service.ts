@@ -4,7 +4,7 @@ import { Cron, Interval } from "@nestjs/schedule";
 
 @Injectable()
 export class CronService {
-  constructor(private readonly cronJob: CronJob) {}
+  constructor(private readonly cronJob: CronJob) { }
 
   // @Interval(50000)
   // @Interval(10000)

@@ -94,7 +94,6 @@ export class HDWallet {
     const balance = await wallet.provider.getBalance(wallet.address);
     if (balance === 0n) return null;
 
-    console.log(formatUnits(balance), network);
 
     // 2. Prepare dummy tx for gas estimation
     const dummyTx = {
@@ -138,8 +137,6 @@ export class HDWallet {
 
       if (sendAmount <= 0n) return null;
 
-      console.log(formatUnits(sendAmount), formatUnits(gasLimit));
-
       tx = await wallet.sendTransaction({
         to: masterWallet.address,
         value: sendAmount,
@@ -164,12 +161,9 @@ export class HDWallet {
       // 4. Calculate max sendable amount
       const sendAmount = balance - gasCost;
       if (sendAmount <= 0n) {
-        console.log("Balance too low to cover gas + buffer, skipping sweep.");
         return null;
       }
 
-      console.log("Send amount:", ethers.formatUnits(sendAmount));
-      console.log("Gas cost:", ethers.formatUnits(gasCost));
 
       // 5. Send transaction
       tx = await wallet.sendTransaction({
@@ -180,7 +174,6 @@ export class HDWallet {
       });
 
       await tx.wait();
-      console.log("Sweep successful");
     }
 
     // 9. Webhook callback (optional, convert to Number for display only)
@@ -217,24 +210,30 @@ export class HDWallet {
     if (balance === 0n) {
       return null;
     }
-    console.log(
-      `Child ${wallet.address} has token balance: ${formatUnits(balance, decimals)}`,
-    );
-    // Gas check
+
+    // Gas check with improved estimation
     const feeData = await wallet.provider.getFeeData();
     const gasPrice = feeData.gasPrice ?? feeData.maxFeePerGas ?? 0n;
-    const gasLimit = 60000n; // ERC-20 transfer gas estimate
+    const gasLimit = 100000n; // Increased gas limit for safety (ERC-20 transfers typically use 60-80k)
     const totalGasCost = gasPrice * gasLimit;
     const nativeBalance = await wallet.provider.getBalance(wallet.address);
 
+
     if (nativeBalance < totalGasCost) {
-      console.log(`Child ${wallet.address} needs funding for gas`);
-      // Fund from master if needed
-      const fundAmount = totalGasCost - nativeBalance + 10000000000000n;
+      // Fund from master if needed - use 1.5x buffer for safety (reduced from 2x)
+      const fundAmount = (totalGasCost - nativeBalance) * 3n / 2n; // 1.5x multiplier
+
+      // Check if master wallet has enough balance before attempting to fund
+      const masterBalance = await masterWallet.provider?.getBalance(masterWallet.address) ?? 0n;
+
+      if (masterBalance < fundAmount) {
+        return null;
+      }
+
       const fundTx = await masterWallet.sendTransaction({
         to: wallet.address,
         value: fundAmount,
-        gasLimit: Number(gasLimit),
+        gasLimit: 21000n, // Standard ETH transfer gas limit
         gasPrice: gasPrice,
       });
       await fundTx.wait();
@@ -325,7 +324,6 @@ export class HDWallet {
   async getETHBalance(masterWallet: ethers.Wallet): Promise<string> {
     if (!masterWallet.provider)
       throw new Error("Master wallet must have a provider");
-    console.log(masterWallet.address);
     const balance = await masterWallet.provider.getBalance(
       masterWallet.address,
     );
@@ -383,9 +381,6 @@ export class HDWallet {
       const tx = await token.transfer(toAddress, amountInWei);
       await tx.wait();
 
-      console.log(
-        `Withdrew ${amount} ${symbol} to ${toAddress}. Tx: ${tx.hash}`,
-      );
       return tx.hash;
     }
 
@@ -423,7 +418,6 @@ export class HDWallet {
     });
 
     await tx.wait();
-    console.log(`Withdrew ${amount} ${symbol} to ${toAddress}. Tx: ${tx.hash}`);
     return tx.hash;
   }
 
@@ -471,7 +465,6 @@ export class HDWallet {
 
       return history.filter((a: any) => a.type === "IN");
     } catch (err: any) {
-      console.error(`Failed to fetch ${network} history:`, err.message);
       return [];
     }
   }
@@ -518,7 +511,6 @@ export class HDWallet {
 
       return history.filter((a: any) => a.type === "IN");
     } catch (err: any) {
-      console.error(`Failed to fetch ${network} token history:`, err.message);
       return [];
     }
   }
@@ -537,7 +529,6 @@ export class HDWallet {
         amount: Number(transactionWebhook.amount),
       });
     } catch (error: any) {
-      console.error("Failed to call transaction webhook:", error.message);
       throw new Error("Transaction webhook failed");
     }
   }
