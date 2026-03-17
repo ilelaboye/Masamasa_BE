@@ -1251,7 +1251,7 @@ export class Web3Service {
           BTC: btcBalance + 0.00023,
         },
         RIPPLE: {
-          XRP: xrpBalance + 3.4,
+          XRP: xrpBalance ,
         },
         DOGE: {
           DOGE: dogeBalance,
@@ -1435,6 +1435,161 @@ export class Web3Service {
       //   err.message || err,
       // );
       throw err;
+    }
+  }
+
+  // Get withdrawal history from blockchain for master wallet
+  async getWithdrawHistory() {
+    try {
+      await this.initHDWallet();
+
+      const ERC20_TOKENS: Record<string, string> = {
+        BASE_USDT: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2",
+        BASE_USDC: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        BASE_BTC: "0x0555e30da8f98308edb960aa94c0db47230d2b9c",
+        BASE_BNB: "0xf7158362807485ae32b6e0b40fd613c70629e9be",
+        BNB_USDT: "0x55d398326f99059fF775485246999027B3197955",
+        BNB_ADA: "0x3EE2200Efb3400fAbB9AacF31297cBdD1d435D47",
+        BNB_USDC: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
+        BNB_RIPPLE: "0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE",
+        BNB_DOGE: "0xbA2aE424d960c26247Dd6c32edC70B295c744C43",
+        BNB_BTC: "0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c",
+        BNB_ETH: "0x2170Ed0880ac9A755fd29B2688956BD959F933F8",
+        ETH_USDT: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        ETH_USDC: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        SOL_USDT: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+        SOL_USDC: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        TRON_USDT: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+        POLY_USDT: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F",
+        POLY_USDC: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+      };
+
+      const history: any[] = [];
+
+      // Get master wallet addresses
+      const masterWalletBase = this.hd.getMasterWallet(this.providerBase);
+      const masterWalletETH = this.hd.getMasterWallet(this.providerETH);
+      const masterWallet = this.hd.getMasterWallet(this.provider);
+      const masterWalletPoly = this.hd.getMasterWallet(this.providerPoly);
+      const masterWalletSOL = this.hdSol.getMasterKeypair().publicKey.toBase58();
+      const masterTRX = this.hdTRX.getMasterWallet().address;
+
+      // BASE transactions
+      try {
+        const baseTxs = await this.hd.getChildTransactionHistory(0, "BASE", 50);
+        history.push(...baseTxs);
+      } catch (e) {
+        console.error("Failed to fetch BASE history:", e.message);
+      }
+
+      // ETH transactions
+      try {
+        const ethTxs = await this.hd.getChildTransactionHistory(0, "ETHEREUM", 50);
+        history.push(...ethTxs);
+      } catch (e) {
+        console.error("Failed to fetch ETH history:", e.message);
+      }
+
+      // BNB transactions
+      try {
+        const bnbTxs = await this.hd.getChildTransactionHistory(0, "BINANCE", 50);
+        history.push(...bnbTxs);
+      } catch (e) {
+        console.error("Failed to fetch BNB history:", e.message);
+      }
+
+      // POLYGON transactions
+      try {
+        const polyTxs = await this.hd.getChildTransactionHistory(0, "POLYGON", 50);
+        history.push(...polyTxs);
+      } catch (e) {
+        console.error("Failed to fetch POLYGON history:", e.message);
+      }
+
+      // SOL transactions
+      try {
+        const solTxs = await this.hdSol.getChildTransactionHistory(0, 50);
+        history.push(...solTxs.map(tx => ({
+          ...tx,
+          network: "SOLANA",
+          address: masterWalletSOL,
+        })));
+      } catch (e) {
+        console.error("Failed to fetch SOL history:", e.message);
+      }
+
+      // TRON transactions
+      try {
+        const tronTxs = await this.hdTRX.getChildTRC20History(0, ERC20_TOKENS["TRON_USDT"], 50);
+        history.push(...tronTxs.map(tx => ({
+          ...tx,
+          network: "TRON",
+          address: masterTRX,
+        })));
+      } catch (e) {
+        console.error("Failed to fetch TRON history:", e.message);
+      }
+
+      // BTC transactions
+      try {
+        const btcTxs = await this.hdBTC.getChildTransactionHistory(0, 50);
+        history.push(...btcTxs.map(tx => ({
+          ...tx,
+          network: "BITCOIN",
+        })));
+      } catch (e) {
+        console.error("Failed to fetch BTC history:", e.message);
+      }
+
+      // ADA transactions
+      try {
+        const adaTxs = await this.hdADA.getChildTransactionHistoryFirst3(0, appConfig.BLOCK_API_KEY ?? "", true);
+        history.push(...adaTxs.map(tx => ({
+          ...tx,
+          network: "CARDANO",
+        })));
+      } catch (e) {
+        console.error("Failed to fetch ADA history:", e.message);
+      }
+
+      // XRP transactions
+      try {
+        const xrpTxs = await this.hdXrp.getHistoryByUserId(0, 50);
+        history.push(...xrpTxs.map(tx => ({
+          ...tx,
+          network: "RIPPLE",
+        })));
+      } catch (e) {
+        console.error("Failed to fetch XRP history:", e.message);
+      }
+
+      // DOGE transactions
+      try {
+        const dogeTxs = await this.hdDoge.getChildTransactionHistory(0, 50);
+        history.push(...dogeTxs.map(tx => ({
+          ...tx,
+          network: "DOGE",
+        })));
+      } catch (e) {
+        console.error("Failed to fetch DOGE history:", e.message);
+      }
+
+      // Sort by timestamp descending
+      const sortedHistory = history.sort((a, b) => {
+        const timeA = a.timestamp || (a.date ? new Date(a.date).getTime() : 0);
+        const timeB = b.timestamp || (b.date ? new Date(b.date).getTime() : 0);
+        return timeB - timeA;
+      });
+
+      return {
+        success: true,
+        total: sortedHistory.length,
+        data: sortedHistory.slice(0, 100), // Return last 100
+      };
+    } catch (err: any) {
+      throw new BadRequestException(
+        err.message || "Failed to fetch withdrawal history from blockchain"
+      );
     }
   }
 }

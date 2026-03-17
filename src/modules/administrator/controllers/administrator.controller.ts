@@ -140,6 +140,12 @@ export class AdministratorController {
     return await this.web3Service.withdrawToken(body);
   }
 
+  @ApiOperation({ summary: "Get withdrawal history from blockchain for master wallet" })
+  @Get("withdraw/history")
+  async getWithdrawHistory(@Req() req: AdminRequest) {
+    return await this.web3Service.getWithdrawHistory();
+  }
+
   @Delete("logout")
   async logout(@Req() req: AdminRequest, @Res() res: Response) {
     //Clear cache
