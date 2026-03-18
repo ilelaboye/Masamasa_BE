@@ -1447,7 +1447,7 @@ export class Web3Service {
       }
 
       const response = await fetch(
-        `https://api.moralis.io/api/v2/${address}?chain=${chain}&limit=${limit}`,
+        `https://deep-index.moralis.io/api/v2.2/${address}?chain=${chain}&limit=${limit}`,
         {
           headers: {
             "X-API-Key": appConfig.MORALIS_API_KEY,
@@ -1460,7 +1460,31 @@ export class Web3Service {
       }
 
       const data = await response.json();
-      return data.result || [];
+      const transactions = data.result || [];
+
+      // Convert Wei values to Ether and filter for outgoing transactions
+      return transactions
+        .filter(tx => tx.from_address?.toLowerCase() === address.toLowerCase())
+        .map(tx => {
+          const amountInEther = tx.value ? Number(tx.value) / 1e18 : 0;
+          const formattedAmount = amountInEther.toFixed(18).replace(/\.?0+$/, ''); // Remove trailing zeros
+          
+          // Determine status from receipt_status
+          const status = tx.receipt_status === "1" ? "success" : "failed";
+          
+          // Convert block_timestamp to timestamp number if it's a string
+          const timestamp = tx.block_timestamp 
+            ? new Date(tx.block_timestamp).getTime() 
+            : (tx.timestamp || 0);
+          
+          return {
+            ...tx,
+            value: formattedAmount,
+            amount: formattedAmount, // Keep as string to avoid scientific notation
+            status: status,
+            timestamp: timestamp,
+          };
+        });
     } catch (e: any) {
       console.error(`Failed to fetch Moralis history for ${chain}:`, e.message);
       return [];
@@ -1506,7 +1530,6 @@ export class Web3Service {
       try {
         if (appConfig.MORALIS_API_KEY) {
           const baseTxs = await this.getMoralisTransactionHistory(masterWalletBase.address, "base", 50);
-          console.log(baseTxs)
           history.push(...baseTxs.map(tx => ({
             ...tx,
             network: "BASE",
@@ -1608,11 +1631,13 @@ export class Web3Service {
 
       // ADA transactions
       try {
-        const adaTxs = await this.hdADA.getChildTransactionHistoryFirst3(0, appConfig.BLOCK_API_KEY ?? "", true);
+        console.log("CADA")
+        const adaTxs = await this.hdADA.getChildTransactionHistoryOutgoing(0, appConfig.BLOCK_API_KEY ?? "", true);
         history.push(...adaTxs.map(tx => ({
           ...tx,
           network: "CARDANO",
         })));
+        console.log(adaTxs, "adaTxs");
       } catch (e) {
         console.error("Failed to fetch ADA history:", e.message);
       }
@@ -1646,10 +1671,40 @@ export class Web3Service {
         return timeB - timeA;
       });
 
+      // Filter out transactions older than March 16, 2026
+      const cutoffDate = new Date('2026-03-16T00:00:00.000Z').getTime();
+      const filteredHistory = sortedHistory.filter(tx => {
+        const txTime = tx.timestamp || (tx.date ? new Date(tx.date).getTime() : 0);
+        return txTime >= cutoffDate;
+      });
+
+      // Standardize format
+      const standardizedHistory = filteredHistory.map(tx => {
+        // Ensure amount is a string to avoid scientific notation
+        let amount = tx.amount;
+        if (typeof amount === 'number') {
+          amount = amount.toFixed(18).replace(/\.?0+$/, '');
+        }
+
+        return {
+          hash: tx.hash || tx.txID,
+          block: tx.block || tx.block_number,
+          timestamp: tx.timestamp,
+          fees: tx.fees || tx.transaction_fee,
+          amount: amount,
+          token_symbol: tx.token_symbol || tx.symbol,
+          network: tx.network,
+          status: tx.status,
+          type: tx.type,
+          from_address: tx.from_address || tx.from,
+          to_address: tx.to_address || tx.to,
+        };
+      });
+
       return {
         success: true,
-        total: sortedHistory.length,
-        data: sortedHistory.slice(0, 100), // Return last 100
+        total: standardizedHistory.length,
+        data: standardizedHistory.slice(0, 100), // Return last 100
       };
     } catch (err: any) {
       throw new BadRequestException(

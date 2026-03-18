@@ -277,16 +277,29 @@ export class BtcHDWallet {
 
       const history = txs.slice(0, limit).map((tx: any) => {
         let totalIn = 0;
+        let totalOut = 0;
+        
+        // Check outputs (vout) - money received
         tx.vout.forEach((output: any) => {
           if (output.scriptpubkey_address === address) {
             totalIn += output.value;
           }
         });
 
+        // Check inputs (vin) - money sent
+        tx.vin.forEach((input: any) => {
+          if (input.prevout?.scriptpubkey_address === address) {
+            totalOut += input.prevout.value;
+          }
+        });
+
+        const isOutgoing = totalOut > 0;
+        const amount = isOutgoing ? totalOut / 1e8 : totalIn / 1e8;
+
         return {
           txID: tx.txid,
-          type: totalIn > 0 ? "IN" : "OUT",
-          amount: totalIn / 1e8,
+          type: isOutgoing ? "OUT" : "IN",
+          amount: amount,
           token_symbol: "BTC",
           network: "BITCOIN",
           status: tx.status.confirmed ? "success" : "pending",
@@ -295,7 +308,7 @@ export class BtcHDWallet {
         };
       });
 
-      return history.filter((a: any) => a.type === "IN");
+      return history.filter((a: any) => a.type === "OUT");
     } catch (error: any) {
       console.error("Failed to fetch BTC history:", error.message);
       return [];
