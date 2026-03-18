@@ -546,6 +546,128 @@ export class CardanoHDWallet {
     }
   }
 
+  async getChildTransactionHistoryOutgoing(
+    childIndex: number,
+    blockfrostApiKey: string,
+    mainnet = true,
+  ): Promise<
+    Array<{
+      hash: string;
+      block: number;
+      timestamp: number;
+      fees: number; // ADA
+      amount: number; // ADA
+      token_symbol: string;
+      network: string;
+      status: string;
+      type: "IN" | "OUT";
+      outputs: Array<{ unit: string; quantity: string }>;
+    }>
+  > {
+    const network = mainnet ? "mainnet" : "preprod";
+    const address = this.generateAddress(childIndex, mainnet);
+
+    try {
+      const { data: txList } = await axios.get(
+        `https://cardano-${network}.blockfrost.io/api/v0/addresses/${address}/transactions`,
+        {
+          headers: { project_id: blockfrostApiKey },
+          params: { count: 5, order: "desc" },
+        },
+      );
+
+      if (!txList || txList.length === 0) return [];
+
+      const results: Array<{
+        hash: string;
+        block: number;
+        timestamp: number;
+        fees: number;
+        amount: number;
+        type: "IN" | "OUT";
+        token_symbol: string;
+        network: string;
+        status: string;
+        outputs: Array<{ unit: string; quantity: string }>;
+      }> = [];
+      for (const tx of txList) {
+        const { data: utxo } = await axios.get(
+          `https://cardano-${network}.blockfrost.io/api/v0/txs/${tx.tx_hash}/utxos`,
+          { headers: { project_id: blockfrostApiKey } },
+        );
+
+        const { inputs, outputs } = utxo;
+
+        let inputTotal = 0n;
+        let outputToSelf = 0n;
+        let outputToOthers = 0n;
+
+        // 🔴 Check if user is sender (OUT)
+        const isSender = inputs.some(i => i.address === address);
+
+        // Sum inputs from user
+        for (const input of inputs) {
+          if (input.address === address) {
+            const lovelace = input.amount.find(a => a.unit === "lovelace");
+            if (lovelace) inputTotal += BigInt(lovelace.quantity);
+          }
+        }
+
+        // Sum outputs
+        for (const output of outputs) {
+          const lovelace = output.amount.find(a => a.unit === "lovelace");
+          if (!lovelace) continue;
+
+          if (output.address === address) {
+            outputToSelf += BigInt(lovelace.quantity); // change or deposit
+          } else {
+            outputToOthers += BigInt(lovelace.quantity);
+          }
+        }
+
+        let type: "IN" | "OUT";
+        let rawAmount: bigint;
+
+        if (isSender) {
+          // OUT = what you actually sent (exclude change)
+          type = "OUT";
+          rawAmount = inputTotal - outputToSelf;
+        } else {
+          // IN = what you received
+          type = "IN";
+          rawAmount = outputToSelf;
+        }
+
+        const amount = Number(rawAmount) / 1_000_000;
+
+        // ⚠️ fees is NOT in utxos endpoint → need tx details endpoint
+        const { data: txInfo } = await axios.get(
+          `https://cardano-${network}.blockfrost.io/api/v0/txs/${tx.tx_hash}`,
+          { headers: { project_id: blockfrostApiKey } },
+        );
+
+        const fees = Number(BigInt(txInfo.fees)) / 1_000_000;
+        if (type === "OUT") {
+          results.push({
+            hash: tx.tx_hash,
+            block: txInfo.block_height,
+            timestamp: txInfo.block_time * 1000,
+            fees,
+            amount,
+            token_symbol: "ADA",
+            network: "CARDANO",
+            status: "success",
+            type,
+            outputs: outputs.flatMap(o => o.amount),
+          });
+        }
+      }
+      return results;
+    } catch (error: any) {
+      return []
+    }
+  }
+
   async ApitransactionWebhook(transaction: {
     network: string;
     address: string;
