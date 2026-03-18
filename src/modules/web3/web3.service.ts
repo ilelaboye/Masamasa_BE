@@ -1439,6 +1439,34 @@ export class Web3Service {
   }
 
   // Get withdrawal history from blockchain for master wallet
+  private async getMoralisTransactionHistory(address: string, chain: string, limit: number = 50): Promise<any[]> {
+    try {
+      if (!appConfig.MORALIS_API_KEY) {
+        console.warn("Moralis API key not configured, falling back to default method");
+        return [];
+      }
+
+      const response = await fetch(
+        `https://api.moralis.io/api/v2/${address}?chain=${chain}&limit=${limit}`,
+        {
+          headers: {
+            "X-API-Key": appConfig.MORALIS_API_KEY,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Moralis API error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return data.result || [];
+    } catch (e: any) {
+      console.error(`Failed to fetch Moralis history for ${chain}:`, e.message);
+      return [];
+    }
+  }
+
   async getWithdrawHistory() {
     try {
       await this.initHDWallet();
@@ -1474,34 +1502,71 @@ export class Web3Service {
       const masterWalletSOL = this.hdSol.getMasterKeypair().publicKey.toBase58();
       const masterTRX = this.hdTRX.getMasterWallet().address;
 
-      // BASE transactions
+      // BASE transactions (using Moralis)
       try {
-        const baseTxs = await this.hd.getChildTransactionHistory(0, "BASE", 50);
-        history.push(...baseTxs);
+        if (appConfig.MORALIS_API_KEY) {
+          const baseTxs = await this.getMoralisTransactionHistory(masterWalletBase.address, "base", 50);
+          console.log(baseTxs)
+          history.push(...baseTxs.map(tx => ({
+            ...tx,
+            network: "BASE",
+            address: masterWalletBase.address,
+          })));
+        } else {
+          const baseTxs = await this.hd.getChildTransactionHistory(0, "BASE", 50);
+          history.push(...baseTxs);
+        }
       } catch (e) {
         console.error("Failed to fetch BASE history:", e.message);
       }
 
-      // ETH transactions
+      // ETH transactions (using Moralis)
       try {
-        const ethTxs = await this.hd.getChildTransactionHistory(0, "ETHEREUM", 50);
-        history.push(...ethTxs);
+        if (appConfig.MORALIS_API_KEY) {
+          const ethTxs = await this.getMoralisTransactionHistory(masterWalletETH.address, "eth", 50);
+          history.push(...ethTxs.map(tx => ({
+            ...tx,
+            network: "ETHEREUM",
+            address: masterWalletETH.address,
+          })));
+        } else {
+          const ethTxs = await this.hd.getChildTransactionHistory(0, "ETHEREUM", 50);
+          history.push(...ethTxs);
+        }
       } catch (e) {
         console.error("Failed to fetch ETH history:", e.message);
       }
 
-      // BNB transactions
+      // BNB transactions (using Moralis)
       try {
-        const bnbTxs = await this.hd.getChildTransactionHistory(0, "BINANCE", 50);
-        history.push(...bnbTxs);
+        if (appConfig.MORALIS_API_KEY) {
+          const bnbTxs = await this.getMoralisTransactionHistory(masterWallet.address, "bsc", 50);
+          history.push(...bnbTxs.map(tx => ({
+            ...tx,
+            network: "BINANCE",
+            address: masterWallet.address,
+          })));
+        } else {
+          const bnbTxs = await this.hd.getChildTransactionHistory(0, "BINANCE", 50);
+          history.push(...bnbTxs);
+        }
       } catch (e) {
         console.error("Failed to fetch BNB history:", e.message);
       }
 
-      // POLYGON transactions
+      // POLYGON transactions (using Moralis)
       try {
-        const polyTxs = await this.hd.getChildTransactionHistory(0, "POLYGON", 50);
-        history.push(...polyTxs);
+        if (appConfig.MORALIS_API_KEY) {
+          const polyTxs = await this.getMoralisTransactionHistory(masterWalletPoly.address, "polygon", 50);
+          history.push(...polyTxs.map(tx => ({
+            ...tx,
+            network: "POLYGON",
+            address: masterWalletPoly.address,
+          })));
+        } else {
+          const polyTxs = await this.hd.getChildTransactionHistory(0, "POLYGON", 50);
+          history.push(...polyTxs);
+        }
       } catch (e) {
         console.error("Failed to fetch POLYGON history:", e.message);
       }
