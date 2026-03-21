@@ -80,6 +80,7 @@ export const appConfig = {
   BASE_RPC_URL: "https://base-mainnet.public.blastapi.io",
   ETH_RPC_URL: "https://eth.meowrpc.com",
   SOL_RPC_URL: "https://api.mainnet-beta.solana.com",
+  SOL_RPC_URL2: "https://solana-rpc.publicnode.com",
   POLY_RPC_URL: process.env.POLY_RPC_URL || "https://polygon-bor-rpc.publicnode.com",
   // Fallback Polygon RPC URLs for automatic failover on SSL/connection errors
   POLY_RPC_URLS: [
@@ -89,8 +90,14 @@ export const appConfig = {
     "https://rpc-mainnet.maticvigil.com",
     "https://polygon-mainnet.public.blastapi.io"
   ],
-  XRP_RPC_URL: "wss://xrplcluster.com",
-  // XRP_RPC_URL: "wss://s.altnet.rippletest.net:51233",
+  XRP_RPC_URL: process.env.XRP_RPC_URL || "wss://s1.ripple.com",
+  // Alternative XRP RPC URLs for failover
+  XRP_RPC_URLS: [
+    "wss://s1.ripple.com",
+    "wss://s2.ripple.com",
+    "wss://xrplcluster.com",
+    "wss://xrpl.ws"
+  ],
   TRX_API_KEY: process.env.TRX_API_KEY ?? "",
   ETH_PRIVATE_KEY: process.env.PRIVATE_KEY ?? "",
   //BLOCK

@@ -4,6 +4,7 @@ import { PublicService } from "../global/public/public.service";
 
 export class XrpHDWallet {
     private client: Client;
+    private currentRpcIndex: number = 0;
 
     constructor(
         private mnemonic: string,
@@ -14,8 +15,36 @@ export class XrpHDWallet {
 
     private async ensureConnected() {
         if (!this.client.isConnected()) {
-            await this.client.connect();
+            try {
+                await this.client.connect();
+            } catch (error: any) {
+                console.error(`Failed to connect to ${appConfig.XRP_RPC_URL}:`, error.message);
+                // Try failover to alternative RPC
+                await this.tryFailoverConnection();
+            }
         }
+    }
+
+    private async tryFailoverConnection() {
+        const rpcUrls = appConfig.XRP_RPC_URLS || [appConfig.XRP_RPC_URL];
+        
+        for (let i = 0; i < rpcUrls.length; i++) {
+            const rpcUrl = rpcUrls[i];
+            if (rpcUrl === appConfig.XRP_RPC_URL) continue; // Skip the one that already failed
+            
+            try {
+                console.log(`Trying XRP RPC failover: ${rpcUrl}`);
+                this.client = new Client(rpcUrl);
+                await this.client.connect();
+                console.log(`Successfully connected to XRP RPC: ${rpcUrl}`);
+                return;
+            } catch (error: any) {
+                console.error(`Failed to connect to ${rpcUrl}:`, error.message);
+                continue;
+            }
+        }
+        
+        throw new Error("All XRP RPC endpoints failed");
     }
 
     /**
@@ -146,7 +175,7 @@ export class XrpHDWallet {
 
                 let amount = 0;
                 const rawAmount = tx.Amount || tx.DeliverMax || meta.delivered_amount;
-
+console.log(txObj)
                 if (typeof rawAmount === "string") {
                     amount = Number(dropsToXrp(rawAmount));
                 } else {

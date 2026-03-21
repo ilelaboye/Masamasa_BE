@@ -414,7 +414,7 @@ export class SolHDWallet {
     limit: number = 3,
   ): Promise<any[]> {
     const childPubkey = this.deriveKeypair(childIndex).publicKey;
-    const connection = new Connection(appConfig.SOL_RPC_URL, "confirmed");
+    const connection = new Connection(appConfig.SOL_RPC_URL2, "confirmed");
 
     try {
       const signatures = await connection.getSignaturesForAddress(childPubkey, {
