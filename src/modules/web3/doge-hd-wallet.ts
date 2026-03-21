@@ -95,81 +95,79 @@ export class DogeHDWallet {
         childIndex: number,
         masterAddress: string,
     ): Promise<string | null> {
+
         const childAddress = this.generateAddress(childIndex);
         const path = `m/44'/3'/0'/0/${childIndex}`;
         const childNode = this.root.derivePath(path);
-        console.log(childAddress);
-        const apiToken = process.env.BLOCKCYPHER_TOKEN || '';
-        const baseUrl = `https://api.blockcypher.com/v1/doge/main`;
 
-        // 1. Get UTXOs
+        const RPC_URL = process.env.INSTANODES_DOGE_RPC!;
+
+        const rpcCall = async (method: string, params: any[] = []) => {
+            const { data } = await axios.post(RPC_URL, {
+                jsonrpc: "1.0",
+                id: "doge",
+                method,
+                params,
+            });
+            return data.result;
+        };
+
         try {
-            const utxoUrl = apiToken 
-                ? `${baseUrl}/addrs/${childAddress}?unspentOnly=true&token=${apiToken}`
-                : `${baseUrl}/addrs/${childAddress}?unspentOnly=true`;
-            const { data: addrInfo } = await axios.get(utxoUrl);
-            const utxos = addrInfo.txrefs;
+            console.log("Sweeping:", childAddress);
+
+            // 1. Fetch UTXOs
+            const utxos = await rpcCall("listunspent", [0, 9999999, [childAddress]]);
             if (!utxos || utxos.length === 0) return null;
 
-            // 2. Build Transaction
             const psbt = new bitcoin.Psbt({ network: this.network });
-            // DOGE often requires older transaction formats but bitcoinjs-lib Psbt should handle legacy P2PKH
 
             let totalInput = BigInt(0);
 
-            console.log(utxos);
-
-
+            // 2. Add inputs
             for (const utxo of utxos) {
-                // blockcypher returns value in satoshis
-                // We need the full transaction hex to add input for non-segwit transactions if we want to be safe, 
-                // or we can use the value and scriptPubKey.
-                // For P2PKH, we need nonWitnessUtxo.
-                const txUrl = apiToken 
-                    ? `${baseUrl}/txs/${utxo.tx_hash}?includeHex=true&token=${apiToken}`
-                    : `${baseUrl}/txs/${utxo.tx_hash}?includeHex=true`;
-                const { data: txHex } = await axios.get(txUrl);
+                const rawTx = await rpcCall("getrawtransaction", [utxo.txid, false]);
 
                 psbt.addInput({
-                    hash: utxo.tx_hash,
-                    index: utxo.tx_output_n,
-                    nonWitnessUtxo: Buffer.from(txHex.hex, 'hex'),
+                    hash: utxo.txid,
+                    index: utxo.vout,
+                    nonWitnessUtxo: Buffer.from(rawTx, "hex"),
                 });
-                totalInput += BigInt(utxo.value);
+
+                totalInput += BigInt(Math.floor(utxo.amount * 1e8));
             }
 
-            // 3. Estimate Fee
-            const feeRate = 1000000; // 1 DOGE per KB is common, so ~1000 sat/vB? Actually DOGE fees are low.
-            // Let's use a standard 1 DOGE fee for simplicity or calculate.
-            const estimatedSize = utxos.length * 148 + 1 * 34 + 10;
-            const fee = BigInt(Math.ceil(estimatedSize * 1000)); // 1000 sat/vB = 0.01 DOGE/KB? 
-            // Dogecoin recommended fee is 0.01 DOGE per KB now, but some APIs might require 1 DOGE.
+            // 3. Fee (DOGE standard is LOW)
+            const estimatedSize = utxos.length * 148 + 34 + 10;
+
+            // DOGE fee ≈ 0.01 DOGE per KB
+            const fee = BigInt(Math.ceil((estimatedSize / 1000) * 1e6));
+            // 1e6 = 0.01 DOGE in satoshis
 
             const sendAmount = totalInput - fee;
-            console.log(totalInput, fee)
-            if (sendAmount <= BigInt(100000000)) { // 1 DOGE dust limit for safety
-                console.log("Balance too low to sweep (dust or fee exceeds balance)");
+
+            if (sendAmount <= BigInt(1e8)) {
+                console.log("Too small to sweep");
                 return null;
             }
 
+            // 4. Output
             psbt.addOutput({
                 address: masterAddress,
                 value: sendAmount,
             });
 
-            // 4. Sign inputs
-            utxos.forEach((_, i) => {
+            // 5. Sign
+            utxos.forEach((_: any, i: number) => {
                 psbt.signInput(i, childNode);
             });
 
             psbt.finalizeAllInputs();
+
             const tx = psbt.extractTransaction();
             const txHex = tx.toHex();
 
-            // 5. Broadcast
-            const pushUrl = apiToken ? `${baseUrl}/txs/push?token=${apiToken}` : `${baseUrl}/txs/push`;
-            const { data: broadcastRes } = await axios.post(pushUrl, { tx: txHex });
-            const txid = broadcastRes.tx.hash;
+            // 6. Broadcast via Instanodes
+            const txid = await rpcCall("sendrawtransaction", [txHex]);
 
             await this._transactionWebhook({
                 network: "DOGE",
@@ -180,15 +178,12 @@ export class DogeHDWallet {
             });
 
             return txid;
+
         } catch (error: any) {
-            console.error(
-                "Failed to broadcast DOGE transaction:",
-                error.response?.data || error.message,
-            );
+            console.error("DOGE sweep failed:", error.response?.data || error.message);
             return null;
         }
     }
-
     /**
      * Withdraw DOGE from master to any address
      */
@@ -209,7 +204,7 @@ export class DogeHDWallet {
         const baseUrl = `https://api.blockcypher.com/v1/doge/main`;
 
         // 1. Get UTXOs
-        const utxoUrl = apiToken 
+        const utxoUrl = apiToken
             ? `${baseUrl}/addrs/${masterAddr}?unspentOnly=true&token=${apiToken}`
             : `${baseUrl}/addrs/${masterAddr}?unspentOnly=true`;
         const { data: addrInfo } = await axios.get(utxoUrl);
@@ -223,7 +218,7 @@ export class DogeHDWallet {
 
         let inputCount = 0;
         for (const utxo of utxos) {
-            const txUrl = apiToken 
+            const txUrl = apiToken
                 ? `${baseUrl}/txs/${utxo.tx_hash}?includeHex=true&token=${apiToken}`
                 : `${baseUrl}/txs/${utxo.tx_hash}?includeHex=true`;
             const { data: txHex } = await axios.get(txUrl);
@@ -283,7 +278,7 @@ export class DogeHDWallet {
         const baseUrl = `https://api.blockcypher.com/v1/doge/main`;
 
         try {
-            const historyUrl = apiToken 
+            const historyUrl = apiToken
                 ? `${baseUrl}/addrs/${address}/full?limit=${limit}&token=${apiToken}`
                 : `${baseUrl}/addrs/${address}/full?limit=${limit}`;
             const { data } = await axios.get(historyUrl);

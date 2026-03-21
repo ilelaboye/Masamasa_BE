@@ -1237,15 +1237,15 @@ export class Web3Service {
         },
         sol: {
           SOL: solBalance,
-          USDT: solUSDT + 5,
-          USDC: solUSDC + 4,
+          USDT: solUSDT ,
+          USDC: solUSDC,
         },
         TRX: {
           TRX: trxBalance,
           USDT: trxUSDTBalance + 28,
         },
         ADA: {
-          ADA: cardanoChild.lovelace + 3,
+          ADA: cardanoChild.lovelace,
         },
         BTC: {
           BTC: btcBalance + 0.00023,
