@@ -237,7 +237,6 @@ export class CardanoHDWallet {
     mainnet = true,
   ): Promise<string> {
     try {
-      console.log(`[ADA] Withdrawing ${amountADA} ADA to ${toAddressBech32}`);
       const network = mainnet ? "mainnet" : "preprod";
       const masterIdx = 0;
       const masterAddress = this.generateAddress(masterIdx, mainnet);
@@ -250,8 +249,7 @@ export class CardanoHDWallet {
       );
 
       if (utxos.length === 0) throw new Error("No funds in master wallet");
-      console.log(`[ADA] Found ${utxos.length} UTXOs`);
-
+     
       const pp = await this.fetchProtocolParams(network, blockfrostApiKey);
 
       const config = TransactionBuilderConfigBuilder.new()
@@ -301,7 +299,6 @@ export class CardanoHDWallet {
         if (accumulated > amountLovelace + 2_000_000n) break;
       }
 
-      console.log(`[ADA] Accumulated: ${Number(accumulated) / 1_000_000} ADA`);
       if (accumulated < amountLovelace)
         throw new Error(`Insufficient ADA. Have: ${Number(accumulated) / 1_000_000}, Need: ${amountADA}`);
 
@@ -315,7 +312,6 @@ export class CardanoHDWallet {
       // Add change
       txBuilder.add_change_if_needed(masterAddr);
 
-      console.log(`[ADA] Building and signing transaction...`);
       const txBody = txBuilder.build();
       const txHashBytes = blake2b(txBody.to_bytes(), undefined, 32);
       const txHash = TransactionHash.from_bytes(txHashBytes);
@@ -330,7 +326,6 @@ export class CardanoHDWallet {
 
       const signedTx = Transaction.new(txBody, witnesses);
 
-      console.log(`[ADA] Submitting to Blockfrost...`);
       const { data } = await axios.post(
         `https://cardano-${network}.blockfrost.io/api/v0/tx/submit`,
         Buffer.from(signedTx.to_bytes()),
@@ -342,7 +337,6 @@ export class CardanoHDWallet {
         },
       );
 
-      console.log(`[ADA] Success! TX: ${data}`);
       return data;
     } catch (error: any) {
       console.error(`[ADA] Withdrawal failed:`, {

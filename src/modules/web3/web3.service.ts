@@ -1631,13 +1631,11 @@ export class Web3Service {
 
       // ADA transactions
       try {
-        console.log("CADA")
         const adaTxs = await this.hdADA.getChildTransactionHistoryOutgoing(0, appConfig.BLOCK_API_KEY ?? "", true);
         history.push(...adaTxs.map(tx => ({
           ...tx,
           network: "CARDANO",
         })));
-        console.log(adaTxs, "adaTxs");
       } catch (e) {
         console.error("Failed to fetch ADA history:", e.message);
       }
@@ -1645,6 +1643,7 @@ export class Web3Service {
       // XRP transactions
       try {
         const xrpTxs = await this.hdXrp.getHistoryByUserId(0, 50);
+       console.log(xrpTxs, "xrp")
         history.push(...xrpTxs.map(tx => ({
           ...tx,
           network: "RIPPLE",
