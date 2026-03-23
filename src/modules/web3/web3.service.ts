@@ -1462,6 +1462,14 @@ export class Web3Service {
       const data = await response.json();
       const transactions = data.result || [];
 
+      // Map chain to native token symbol
+      const chainTokenMap: Record<string, string> = {
+        'base': 'ETH',
+        'eth': 'ETH',
+        'bsc': 'BNB',
+        'polygon': 'MATIC',
+      };
+
       // Convert Wei values to Ether and filter for outgoing transactions
       return transactions
         .filter(tx => tx.from_address?.toLowerCase() === address.toLowerCase())
@@ -1478,11 +1486,16 @@ export class Web3Service {
             : (tx.timestamp || 0);
           
           return {
-            ...tx,
-            value: formattedAmount,
-            amount: formattedAmount, // Keep as string to avoid scientific notation
-            status: status,
+            hash: tx.hash,
+            block: tx.block_number,
             timestamp: timestamp,
+            fees: tx.transaction_fee || tx.gas_price,
+            amount: formattedAmount,
+            token_symbol: chainTokenMap[chain] || 'ETH',
+            status: status,
+            type: 'OUT',
+            from_address: tx.from_address,
+            to_address: tx.to_address,
           };
         });
     } catch (e: any) {
@@ -1677,13 +1690,56 @@ export class Web3Service {
         return txTime >= cutoffDate;
       });
 
+      // Filter out refuel/dust transactions (very small amounts)
+      const dustThresholds: Record<string, number> = {
+        'BTC': 0.0001,      // 0.0001 BTC
+        'ETH': 0.001,       // 0.001 ETH
+        'BNB': 0.001,       // 0.001 BNB
+        'MATIC': 0.1,       // 0.1 MATIC
+        'SOL': 0.01,        // 0.01 SOL
+        'ADA': 1,           // 1 ADA
+        'XRP': 1,           // 1 XRP
+        'DOGE': 10,         // 10 DOGE
+        'TRX': 10,          // 10 TRX
+        'USDT': 0.1,        // 0.1 USDT
+        'USDC': 0.1,        // 0.1 USDC
+      };
+
+      const filteredNoDust = filteredHistory.filter(tx => {
+        const tokenSymbol = tx.token_symbol || tx.symbol;
+        const amount = typeof tx.amount === 'string' ? parseFloat(tx.amount) : tx.amount;
+        const threshold = dustThresholds[tokenSymbol] || 0.0001;
+        
+        // Keep transactions above dust threshold
+        return amount >= threshold;
+      });
+
+      // Coin name mapping
+      const coinNameMap: Record<string, string> = {
+        'BTC': 'Bitcoin',
+        'ETH': 'Ethereum',
+        'BNB': 'Binance Coin',
+        'USDT': 'Tether',
+        'USDC': 'USD Coin',
+        'SOL': 'Solana',
+        'ADA': 'Cardano',
+        'XRP': 'Ripple',
+        'DOGE': 'Dogecoin',
+        'TRX': 'Tron',
+        'MATIC': 'Polygon',
+        'RIPPLE': 'Ripple',
+      };
+
       // Standardize format
-      const standardizedHistory = filteredHistory.map(tx => {
+      const standardizedHistory = filteredNoDust.map(tx => {
         // Ensure amount is a string to avoid scientific notation
         let amount = tx.amount;
         if (typeof amount === 'number') {
           amount = amount.toFixed(18).replace(/\.?0+$/, '');
         }
+
+        const tokenSymbol = tx.token_symbol || tx.symbol;
+        const coinName = coinNameMap[tokenSymbol] || tokenSymbol;
 
         return {
           hash: tx.hash || tx.txID,
@@ -1691,7 +1747,8 @@ export class Web3Service {
           timestamp: tx.timestamp,
           fees: tx.fees || tx.transaction_fee,
           amount: amount,
-          token_symbol: tx.token_symbol || tx.symbol,
+          token_symbol: tokenSymbol,
+          coin_name: coinName,
           network: tx.network,
           status: tx.status,
           type: tx.type,
