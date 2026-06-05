@@ -175,7 +175,7 @@ export class XrpHDWallet {
 
                 let amount = 0;
                 const rawAmount = tx.Amount || tx.DeliverMax || meta.delivered_amount;
-console.log(txObj)
+
                 if (typeof rawAmount === "string") {
                     amount = Number(dropsToXrp(rawAmount));
                 } else {
