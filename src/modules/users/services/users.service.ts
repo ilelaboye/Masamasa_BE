@@ -6,7 +6,7 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { DataSource, Repository } from "typeorm";
 import { BaseService } from "../../base.service";
 import { KycStatus, User } from "../entities/user.entity";
 import {
@@ -33,7 +33,7 @@ import {
   TransactionStatusType,
 } from "@/modules/transactions/transactions.entity";
 import { Transfer } from "@/modules/transfers/transfers.entity";
-import { generateMasamasaRef, paginate } from "@/core/helpers";
+import { generateMasamasaRef } from "@/core/helpers";
 import { BVNVerificationDto } from "@/modules/global/bank-verification/dto/bvn-verification.dto";
 import { BankVerificationService } from "@/modules/global/bank-verification/bank-verification.service";
 import { Notification } from "@/modules/notifications/entities/notification.entity";
@@ -60,6 +60,7 @@ export class UsersService extends BaseService {
     private readonly transactionService: TransactionService,
     private readonly bankVerificationService: BankVerificationService,
     private readonly cronJob: CronJob,
+    private readonly dataSource: DataSource,
   ) {
     super();
   }
@@ -396,10 +397,7 @@ export class UsersService extends BaseService {
         "Auth user not found, please login again",
       );
     }
-    const balance = await this.transactionService.getAccountBalance(req);
-    if (balance < withdrawalDto.amount) {
-      throw new BadRequestException("Insufficient wallet balance");
-    }
+
     const verified = await verifyHash(withdrawalDto.pin, user.pin);
     if (!verified) throw new BadRequestException("Incorrect pin");
 
@@ -411,28 +409,76 @@ export class UsersService extends BaseService {
       );
     }
 
-    const trans = await this.transactionService.saveTransaction({
-      user_id: user.id,
-      network: null,
-      coin_amount: 0,
-      wallet_address: null,
-      mode: TransactionModeType.debit,
-      entity_type: TransactionEntityType.withdrawal,
-      metadata: {
-        bankCode: withdrawalDto.bankCode,
-        accountNumber: withdrawalDto.accountNumber,
-        accountName: withdrawalDto.accountName,
-        bankName: withdrawalDto.bankName,
-        narration: withdrawalDto.narration,
-      },
-      exchange_rate_id: null,
-      currency: "NGN",
-      entity_id: 0,
-      dollar_amount: 0,
-      amount: withdrawalDto.amount,
-      coin_exchange_rate: 0,
-      status: TransactionStatusType.processing,
-    });
+    // Lock the user row for the duration of the balance check + transaction insert
+    // to prevent concurrent withdrawals from racing past the balance check.
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    let trans: Transactions;
+    try {
+      await queryRunner.manager
+        .createQueryBuilder(User, "user")
+        .setLock("pessimistic_write")
+        .where("user.id = :id", { id: user.id })
+        .getOne();
+
+      const balanceResult = await queryRunner.manager
+        .createQueryBuilder(Transactions, "transaction")
+        .select(
+          `
+          SUM(CASE WHEN transaction.mode = :credit AND transaction.status = :success THEN transaction.amount ELSE 0 END) -
+          SUM(CASE WHEN transaction.mode = :debit AND transaction.status IN (:success, :processing) THEN transaction.amount ELSE 0 END)
+        `,
+          "balance",
+        )
+        .where("transaction.user_id = :user_id", { user_id: user.id })
+        .setParameters({
+          credit: TransactionModeType.credit,
+          debit: TransactionModeType.debit,
+          success: TransactionStatusType.success,
+          processing: TransactionStatusType.processing,
+        })
+        .getRawOne();
+
+      const balance = parseFloat(balanceResult.balance) || 0;
+      if (balance < withdrawalDto.amount) {
+        throw new BadRequestException("Insufficient wallet balance");
+      }
+
+      trans = await queryRunner.manager.save(
+        queryRunner.manager.create(Transactions, {
+          user_id: user.id,
+          network: null,
+          coin_amount: 0,
+          wallet_address: null,
+          mode: TransactionModeType.debit,
+          entity_type: TransactionEntityType.withdrawal,
+          metadata: {
+            bankCode: withdrawalDto.bankCode,
+            accountNumber: withdrawalDto.accountNumber,
+            accountName: withdrawalDto.accountName,
+            bankName: withdrawalDto.bankName,
+            narration: withdrawalDto.narration,
+          },
+          exchange_rate_id: null,
+          currency: "NGN",
+          entity_id: 0,
+          dollar_amount: 0,
+          amount: withdrawalDto.amount,
+          coin_exchange_rate: 0,
+          masamasa_ref: generateMasamasaRef(),
+          status: TransactionStatusType.processing,
+        } as unknown as Transactions),
+      );
+
+      await queryRunner.commitTransaction();
+    } catch (e) {
+      await queryRunner.rollbackTransaction();
+      throw e;
+    } finally {
+      await queryRunner.release();
+    }
 
     var accessToken = await this.accessTokenRepository.findOne({
       where: { type: AccessTokenType.nomba },

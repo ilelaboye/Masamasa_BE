@@ -16,6 +16,7 @@ import { Transactions } from "../transactions/transactions.entity";
 import { AdministratorService } from "../administrator/services/administrator.service";
 import { AdminLogs } from "../administrator/entities/admin-logs.entity";
 import { Administrator } from "../administrator/entities/administrator.entity";
+import { WithdrawalWallet } from "../web3/entity/withdrawal-wallet.entity";
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { Administrator } from "../administrator/entities/administrator.entity";
       Transactions,
       AdminLogs,
       Administrator,
+      WithdrawalWallet,
     ]),
   ],
   controllers: [PurchaseController],

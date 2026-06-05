@@ -3,7 +3,7 @@ import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { CronJob } from "./cron.job";
 import { CronService } from "./cron.service";
-// import { Transactions } from "@/modules/transactions/transactions.entity";
+import { Transactions } from "@/modules/transactions/transactions.entity";
 // import { AdministratorService } from "@/modules/administrator/services/administrator.service";
 // import { Administrator } from "@/modules/administrator/entities/administrator.entity";
 import { User } from "@/modules/users/entities/user.entity";
@@ -20,7 +20,7 @@ import { BankVerification } from "../../bank-verification/entities/bank-verifica
   imports: [
     TypeOrmModule.forFeature([
       Notification,
-      // Transactions,
+      Transactions,
       // Administrator,
       User,
       AdminLogs,
@@ -39,4 +39,4 @@ import { BankVerification } from "../../bank-verification/entities/bank-verifica
     BankVerificationService,
   ],
 })
-export class CronModule { }
+export class CronModule {}

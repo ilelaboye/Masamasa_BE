@@ -9,10 +9,17 @@ import { AdminLogs } from "./entities/admin-logs.entity";
 import { User } from "../users/entities/user.entity";
 import { Transactions } from "../transactions/transactions.entity";
 import { Web3Module } from "../web3/web3.module";
+import { WithdrawalWallet } from "../web3/entity/withdrawal-wallet.entity";
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Administrator, AdminLogs, User, Transactions]),
+    TypeOrmModule.forFeature([
+      Administrator,
+      AdminLogs,
+      User,
+      Transactions,
+      WithdrawalWallet,
+    ]),
     Web3Module,
   ],
   controllers: [AdministratorController, AdminAuthController],
