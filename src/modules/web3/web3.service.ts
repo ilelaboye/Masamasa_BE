@@ -1374,13 +1374,13 @@ export class Web3Service {
           USDT: trxUSDTBalance + 28,
         },
         ADA: {
-          ADA: cardanoChild.lovelace + 20,
+          ADA: cardanoChild.lovelace,
         },
         BTC: {
           BTC: btcBalance + 0.00023,
         },
         RIPPLE: {
-          XRP: xrpBalance + 9,
+          XRP: xrpBalance ,
         },
         DOGE: {
           DOGE: dogeBalance,
