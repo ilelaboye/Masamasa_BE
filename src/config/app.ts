@@ -78,7 +78,15 @@ export const appConfig = {
   BTC_MASTER_MNEMONIC: process.env.MASTER_MNEMONIC ?? "",
   EVM_RPC_URL: "https://bsc-dataseed1.defibit.io",
   BASE_RPC_URL: "https://base-mainnet.public.blastapi.io",
-  ETH_RPC_URL: "https://eth.meowrpc.com",
+  ETH_RPC_URL: process.env.ETH_RPC_URL || "https://ethereum.publicnode.com",
+  // Fallback Ethereum RPC URLs for automatic failover
+  ETH_RPC_URLS: [
+    "https://ethereum.publicnode.com",
+    "https://rpc.ankr.com/eth",
+    "https://eth-mainnet.public.blastapi.io",
+    "https://1rpc.io/eth",
+    "https://eth.drpc.org"
+  ],
   SOL_RPC_URL: "https://api.mainnet-beta.solana.com",
   SOL_RPC_URL2: "https://solana-rpc.publicnode.com",
   POLY_RPC_URL: process.env.POLY_RPC_URL || "https://polygon-bor-rpc.publicnode.com",
