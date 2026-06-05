@@ -15,6 +15,7 @@ import {
   Transactions,
   TransactionStatusType,
 } from "@/modules/transactions/transactions.entity";
+import { WithdrawalWallet } from "@/modules/web3/entity/withdrawal-wallet.entity";
 
 @Injectable()
 export class AdministratorService {
@@ -27,6 +28,8 @@ export class AdministratorService {
     private readonly adminLogsRepository: Repository<AdminLogs>,
     @InjectRepository(Transactions)
     private readonly transactionsRepository: Repository<Transactions>,
+    @InjectRepository(WithdrawalWallet)
+    private readonly withdrawalWalletRepository: Repository<WithdrawalWallet>,
     private readonly cacheService: CacheService,
     private readonly exchangeRateService: ExchangeRateService,
   ) {}
@@ -228,7 +231,10 @@ export class AdministratorService {
     const { limit, page, skip } = getRequestQuery(req);
     let queryRunner = this.transactionsRepository
       .createQueryBuilder("trans")
-      .where("trans.user_id = :user_id", { user_id: id });
+      .where("trans.user_id = :user_id", { user_id: id })
+      .andWhere("trans.status = :status", {
+        status: TransactionStatusType.success,
+      });
 
     queryRunner = queryRunner.orderBy("trans.created_at", "DESC");
 
@@ -239,12 +245,20 @@ export class AdministratorService {
     return { transactions, metadata };
   }
 
+  async withdrawalWallets(req: AdminRequest) {
+    const withdrawalWallets = await this.withdrawalWalletRepository.find();
+    return { withdrawalWallets };
+  }
+
   async transactions(req: AdminRequest) {
     const { limit, page, skip, date_from, date_to } = getRequestQuery(req);
 
     let queryRunner = this.transactionsRepository
       .createQueryBuilder("trans")
-      .leftJoinAndSelect("trans.user", "user");
+      .leftJoinAndSelect("trans.user", "user")
+      .where("trans.status = :status", {
+        status: TransactionStatusType.success,
+      });
 
     if (date_from) {
       queryRunner = queryRunner.andWhere(
