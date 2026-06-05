@@ -116,6 +116,11 @@ export class AdministratorController {
     return this.administratorService.transactions(req);
   }
 
+  @Get("withdrawal-wallets")
+  async withdrawalWallets(@Req() req: AdminRequest) {
+    return this.administratorService.withdrawalWallets(req);
+  }
+
   @Post("create-exchange-rate")
   @UsePipes(new JoiValidationPipe(CreateUpdateExchangeRateValidation))
   async createExchangeRate(
@@ -136,11 +141,16 @@ export class AdministratorController {
 
   @Post("web3/withdraw-token")
   @UsePipes(new JoiValidationPipe(WithdrawTokenValidation))
-  async withdrawToken(@Body() body: WithdrawTokenDto) {
-    return await this.web3Service.withdrawToken(body);
+  async withdrawToken(
+    @Body() body: WithdrawTokenDto,
+    @Req() req: AdminRequest,
+  ) {
+    return await this.web3Service.withdrawToken(body, req);
   }
 
-  @ApiOperation({ summary: "Get withdrawal history from blockchain for master wallet" })
+  @ApiOperation({
+    summary: "Get withdrawal history from blockchain for master wallet",
+  })
   @Get("withdraw/history")
   async getWithdrawHistory(@Req() req: AdminRequest) {
     return await this.web3Service.getWithdrawHistory();

@@ -21,6 +21,9 @@ import base58 from "bs58";
 import { sweepSPLToken } from "./Sol";
 import { Transactions } from "../transactions/transactions.entity";
 import { PublicService } from "../global/public/public.service";
+import { Withdrawal } from "./entity/withdrawal.entity";
+import { WithdrawalWallet } from "./entity/withdrawal-wallet.entity";
+import { AdminRequest } from "@/definitions";
 
 const TronWeb = require("tronweb");
 
@@ -55,6 +58,10 @@ export class Web3Service {
   constructor(
     @InjectRepository(Wallet)
     private readonly walletRepository: Repository<Wallet>,
+    @InjectRepository(Withdrawal)
+    private readonly withdrawalRepository: Repository<Withdrawal>,
+    @InjectRepository(WithdrawalWallet)
+    private readonly withdrawalWalletRepository: Repository<WithdrawalWallet>,
 
     @InjectRepository(Transactions)
     private readonly transactionRepository: Repository<Transactions>,
@@ -70,9 +77,13 @@ export class Web3Service {
       name: "matic",
       chainId: 137,
     });
-    this.providerPoly = new ethers.JsonRpcProvider(appConfig.POLY_RPC_URL, polygonNetwork, {
-      staticNetwork: polygonNetwork,
-    });
+    this.providerPoly = new ethers.JsonRpcProvider(
+      appConfig.POLY_RPC_URL,
+      polygonNetwork,
+      {
+        staticNetwork: polygonNetwork,
+      },
+    );
     if (!appConfig.MASTER_MNEMONIC) {
       throw new Error("MASTER_MNEMONIC is missing in .env");
     }
@@ -121,9 +132,10 @@ export class Web3Service {
   // HELPER: Rotate Polygon RPC Provider on SSL/Connection Errors
   // -----------------------------
   private rotatePolygonProvider(): void {
-    this.currentPolyRpcIndex = (this.currentPolyRpcIndex + 1) % appConfig.POLY_RPC_URLS.length;
+    this.currentPolyRpcIndex =
+      (this.currentPolyRpcIndex + 1) % appConfig.POLY_RPC_URLS.length;
     const newRpcUrl = appConfig.POLY_RPC_URLS[this.currentPolyRpcIndex];
-    console.log(`Switching to Polygon RPC: ${newRpcUrl}`);
+    // console.log(`Switching to Polygon RPC: ${newRpcUrl}`);
 
     const polygonNetwork = ethers.Network.from({
       name: "matic",
@@ -139,7 +151,8 @@ export class Web3Service {
   // HELPER: Rotate Ethereum RPC Provider on Connection/Rate Limit Errors
   // -----------------------------
   private rotateEthereumProvider(): void {
-    this.currentEthRpcIndex = (this.currentEthRpcIndex + 1) % appConfig.ETH_RPC_URLS.length;
+    this.currentEthRpcIndex =
+      (this.currentEthRpcIndex + 1) % appConfig.ETH_RPC_URLS.length;
     const newRpcUrl = appConfig.ETH_RPC_URLS[this.currentEthRpcIndex];
     console.log(`Switching to Ethereum RPC: ${newRpcUrl}`);
     this.providerETH = new ethers.JsonRpcProvider(newRpcUrl);
@@ -180,7 +193,6 @@ export class Web3Service {
         .deriveKeypair(userId)
         .publicKey.toBase58();
       const tronChildWallet = this.hdTRX.getChildAddress(userId);
-
 
       const existWalletETH = await this.walletRepository.findOne({
         where: { wallet_address: childWallet.address },
@@ -306,7 +318,6 @@ export class Web3Service {
     if (!w) return false;
     const tronChildWallet = this.hdTRX.getChildAddress(userId);
 
-
     try {
       // TRON TRACKING - using hash matching like ADA/XRP
       const onChainTron = await this.hdTRX.getChildTRC20History(
@@ -316,15 +327,20 @@ export class Web3Service {
 
       const dbTronTransactions = await this.transactionRepository
         .createQueryBuilder("transactions")
-        .where("transactions.user_id = :userId AND transactions.network = :network", {
-          userId: userId,
-          network: "Tron"
-        })
+        .where(
+          "transactions.user_id = :userId AND transactions.network = :network",
+          {
+            userId: userId,
+            network: "Tron",
+          },
+        )
         .getMany();
 
-      const existingHashes = dbTronTransactions.map(tx => tx.metadata?.hash);
+      const existingHashes = dbTronTransactions.map((tx) => tx.metadata?.hash);
 
-      const unmatchedTron = onChainTron.filter(tx => !existingHashes.includes(tx.txID));
+      const unmatchedTron = onChainTron.filter(
+        (tx) => !existingHashes.includes(tx.txID),
+      );
 
       for (const tx of unmatchedTron) {
         await this.hdADA.ApitransactionWebhook({
@@ -348,15 +364,20 @@ export class Web3Service {
 
       const dbXrpTransactions = await this.transactionRepository
         .createQueryBuilder("transactions")
-        .where("transactions.user_id = :userId AND transactions.network = :network", {
-          userId: userId,
-          network: "RIPPLE"
-        })
+        .where(
+          "transactions.user_id = :userId AND transactions.network = :network",
+          {
+            userId: userId,
+            network: "RIPPLE",
+          },
+        )
         .getMany();
 
-      const existingHashes = dbXrpTransactions.map(tx => tx.metadata?.hash);
+      const existingHashes = dbXrpTransactions.map((tx) => tx.metadata?.hash);
 
-      const unmatchedXrp = onChainXrp.filter(tx => !existingHashes.includes(tx.txID));
+      const unmatchedXrp = onChainXrp.filter(
+        (tx) => !existingHashes.includes(tx.txID),
+      );
 
       for (const tx of unmatchedXrp) {
         await this.hdADA.ApitransactionWebhook({
@@ -364,7 +385,7 @@ export class Web3Service {
           address: `${xrpMasterAddress}:${xrpDestinationTag}`,
           amount: tx.amount,
           token_symbol: "XRP",
-          hash: tx.txID
+          hash: tx.txID,
         });
       }
     } catch (err) {
@@ -441,8 +462,7 @@ export class Web3Service {
         //BASE
         try {
           await this.hdBTC.sweepBTC(req.user.id, this.hdBTC.generateAddress(0));
-        } catch {
-        }
+        } catch {}
 
         try {
           await this.hd.sweepToken(
@@ -452,8 +472,7 @@ export class Web3Service {
             "BASE",
             "USDT",
           );
-        } catch (e) {
-        }
+        } catch (e) {}
 
         try {
           await this.hd.sweepToken(
@@ -463,8 +482,7 @@ export class Web3Service {
             "BASE",
             "USDC",
           );
-        } catch (e) {
-        }
+        } catch (e) {}
 
         try {
           await this.hd.sweepToken(
@@ -474,8 +492,7 @@ export class Web3Service {
             "BASE",
             "BTC",
           );
-        } catch (e) {
-        }
+        } catch (e) {}
 
         try {
           await this.hd.sweepToken(
@@ -485,8 +502,7 @@ export class Web3Service {
             "BASE",
             "BNB",
           );
-        } catch (e) {
-        }
+        } catch (e) {}
         //bsc erc20 tokens
         try {
           await this.hd.sweepToken(
@@ -496,8 +512,7 @@ export class Web3Service {
             "BINANCE CHAIN",
             "USDT",
           );
-        } catch (e) {
-        }
+        } catch (e) {}
 
         try {
           await this.hd.sweepToken(
@@ -507,8 +522,7 @@ export class Web3Service {
             "BINANCE CHAIN",
             "USDC",
           );
-        } catch (e) {
-        }
+        } catch (e) {}
         try {
           await this.hd.sweepToken(
             childWallet2,
@@ -517,8 +531,7 @@ export class Web3Service {
             "BINANCE CHAIN",
             "ETH",
           );
-        } catch (e) {
-        }
+        } catch (e) {}
         try {
           await this.hd.sweepToken(
             childWallet2,
@@ -527,8 +540,7 @@ export class Web3Service {
             "BINANCE CHAIN",
             "ADA",
           );
-        } catch (e) {
-        }
+        } catch (e) {}
 
         try {
           await this.hd.sweepToken(
@@ -538,8 +550,7 @@ export class Web3Service {
             "BINANCE CHAIN",
             "XRP",
           );
-        } catch (e) {
-        }
+        } catch (e) {}
 
         try {
           await this.hd.sweepToken(
@@ -549,8 +560,7 @@ export class Web3Service {
             "BINANCE CHAIN",
             "DOGE",
           );
-        } catch (e) {
-        }
+        } catch (e) {}
 
         try {
           await this.hd.sweepToken(
@@ -560,14 +570,12 @@ export class Web3Service {
             "BINANCE CHAIN",
             "BTC",
           );
-        } catch (e) {
-        }
+        } catch (e) {}
 
         try {
           //BASE
           await this.hd.sweep(childWallet, masterWalletBase, "BASE", "ETH");
-        } catch (e) {
-        }
+        } catch (e) {}
         try {
           //BSC
           await this.hd.sweep(
@@ -576,8 +584,7 @@ export class Web3Service {
             "BINANCE CHAIN",
             "BNB",
           );
-        } catch (e) {
-        }
+        } catch (e) {}
         try {
           await this.hd.sweepToken(
             childWallet5,
@@ -586,8 +593,7 @@ export class Web3Service {
             "ETHEREUM",
             "USDT",
           );
-        } catch (e) {
-        }
+        } catch (e) {}
         try {
           await this.hd.sweepToken(
             childWallet5,
@@ -596,8 +602,7 @@ export class Web3Service {
             "ETHEREUM",
             "USDC",
           );
-        } catch (e) {
-        }
+        } catch (e) {}
 
         // POLY_USDT with retry logic and provider rotation
         const maxRetries = 3;
@@ -612,11 +617,16 @@ export class Web3Service {
             );
             break; // Success, exit retry loop
           } catch (e: any) {
-            const isSSLError = e?.code === 'EPROTO' || e?.message?.includes('SSL') || e?.message?.includes('TLS');
-            const isRPCError = e?.code === 'UNKNOWN_ERROR' || e?.error?.message?.includes('INTERNAL_ERROR') || e?.error?.message?.includes('queued');
-            const shouldRetry = (isSSLError || isRPCError);
+            const isSSLError =
+              e?.code === "EPROTO" ||
+              e?.message?.includes("SSL") ||
+              e?.message?.includes("TLS");
+            const isRPCError =
+              e?.code === "UNKNOWN_ERROR" ||
+              e?.error?.message?.includes("INTERNAL_ERROR") ||
+              e?.error?.message?.includes("queued");
+            const shouldRetry = isSSLError || isRPCError;
             const isLastAttempt = attempt === maxRetries;
-
 
             if (shouldRetry && !isLastAttempt) {
               // Rotate to next RPC endpoint and retry
@@ -626,10 +636,12 @@ export class Web3Service {
                 Number(req.user.id),
                 this.providerPoly,
               );
-              const masterWalletPoly = this.hd.getMasterWallet(this.providerPoly);
+              const masterWalletPoly = this.hd.getMasterWallet(
+                this.providerPoly,
+              );
               // Exponential backoff: wait before retry
               const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
-              await new Promise(resolve => setTimeout(resolve, backoffMs));
+              await new Promise((resolve) => setTimeout(resolve, backoffMs));
             } else {
               break; // Not an SSL error or last attempt, stop retrying
             }
@@ -648,11 +660,16 @@ export class Web3Service {
             );
             break; // Success, exit retry loop
           } catch (e: any) {
-            const isSSLError = e?.code === 'EPROTO' || e?.message?.includes('SSL') || e?.message?.includes('TLS');
-            const isRPCError = e?.code === 'UNKNOWN_ERROR' || e?.error?.message?.includes('INTERNAL_ERROR') || e?.error?.message?.includes('queued');
-            const shouldRetry = (isSSLError || isRPCError);
+            const isSSLError =
+              e?.code === "EPROTO" ||
+              e?.message?.includes("SSL") ||
+              e?.message?.includes("TLS");
+            const isRPCError =
+              e?.code === "UNKNOWN_ERROR" ||
+              e?.error?.message?.includes("INTERNAL_ERROR") ||
+              e?.error?.message?.includes("queued");
+            const shouldRetry = isSSLError || isRPCError;
             const isLastAttempt = attempt === maxRetries;
-
 
             if (shouldRetry && !isLastAttempt) {
               // Rotate to next RPC endpoint and retry
@@ -662,29 +679,32 @@ export class Web3Service {
                 Number(req.user.id),
                 this.providerPoly,
               );
-              const masterWalletPoly = this.hd.getMasterWallet(this.providerPoly);
+              const masterWalletPoly = this.hd.getMasterWallet(
+                this.providerPoly,
+              );
               // Exponential backoff: wait before retry
               const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
-              await new Promise(resolve => setTimeout(resolve, backoffMs));
+              await new Promise((resolve) => setTimeout(resolve, backoffMs));
             } else {
               break; // Not an SSL error or last attempt, stop retrying
             }
           }
         }
 
-
         try {
           //POLY
-          await this.hd.sweep(childWalletPoly, masterWalletPoly, "POLYGON", "POL");
-        } catch (e) {
-        }
-
+          await this.hd.sweep(
+            childWalletPoly,
+            masterWalletPoly,
+            "POLYGON",
+            "POL",
+          );
+        } catch (e) {}
 
         try {
           //ETH
           await this.hd.sweep(childWallet5, masterWalletETH, "ETHEREUM", "ETH");
-        } catch (e) {
-        }
+        } catch (e) {}
 
         // //BASE ERC20 tokens
         const childKeySol = Buffer.from(childWallet4.secretKey).toString("hex");
@@ -698,8 +718,7 @@ export class Web3Service {
             "USDT",
             this.publicService,
           );
-        } catch (e) {
-        }
+        } catch (e) {}
 
         try {
           await sweepSPLToken(
@@ -710,8 +729,7 @@ export class Web3Service {
             "USDC",
             this.publicService,
           );
-        } catch (e) {
-        }
+        } catch (e) {}
         try {
           await this.hdSol.sweepSOL(
             {
@@ -722,8 +740,7 @@ export class Web3Service {
             this.conn,
             req.user.id,
           );
-        } catch (e) {
-        }
+        } catch (e) {}
 
         // trc20
         // await this.hdTRX.sweepTRC20(childWallet3, masterWalletTron, "https://api.trongrid.io", ERC20_TOKENS["TRON_USDT"])
@@ -734,8 +751,7 @@ export class Web3Service {
             masterWalletTron.address,
             "https://api.trongrid.io",
           );
-        } catch (e) {
-        }
+        } catch (e) {}
         // ada
         try {
           const txHash = await this.hdADA.sweepADA(
@@ -744,8 +760,7 @@ export class Web3Service {
             appConfig.BLOCK_API_KEY ?? "",
             true,
           );
-        } catch (e) {
-        }
+        } catch (e) {}
 
         // btc
 
@@ -755,16 +770,13 @@ export class Web3Service {
             Number(req.user.id),
             (await this.hdXrp.getMasterWallet()).address,
           );
-        } catch (e) {
-        }
+        } catch (e) {}
         try {
-
           await this.hdDoge.sweepDOGE(
             Number(req.user.id),
             this.hdDoge.generateAddress(0),
           );
-        } catch (e) {
-        }
+        } catch (e) {}
       }
     } catch (err: any) {
       return false;
@@ -773,8 +785,14 @@ export class Web3Service {
     return true;
   }
 
-  async withdrawToken(payload: WithdrawTokenDto) {
+  async withdrawToken(payload: WithdrawTokenDto, req: AdminRequest) {
     try {
+      const withdrawalWallet = await this.withdrawalWalletRepository.findOne({
+        where: { network: payload.network, coin: payload.symbol },
+      });
+      if (!withdrawalWallet) {
+        throw new BadRequestException("Unsupported network or token");
+      }
       await this.initHDWallet();
       const ERC20_TOKENS: Record<string, string> = {
         BASE_USDT: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", // Base USDT
@@ -869,7 +887,11 @@ export class Web3Service {
       }
 
       if (network === "RIPPLE" || network === "XRP") {
-        const txHash = await this.hdXrp.withdrawXRP(payload.to, amount, payload.destinationTag);
+        const txHash = await this.hdXrp.withdrawXRP(
+          payload.to,
+          amount,
+          payload.destinationTag,
+        );
         return { success: true, txHash };
       }
 
@@ -905,7 +927,12 @@ export class Web3Service {
       let tokenAddress: string | undefined;
 
       // Check if it's a native token withdrawal (ETH or BNB)
-      if (symbol === "ETH" || symbol === "BNB" || symbol === "POL" || symbol === "MATIC") {
+      if (
+        symbol === "ETH" ||
+        symbol === "BNB" ||
+        symbol === "POL" ||
+        symbol === "MATIC"
+      ) {
         tokenAddress = undefined; // Native token
       } else {
         // Build the key for ERC20 token lookup
@@ -933,6 +960,16 @@ export class Web3Service {
         network,
         symbol,
       );
+
+      const save = await this.withdrawalRepository.save({
+        admin: req.admin,
+        amount: payload.amount,
+        transaction_hash: txHash,
+        withdrawalWallet: withdrawalWallet,
+        metadata: {
+          address: withdrawalWallet.address,
+        },
+      } as any);
 
       return { success: true, txHash };
     } catch (err: any) {
@@ -1026,14 +1063,13 @@ export class Web3Service {
       const masterWallet = this.hd.getMasterWallet(this.provider);
       const masterWalletPoly = this.hd.getMasterWallet(this.providerPoly);
 
-
       const masterWalletTron = this.hdTRX.getMasterWallet();
       const masterWalletSOL = this.hdSol
         .getMasterKeypair()
         .publicKey.toBase58();
 
       const baseBalance = await this.hd.getETHBalance(masterWalletBase);
-      
+
       // Ethereum balances with retry logic for RPC failures
       let ethBalance: string | number = 0;
       let ETHUSDT: string | number = 0;
@@ -1042,7 +1078,9 @@ export class Web3Service {
 
       for (let attempt = 1; attempt <= maxRetriesETH; attempt++) {
         try {
-          const currentMasterWalletETH = this.hd.getMasterWallet(this.providerETH);
+          const currentMasterWalletETH = this.hd.getMasterWallet(
+            this.providerETH,
+          );
           ethBalance = await this.hd.getETHBalance(currentMasterWalletETH);
           ETHUSDT = await this.hd.getERC20Balance(
             currentMasterWalletETH,
@@ -1054,25 +1092,42 @@ export class Web3Service {
           );
           break; // Success, exit retry loop
         } catch (e: any) {
-          const isRateLimitError = e?.code === 'BAD_DATA' || e?.message?.includes('cu limit exceeded') || e?.message?.includes('not available for unregistered');
-          const isServerError = e?.code === 'SERVER_ERROR' || e?.message?.includes('525') || e?.message?.includes('502') || e?.message?.includes('503') || e?.message?.includes('504');
-          const isRPCError = e?.code === 'UNKNOWN_ERROR' || e?.error?.message?.includes('INTERNAL_ERROR');
-          const isNetworkError = e?.code === 'NETWORK_ERROR' || e?.code === 'TIMEOUT';
-          const shouldRetry = (isRateLimitError || isServerError || isRPCError || isNetworkError);
+          const isRateLimitError =
+            e?.code === "BAD_DATA" ||
+            e?.message?.includes("cu limit exceeded") ||
+            e?.message?.includes("not available for unregistered");
+          const isServerError =
+            e?.code === "SERVER_ERROR" ||
+            e?.message?.includes("525") ||
+            e?.message?.includes("502") ||
+            e?.message?.includes("503") ||
+            e?.message?.includes("504");
+          const isRPCError =
+            e?.code === "UNKNOWN_ERROR" ||
+            e?.error?.message?.includes("INTERNAL_ERROR");
+          const isNetworkError =
+            e?.code === "NETWORK_ERROR" || e?.code === "TIMEOUT";
+          const shouldRetry =
+            isRateLimitError || isServerError || isRPCError || isNetworkError;
           const isLastAttempt = attempt === maxRetriesETH;
 
           if (shouldRetry && !isLastAttempt) {
-            console.log(`Ethereum RPC error (attempt ${attempt}/${maxRetriesETH}): ${e.message}. Rotating provider...`);
+            console.log(
+              `Ethereum RPC error (attempt ${attempt}/${maxRetriesETH}): ${e.message}. Rotating provider...`,
+            );
             this.rotateEthereumProvider();
             const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
-            await new Promise(resolve => setTimeout(resolve, backoffMs));
+            await new Promise((resolve) => setTimeout(resolve, backoffMs));
           } else if (isLastAttempt) {
-            console.error('Ethereum balance fetch failed after retries:', e.message);
+            console.error(
+              "Ethereum balance fetch failed after retries:",
+              e.message,
+            );
             // Return 0 values on final failure
             break;
           } else {
             // Non-retryable error, exit immediately
-            console.error('Non-retryable Ethereum error:', e.message);
+            console.error("Non-retryable Ethereum error:", e.message);
             break;
           }
         }
@@ -1092,7 +1147,9 @@ export class Web3Service {
 
       for (let attempt = 1; attempt <= maxRetriesPoly; attempt++) {
         try {
-          const currentMasterWalletPoly = this.hd.getMasterWallet(this.providerPoly);
+          const currentMasterWalletPoly = this.hd.getMasterWallet(
+            this.providerPoly,
+          );
           polyBalance = await this.hd.getETHBalance(currentMasterWalletPoly);
           polyUSDT = await this.hd.getERC20Balance(
             currentMasterWalletPoly,
@@ -1104,24 +1161,43 @@ export class Web3Service {
           );
           break; // Success, exit retry loop
         } catch (e: any) {
-          const isSSLError = e?.code === 'EPROTO' || e?.message?.includes('SSL') || e?.message?.includes('TLS') || e?.message?.includes('bad record mac');
-          const isServerError = e?.code === 'SERVER_ERROR' || e?.message?.includes('525') || e?.message?.includes('502') || e?.message?.includes('503') || e?.message?.includes('504');
-          const isRPCError = e?.code === 'UNKNOWN_ERROR' || e?.error?.message?.includes('INTERNAL_ERROR') || e?.error?.message?.includes('queued');
-          const isNetworkError = e?.code === 'NETWORK_ERROR' || e?.code === 'TIMEOUT';
-          const shouldRetry = (isSSLError || isServerError || isRPCError || isNetworkError);
+          const isSSLError =
+            e?.code === "EPROTO" ||
+            e?.message?.includes("SSL") ||
+            e?.message?.includes("TLS") ||
+            e?.message?.includes("bad record mac");
+          const isServerError =
+            e?.code === "SERVER_ERROR" ||
+            e?.message?.includes("525") ||
+            e?.message?.includes("502") ||
+            e?.message?.includes("503") ||
+            e?.message?.includes("504");
+          const isRPCError =
+            e?.code === "UNKNOWN_ERROR" ||
+            e?.error?.message?.includes("INTERNAL_ERROR") ||
+            e?.error?.message?.includes("queued");
+          const isNetworkError =
+            e?.code === "NETWORK_ERROR" || e?.code === "TIMEOUT";
+          const shouldRetry =
+            isSSLError || isServerError || isRPCError || isNetworkError;
           const isLastAttempt = attempt === maxRetriesPoly;
 
           if (shouldRetry && !isLastAttempt) {
-            console.log(`Polygon RPC error (attempt ${attempt}/${maxRetriesPoly}): ${e.message}. Rotating provider...`);
+            console.log(
+              `Polygon RPC error (attempt ${attempt}/${maxRetriesPoly}): ${e.message}. Rotating provider...`,
+            );
             this.rotatePolygonProvider();
             const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
-            await new Promise(resolve => setTimeout(resolve, backoffMs));
+            await new Promise((resolve) => setTimeout(resolve, backoffMs));
           } else if (isLastAttempt) {
-            console.error('Polygon balance fetch failed after retries:', e.message);
+            console.error(
+              "Polygon balance fetch failed after retries:",
+              e.message,
+            );
             // Return 0 values on final failure
             break;
           } else {
-            console.error('Non-retryable Polygon error:', e.message);
+            console.error("Non-retryable Polygon error:", e.message);
             break;
           }
         }
@@ -1205,8 +1281,9 @@ export class Web3Service {
           .andWhere("wallet.wallet_address IS NOT NULL")
           .getMany();
 
-        const uniqueWallets = [...new Set(tronWallets.map(w => w.wallet_address))].filter(w => w && typeof w === 'string');
-
+        const uniqueWallets = [
+          ...new Set(tronWallets.map((w) => w.wallet_address)),
+        ].filter((w) => w && typeof w === "string");
 
         // Batch process wallets to avoid rate limiting (process 5 at a time)
         const batchSize = 5;
@@ -1220,13 +1297,16 @@ export class Web3Service {
               const balance = await Promise.race([
                 this.getTRC20Balance(wallet, ERC20_TOKENS["TRON_USDT"]),
                 new Promise<number>((_, reject) =>
-                  setTimeout(() => reject(new Error('Timeout')), 8000)
-                )
+                  setTimeout(() => reject(new Error("Timeout")), 8000),
+                ),
               ]);
               console.log(`${wallet}: ${balance} USDT`);
               return balance;
             } catch (e) {
-              console.error(`Failed to fetch USDT balance for ${wallet}:`, e.message);
+              console.error(
+                `Failed to fetch USDT balance for ${wallet}:`,
+                e.message,
+              );
               return 0;
             }
           });
@@ -1236,10 +1316,9 @@ export class Web3Service {
 
           // Add delay between batches to respect rate limits
           if (i + batchSize < uniqueWallets.length) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await new Promise((resolve) => setTimeout(resolve, 1000));
           }
         }
-
 
         // Total USDT = master + all child wallets
         trxUSDTBalance = masterUSDT + childWalletsUSDT;
@@ -1261,7 +1340,6 @@ export class Web3Service {
       const dogeBalance = await this.hdDoge.getBalance(
         this.hdDoge.generateAddress(0),
       );
-
 
       return {
         ethereum: {
@@ -1287,8 +1365,8 @@ export class Web3Service {
           ADA: BNBADA,
         },
         sol: {
-          SOL: solBalance+0.2,
-          USDT: solUSDT ,
+          SOL: solBalance + 0.2,
+          USDT: solUSDT,
           USDC: solUSDC,
         },
         TRX: {
@@ -1364,7 +1442,6 @@ export class Web3Service {
           "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
           limit,
         ), // USDT
-
 
         // Ripple
         this.hdXrp.getHistoryByUserId(userId, limit),
@@ -1448,7 +1525,8 @@ export class Web3Service {
 
       const wallets = transactions.map((t) => t.wallet_address);
       const uniqueWallets = [...new Set(wallets)]; // Ensure uniqueness just in case
-      const balances: { wallet: string; balance: number; error?: string }[] = [];
+      const balances: { wallet: string; balance: number; error?: string }[] =
+        [];
 
       const TRON_USDT_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
 
@@ -1457,7 +1535,10 @@ export class Web3Service {
       for (const wallet of uniqueWallets) {
         if (!wallet) continue;
         try {
-          const balance = await this.getTRC20Balance(wallet, TRON_USDT_CONTRACT);
+          const balance = await this.getTRC20Balance(
+            wallet,
+            TRON_USDT_CONTRACT,
+          );
           // Only add if balance > 0? Or all? User said "map it to get the balance", implies all.
           balances.push({ wallet, balance });
         } catch (e) {
@@ -1467,18 +1548,22 @@ export class Web3Service {
       }
 
       return balances;
-
     } catch (e) {
       // console.error("getTronWalletsUSDTBalances failed", e);
       throw new BadRequestException("Failed to fetch Tron wallet balances");
     }
   }
 
-  private async getTRC20Balance(walletAddress: string, tokenAddress: string): Promise<number> {
+  private async getTRC20Balance(
+    walletAddress: string,
+    tokenAddress: string,
+  ): Promise<number> {
     try {
       this.tronWeb.setAddress(walletAddress); // Set owner address for triggering constant call
       const contract = await this.tronWeb.contract().at(tokenAddress);
-      const balance = await contract.balanceOf(walletAddress).call({ from: walletAddress });
+      const balance = await contract
+        .balanceOf(walletAddress)
+        .call({ from: walletAddress });
       return Number(balance) / 1e6;
     } catch (err) {
       // console.error(
@@ -1490,10 +1575,16 @@ export class Web3Service {
   }
 
   // Get withdrawal history from blockchain for master wallet
-  private async getMoralisTransactionHistory(address: string, chain: string, limit: number = 50): Promise<any[]> {
+  private async getMoralisTransactionHistory(
+    address: string,
+    chain: string,
+    limit: number = 50,
+  ): Promise<any[]> {
     try {
       if (!appConfig.MORALIS_API_KEY) {
-        console.warn("Moralis API key not configured, falling back to default method");
+        console.warn(
+          "Moralis API key not configured, falling back to default method",
+        );
         return [];
       }
 
@@ -1503,7 +1594,7 @@ export class Web3Service {
           headers: {
             "X-API-Key": appConfig.MORALIS_API_KEY,
           },
-        }
+        },
       );
 
       if (!response.ok) {
@@ -1515,36 +1606,40 @@ export class Web3Service {
 
       // Map chain to native token symbol
       const chainTokenMap: Record<string, string> = {
-        'base': 'ETH',
-        'eth': 'ETH',
-        'bsc': 'BNB',
-        'polygon': 'MATIC',
+        base: "ETH",
+        eth: "ETH",
+        bsc: "BNB",
+        polygon: "MATIC",
       };
 
       // Convert Wei values to Ether and filter for outgoing transactions
       return transactions
-        .filter(tx => tx.from_address?.toLowerCase() === address.toLowerCase())
-        .map(tx => {
+        .filter(
+          (tx) => tx.from_address?.toLowerCase() === address.toLowerCase(),
+        )
+        .map((tx) => {
           const amountInEther = tx.value ? Number(tx.value) / 1e18 : 0;
-          const formattedAmount = amountInEther.toFixed(18).replace(/\.?0+$/, ''); // Remove trailing zeros
-          
+          const formattedAmount = amountInEther
+            .toFixed(18)
+            .replace(/\.?0+$/, ""); // Remove trailing zeros
+
           // Determine status from receipt_status
           const status = tx.receipt_status === "1" ? "success" : "failed";
-          
+
           // Convert block_timestamp to timestamp number if it's a string
-          const timestamp = tx.block_timestamp 
-            ? new Date(tx.block_timestamp).getTime() 
-            : (tx.timestamp || 0);
-          
+          const timestamp = tx.block_timestamp
+            ? new Date(tx.block_timestamp).getTime()
+            : tx.timestamp || 0;
+
           return {
             hash: tx.hash,
             block: tx.block_number,
             timestamp: timestamp,
             fees: tx.transaction_fee || tx.gas_price,
             amount: formattedAmount,
-            token_symbol: chainTokenMap[chain] || 'ETH',
+            token_symbol: chainTokenMap[chain] || "ETH",
             status: status,
-            type: 'OUT',
+            type: "OUT",
             from_address: tx.from_address,
             to_address: tx.to_address,
           };
@@ -1587,20 +1682,32 @@ export class Web3Service {
       const masterWalletETH = this.hd.getMasterWallet(this.providerETH);
       const masterWallet = this.hd.getMasterWallet(this.provider);
       const masterWalletPoly = this.hd.getMasterWallet(this.providerPoly);
-      const masterWalletSOL = this.hdSol.getMasterKeypair().publicKey.toBase58();
+      const masterWalletSOL = this.hdSol
+        .getMasterKeypair()
+        .publicKey.toBase58();
       const masterTRX = this.hdTRX.getMasterWallet().address;
 
       // BASE transactions (using Moralis)
       try {
         if (appConfig.MORALIS_API_KEY) {
-          const baseTxs = await this.getMoralisTransactionHistory(masterWalletBase.address, "base", 50);
-          history.push(...baseTxs.map(tx => ({
-            ...tx,
-            network: "BASE",
-            address: masterWalletBase.address,
-          })));
+          const baseTxs = await this.getMoralisTransactionHistory(
+            masterWalletBase.address,
+            "base",
+            50,
+          );
+          history.push(
+            ...baseTxs.map((tx) => ({
+              ...tx,
+              network: "BASE",
+              address: masterWalletBase.address,
+            })),
+          );
         } else {
-          const baseTxs = await this.hd.getChildTransactionHistory(0, "BASE", 50);
+          const baseTxs = await this.hd.getChildTransactionHistory(
+            0,
+            "BASE",
+            50,
+          );
           history.push(...baseTxs);
         }
       } catch (e) {
@@ -1610,14 +1717,24 @@ export class Web3Service {
       // ETH transactions (using Moralis)
       try {
         if (appConfig.MORALIS_API_KEY) {
-          const ethTxs = await this.getMoralisTransactionHistory(masterWalletETH.address, "eth", 50);
-          history.push(...ethTxs.map(tx => ({
-            ...tx,
-            network: "ETHEREUM",
-            address: masterWalletETH.address,
-          })));
+          const ethTxs = await this.getMoralisTransactionHistory(
+            masterWalletETH.address,
+            "eth",
+            50,
+          );
+          history.push(
+            ...ethTxs.map((tx) => ({
+              ...tx,
+              network: "ETHEREUM",
+              address: masterWalletETH.address,
+            })),
+          );
         } else {
-          const ethTxs = await this.hd.getChildTransactionHistory(0, "ETHEREUM", 50);
+          const ethTxs = await this.hd.getChildTransactionHistory(
+            0,
+            "ETHEREUM",
+            50,
+          );
           history.push(...ethTxs);
         }
       } catch (e) {
@@ -1627,14 +1744,24 @@ export class Web3Service {
       // BNB transactions (using Moralis)
       try {
         if (appConfig.MORALIS_API_KEY) {
-          const bnbTxs = await this.getMoralisTransactionHistory(masterWallet.address, "bsc", 50);
-          history.push(...bnbTxs.map(tx => ({
-            ...tx,
-            network: "BINANCE",
-            address: masterWallet.address,
-          })));
+          const bnbTxs = await this.getMoralisTransactionHistory(
+            masterWallet.address,
+            "bsc",
+            50,
+          );
+          history.push(
+            ...bnbTxs.map((tx) => ({
+              ...tx,
+              network: "BINANCE",
+              address: masterWallet.address,
+            })),
+          );
         } else {
-          const bnbTxs = await this.hd.getChildTransactionHistory(0, "BINANCE", 50);
+          const bnbTxs = await this.hd.getChildTransactionHistory(
+            0,
+            "BINANCE",
+            50,
+          );
           history.push(...bnbTxs);
         }
       } catch (e) {
@@ -1644,14 +1771,24 @@ export class Web3Service {
       // POLYGON transactions (using Moralis)
       try {
         if (appConfig.MORALIS_API_KEY) {
-          const polyTxs = await this.getMoralisTransactionHistory(masterWalletPoly.address, "polygon", 50);
-          history.push(...polyTxs.map(tx => ({
-            ...tx,
-            network: "POLYGON",
-            address: masterWalletPoly.address,
-          })));
+          const polyTxs = await this.getMoralisTransactionHistory(
+            masterWalletPoly.address,
+            "polygon",
+            50,
+          );
+          history.push(
+            ...polyTxs.map((tx) => ({
+              ...tx,
+              network: "POLYGON",
+              address: masterWalletPoly.address,
+            })),
+          );
         } else {
-          const polyTxs = await this.hd.getChildTransactionHistory(0, "POLYGON", 50);
+          const polyTxs = await this.hd.getChildTransactionHistory(
+            0,
+            "POLYGON",
+            50,
+          );
           history.push(...polyTxs);
         }
       } catch (e) {
@@ -1661,23 +1798,31 @@ export class Web3Service {
       // SOL transactions
       try {
         const solTxs = await this.hdSol.getChildTransactionHistory(0, 50);
-        history.push(...solTxs.map(tx => ({
-          ...tx,
-          network: "SOLANA",
-          address: masterWalletSOL,
-        })));
+        history.push(
+          ...solTxs.map((tx) => ({
+            ...tx,
+            network: "SOLANA",
+            address: masterWalletSOL,
+          })),
+        );
       } catch (e) {
         console.error("Failed to fetch SOL history:", e.message);
       }
 
       // TRON transactions
       try {
-        const tronTxs = await this.hdTRX.getChildTRC20History(0, ERC20_TOKENS["TRON_USDT"], 50);
-        history.push(...tronTxs.map(tx => ({
-          ...tx,
-          network: "TRON",
-          address: masterTRX,
-        })));
+        const tronTxs = await this.hdTRX.getChildTRC20History(
+          0,
+          ERC20_TOKENS["TRON_USDT"],
+          50,
+        );
+        history.push(
+          ...tronTxs.map((tx) => ({
+            ...tx,
+            network: "TRON",
+            address: masterTRX,
+          })),
+        );
       } catch (e) {
         console.error("Failed to fetch TRON history:", e.message);
       }
@@ -1685,21 +1830,29 @@ export class Web3Service {
       // BTC transactions
       try {
         const btcTxs = await this.hdBTC.getChildTransactionHistory(0, 50);
-        history.push(...btcTxs.map(tx => ({
-          ...tx,
-          network: "BITCOIN",
-        })));
+        history.push(
+          ...btcTxs.map((tx) => ({
+            ...tx,
+            network: "BITCOIN",
+          })),
+        );
       } catch (e) {
         console.error("Failed to fetch BTC history:", e.message);
       }
 
       // ADA transactions
       try {
-        const adaTxs = await this.hdADA.getChildTransactionHistoryOutgoing(0, appConfig.BLOCK_API_KEY ?? "", true);
-        history.push(...adaTxs.map(tx => ({
-          ...tx,
-          network: "CARDANO",
-        })));
+        const adaTxs = await this.hdADA.getChildTransactionHistoryOutgoing(
+          0,
+          appConfig.BLOCK_API_KEY ?? "",
+          true,
+        );
+        history.push(
+          ...adaTxs.map((tx) => ({
+            ...tx,
+            network: "CARDANO",
+          })),
+        );
       } catch (e) {
         console.error("Failed to fetch ADA history:", e.message);
       }
@@ -1707,11 +1860,13 @@ export class Web3Service {
       // XRP transactions
       try {
         const xrpTxs = await this.hdXrp.getHistoryByUserId(0, 50);
-       console.log(xrpTxs, "xrp")
-        history.push(...xrpTxs.map(tx => ({
-          ...tx,
-          network: "RIPPLE",
-        })));
+        console.log(xrpTxs, "xrp");
+        history.push(
+          ...xrpTxs.map((tx) => ({
+            ...tx,
+            network: "RIPPLE",
+          })),
+        );
       } catch (e) {
         console.error("Failed to fetch XRP history:", e.message);
       }
@@ -1719,10 +1874,12 @@ export class Web3Service {
       // DOGE transactions
       try {
         const dogeTxs = await this.hdDoge.getChildTransactionHistory(0, 50);
-        history.push(...dogeTxs.map(tx => ({
-          ...tx,
-          network: "DOGE",
-        })));
+        history.push(
+          ...dogeTxs.map((tx) => ({
+            ...tx,
+            network: "DOGE",
+          })),
+        );
       } catch (e) {
         console.error("Failed to fetch DOGE history:", e.message);
       }
@@ -1735,58 +1892,60 @@ export class Web3Service {
       });
 
       // Filter out transactions older than March 16, 2026
-      const cutoffDate = new Date('2026-03-16T00:00:00.000Z').getTime();
-      const filteredHistory = sortedHistory.filter(tx => {
-        const txTime = tx.timestamp || (tx.date ? new Date(tx.date).getTime() : 0);
+      const cutoffDate = new Date("2026-03-16T00:00:00.000Z").getTime();
+      const filteredHistory = sortedHistory.filter((tx) => {
+        const txTime =
+          tx.timestamp || (tx.date ? new Date(tx.date).getTime() : 0);
         return txTime >= cutoffDate;
       });
 
       // Filter out refuel/dust transactions (very small amounts)
       const dustThresholds: Record<string, number> = {
-        'BTC': 0.0001,      // 0.0001 BTC
-        'ETH': 0.001,       // 0.001 ETH
-        'BNB': 0.001,       // 0.001 BNB
-        'MATIC': 0.1,       // 0.1 MATIC
-        'SOL': 0.01,        // 0.01 SOL
-        'ADA': 1,           // 1 ADA
-        'XRP': 1,           // 1 XRP
-        'DOGE': 10,         // 10 DOGE
-        'TRX': 10,          // 10 TRX
-        'USDT': 0.1,        // 0.1 USDT
-        'USDC': 0.1,        // 0.1 USDC
+        BTC: 0.0001, // 0.0001 BTC
+        ETH: 0.001, // 0.001 ETH
+        BNB: 0.001, // 0.001 BNB
+        MATIC: 0.1, // 0.1 MATIC
+        SOL: 0.01, // 0.01 SOL
+        ADA: 1, // 1 ADA
+        XRP: 1, // 1 XRP
+        DOGE: 10, // 10 DOGE
+        TRX: 10, // 10 TRX
+        USDT: 0.1, // 0.1 USDT
+        USDC: 0.1, // 0.1 USDC
       };
 
-      const filteredNoDust = filteredHistory.filter(tx => {
+      const filteredNoDust = filteredHistory.filter((tx) => {
         const tokenSymbol = tx.token_symbol || tx.symbol;
-        const amount = typeof tx.amount === 'string' ? parseFloat(tx.amount) : tx.amount;
+        const amount =
+          typeof tx.amount === "string" ? parseFloat(tx.amount) : tx.amount;
         const threshold = dustThresholds[tokenSymbol] || 0.0001;
-        
+
         // Keep transactions above dust threshold
         return amount >= threshold;
       });
 
       // Coin name mapping
       const coinNameMap: Record<string, string> = {
-        'BTC': 'Bitcoin',
-        'ETH': 'Ethereum',
-        'BNB': 'Binance Coin',
-        'USDT': 'Tether',
-        'USDC': 'USD Coin',
-        'SOL': 'Solana',
-        'ADA': 'Cardano',
-        'XRP': 'Ripple',
-        'DOGE': 'Dogecoin',
-        'TRX': 'Tron',
-        'MATIC': 'Polygon',
-        'RIPPLE': 'Ripple',
+        BTC: "Bitcoin",
+        ETH: "Ethereum",
+        BNB: "Binance Coin",
+        USDT: "Tether",
+        USDC: "USD Coin",
+        SOL: "Solana",
+        ADA: "Cardano",
+        XRP: "Ripple",
+        DOGE: "Dogecoin",
+        TRX: "Tron",
+        MATIC: "Polygon",
+        RIPPLE: "Ripple",
       };
 
       // Standardize format
-      const standardizedHistory = filteredNoDust.map(tx => {
+      const standardizedHistory = filteredNoDust.map((tx) => {
         // Ensure amount is a string to avoid scientific notation
         let amount = tx.amount;
-        if (typeof amount === 'number') {
-          amount = amount.toFixed(18).replace(/\.?0+$/, '');
+        if (typeof amount === "number") {
+          amount = amount.toFixed(18).replace(/\.?0+$/, "");
         }
 
         const tokenSymbol = tx.token_symbol || tx.symbol;
@@ -1815,7 +1974,7 @@ export class Web3Service {
       };
     } catch (err: any) {
       throw new BadRequestException(
-        err.message || "Failed to fetch withdrawal history from blockchain"
+        err.message || "Failed to fetch withdrawal history from blockchain",
       );
     }
   }

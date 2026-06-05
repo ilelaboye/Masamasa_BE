@@ -4,7 +4,7 @@ import { Cron, Interval } from "@nestjs/schedule";
 
 @Injectable()
 export class CronService {
-  constructor(private readonly cronJob: CronJob) { }
+  constructor(private readonly cronJob: CronJob) {}
 
   // @Interval(50000)
   // @Interval(10000)
@@ -12,10 +12,10 @@ export class CronService {
   //   this.cronJob.processPaymentJob();
   // }
 
-  // @Interval(6000)
-  // async verifyTransactions() {
-  //   this.cronJob.verifyTransactionJob();
-  // }
+  @Interval(30000)
+  async verifyTransactions() {
+    this.cronJob.verifyTransactionJob();
+  }
 
   @Interval(6000)
   async verifyProcessingVtpassTransactions() {

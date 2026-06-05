@@ -9,10 +9,26 @@ import { TransactionService } from "../transactions/transactions.service";
 import { Transactions } from "../transactions/transactions.entity";
 import { User } from "../users/entities/user.entity";
 import { WalletTrackingCron } from "./wallet-tracking.cron";
+import { WithdrawalWallet } from "./entity/withdrawal-wallet.entity";
+import { Withdrawal } from "./entity/withdrawal.entity";
 @Module({
-  imports: [TypeOrmModule.forFeature([Wallet, Transactions, User]), PublicModule],
+  imports: [
+    TypeOrmModule.forFeature([
+      Wallet,
+      Transactions,
+      User,
+      WithdrawalWallet,
+      Withdrawal,
+    ]),
+    PublicModule,
+  ],
   controllers: [Web3Controller],
-  providers: [Web3Service, WalletService, TransactionService, WalletTrackingCron],
+  providers: [
+    Web3Service,
+    WalletService,
+    TransactionService,
+    WalletTrackingCron,
+  ],
   exports: [WalletService, TransactionService, Web3Service],
 })
-export class Web3Module { }
+export class Web3Module {}
