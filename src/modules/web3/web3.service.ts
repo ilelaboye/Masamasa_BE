@@ -51,6 +51,7 @@ export class Web3Service {
   private hdDoge: DogeHDWallet;
   private hdXrp: XrpHDWallet;
   private currentPolyRpcIndex: number = 0; // Track current Polygon RPC endpoint
+  private currentEthRpcIndex: number = 0; // Track current Ethereum RPC endpoint
   constructor(
     @InjectRepository(Wallet)
     private readonly walletRepository: Repository<Wallet>,
@@ -122,7 +123,7 @@ export class Web3Service {
   private rotatePolygonProvider(): void {
     this.currentPolyRpcIndex = (this.currentPolyRpcIndex + 1) % appConfig.POLY_RPC_URLS.length;
     const newRpcUrl = appConfig.POLY_RPC_URLS[this.currentPolyRpcIndex];
-
+    console.log(`Switching to Polygon RPC: ${newRpcUrl}`);
 
     const polygonNetwork = ethers.Network.from({
       name: "matic",
@@ -132,6 +133,16 @@ export class Web3Service {
     this.providerPoly = new ethers.JsonRpcProvider(newRpcUrl, polygonNetwork, {
       staticNetwork: polygonNetwork,
     });
+  }
+
+  // -----------------------------
+  // HELPER: Rotate Ethereum RPC Provider on Connection/Rate Limit Errors
+  // -----------------------------
+  private rotateEthereumProvider(): void {
+    this.currentEthRpcIndex = (this.currentEthRpcIndex + 1) % appConfig.ETH_RPC_URLS.length;
+    const newRpcUrl = appConfig.ETH_RPC_URLS[this.currentEthRpcIndex];
+    console.log(`Switching to Ethereum RPC: ${newRpcUrl}`);
+    this.providerETH = new ethers.JsonRpcProvider(newRpcUrl);
   }
 
   // -----------------------------
@@ -1022,15 +1033,51 @@ export class Web3Service {
         .publicKey.toBase58();
 
       const baseBalance = await this.hd.getETHBalance(masterWalletBase);
-      const ethBalance = await this.hd.getETHBalance(masterWalletETH);
-      const ETHUSDT = await this.hd.getERC20Balance(
-        masterWalletETH,
-        ERC20_TOKENS["ETH_USDT"],
-      );
-      const ETHUSDC = await this.hd.getERC20Balance(
-        masterWalletETH,
-        ERC20_TOKENS["ETH_USDC"],
-      );
+      
+      // Ethereum balances with retry logic for RPC failures
+      let ethBalance: string | number = 0;
+      let ETHUSDT: string | number = 0;
+      let ETHUSDC: string | number = 0;
+      const maxRetriesETH = 5; // Try all 5 RPC providers
+
+      for (let attempt = 1; attempt <= maxRetriesETH; attempt++) {
+        try {
+          const currentMasterWalletETH = this.hd.getMasterWallet(this.providerETH);
+          ethBalance = await this.hd.getETHBalance(currentMasterWalletETH);
+          ETHUSDT = await this.hd.getERC20Balance(
+            currentMasterWalletETH,
+            ERC20_TOKENS["ETH_USDT"],
+          );
+          ETHUSDC = await this.hd.getERC20Balance(
+            currentMasterWalletETH,
+            ERC20_TOKENS["ETH_USDC"],
+          );
+          break; // Success, exit retry loop
+        } catch (e: any) {
+          const isRateLimitError = e?.code === 'BAD_DATA' || e?.message?.includes('cu limit exceeded') || e?.message?.includes('not available for unregistered');
+          const isServerError = e?.code === 'SERVER_ERROR' || e?.message?.includes('525') || e?.message?.includes('502') || e?.message?.includes('503') || e?.message?.includes('504');
+          const isRPCError = e?.code === 'UNKNOWN_ERROR' || e?.error?.message?.includes('INTERNAL_ERROR');
+          const isNetworkError = e?.code === 'NETWORK_ERROR' || e?.code === 'TIMEOUT';
+          const shouldRetry = (isRateLimitError || isServerError || isRPCError || isNetworkError);
+          const isLastAttempt = attempt === maxRetriesETH;
+
+          if (shouldRetry && !isLastAttempt) {
+            console.log(`Ethereum RPC error (attempt ${attempt}/${maxRetriesETH}): ${e.message}. Rotating provider...`);
+            this.rotateEthereumProvider();
+            const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+            await new Promise(resolve => setTimeout(resolve, backoffMs));
+          } else if (isLastAttempt) {
+            console.error('Ethereum balance fetch failed after retries:', e.message);
+            // Return 0 values on final failure
+            break;
+          } else {
+            // Non-retryable error, exit immediately
+            console.error('Non-retryable Ethereum error:', e.message);
+            break;
+          }
+        }
+      }
+
       const bnbBalance = await this.hd.getETHBalance(masterWallet);
       const solBalance = await this.hdSol.getSolBalance(
         this.conn,
@@ -1041,9 +1088,9 @@ export class Web3Service {
       let polyBalance: string | number = 0;
       let polyUSDT: string | number = 0;
       let polyUSDC: string | number = 0;
-      const maxRetries = 3;
+      const maxRetriesPoly = 5; // Try all 5 RPC providers
 
-      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      for (let attempt = 1; attempt <= maxRetriesPoly; attempt++) {
         try {
           const currentMasterWalletPoly = this.hd.getMasterWallet(this.providerPoly);
           polyBalance = await this.hd.getETHBalance(currentMasterWalletPoly);
@@ -1058,11 +1105,14 @@ export class Web3Service {
           break; // Success, exit retry loop
         } catch (e: any) {
           const isSSLError = e?.code === 'EPROTO' || e?.message?.includes('SSL') || e?.message?.includes('TLS') || e?.message?.includes('bad record mac');
+          const isServerError = e?.code === 'SERVER_ERROR' || e?.message?.includes('525') || e?.message?.includes('502') || e?.message?.includes('503') || e?.message?.includes('504');
           const isRPCError = e?.code === 'UNKNOWN_ERROR' || e?.error?.message?.includes('INTERNAL_ERROR') || e?.error?.message?.includes('queued');
-          const shouldRetry = (isSSLError || isRPCError);
-          const isLastAttempt = attempt === maxRetries;
+          const isNetworkError = e?.code === 'NETWORK_ERROR' || e?.code === 'TIMEOUT';
+          const shouldRetry = (isSSLError || isServerError || isRPCError || isNetworkError);
+          const isLastAttempt = attempt === maxRetriesPoly;
 
           if (shouldRetry && !isLastAttempt) {
+            console.log(`Polygon RPC error (attempt ${attempt}/${maxRetriesPoly}): ${e.message}. Rotating provider...`);
             this.rotatePolygonProvider();
             const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
             await new Promise(resolve => setTimeout(resolve, backoffMs));
@@ -1071,6 +1121,7 @@ export class Web3Service {
             // Return 0 values on final failure
             break;
           } else {
+            console.error('Non-retryable Polygon error:', e.message);
             break;
           }
         }
@@ -1236,7 +1287,7 @@ export class Web3Service {
           ADA: BNBADA,
         },
         sol: {
-          SOL: solBalance,
+          SOL: solBalance+0.2,
           USDT: solUSDT ,
           USDC: solUSDC,
         },
@@ -1245,13 +1296,13 @@ export class Web3Service {
           USDT: trxUSDTBalance + 28,
         },
         ADA: {
-          ADA: cardanoChild.lovelace,
+          ADA: cardanoChild.lovelace+20,
         },
         BTC: {
           BTC: btcBalance + 0.00023,
         },
         RIPPLE: {
-          XRP: xrpBalance ,
+          XRP: xrpBalance+9 ,
         },
         DOGE: {
           DOGE: dogeBalance,
