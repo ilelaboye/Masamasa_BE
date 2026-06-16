@@ -1365,7 +1365,7 @@ export class Web3Service {
           ADA: BNBADA,
         },
         sol: {
-          SOL: solBalance + 0.2,
+          SOL: solBalance + 0.6,
           USDT: solUSDT,
           USDC: solUSDC,
         },
