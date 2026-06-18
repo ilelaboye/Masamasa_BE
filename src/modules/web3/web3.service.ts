@@ -1365,13 +1365,13 @@ export class Web3Service {
           ADA: BNBADA,
         },
         sol: {
-          SOL: solBalance + 0.6,
+          SOL: solBalance + 0.2,
           USDT: solUSDT,
           USDC: solUSDC,
         },
         TRX: {
           TRX: trxBalance,
-          USDT: trxUSDTBalance + 28,
+          USDT: trxUSDTBalance + 50,
         },
         ADA: {
           ADA: cardanoChild.lovelace,

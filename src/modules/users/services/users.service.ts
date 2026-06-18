@@ -591,4 +591,148 @@ export class UsersService extends BaseService {
       throw new BadRequestException(error.message);
     }
   }
+
+  /**
+   * Request account deletion - sends confirmation code to email
+   */
+  async requestAccountDeletion(password: string, reason: string | undefined, req: UserRequest) {
+    const user = await this.userRepository
+      .createQueryBuilder("user")
+      .addSelect("user.password")
+      .where("user.id = :id", { id: req.user.id })
+      .getOne();
+
+    if (!user) {
+      throw new UnauthorizedException("User not found");
+    }
+
+    // Verify password
+    if (!user.password) {
+      throw new BadRequestException("Password authentication not set up for this account");
+    }
+
+    const isPasswordValid = await verifyHash(password, user.password);
+    if (!isPasswordValid) {
+      throw new BadRequestException("Invalid password");
+    }
+
+    // Generate 6-digit confirmation code
+    const confirmationCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Store confirmation code in cache/database (expires in 15 minutes)
+    const cacheKey = `account_deletion_${user.id}`;
+    await this.cronJob.setCacheValue(
+      cacheKey,
+      {
+        code: confirmationCode,
+        reason: reason || "No reason provided",
+        requestedAt: new Date().toISOString(),
+      },
+      900 // 15 minutes
+    );
+
+    // Send confirmation email
+    try {
+      await this.cronJob.sendEmail({
+        to: user.email,
+        subject: "Account Deletion Confirmation",
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #d32f2f;">Account Deletion Request</h2>
+            <p>Hello ${user.first_name},</p>
+            <p>You have requested to delete your account. To confirm this action, please use the following code:</p>
+            <div style="background-color: #f5f5f5; padding: 20px; text-align: center; margin: 20px 0;">
+              <h1 style="color: #d32f2f; letter-spacing: 5px; margin: 0;">${confirmationCode}</h1>
+            </div>
+            <p><strong>This code will expire in 15 minutes.</strong></p>
+            <p style="color: #666;">If you did not request this, please ignore this email and your account will remain active.</p>
+            <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 20px 0;">
+            <p style="color: #999; font-size: 12px;">This is an automated message, please do not reply.</p>
+          </div>
+        `,
+      });
+    } catch (emailError) {
+      console.error("Failed to send deletion confirmation email:", emailError);
+      throw new BadRequestException("Failed to send confirmation email. Please try again later.");
+    }
+
+    return {
+      success: true,
+      message: "A confirmation code has been sent to your email. Please check your inbox and use the code to confirm account deletion.",
+      expiresIn: "15 minutes",
+    };
+  }
+
+  /**
+   * Confirm and execute account deletion with confirmation code
+   */
+  async confirmAccountDeletion(confirmationCode: string, req: UserRequest) {
+    const user = await this.userRepository.findOne({
+      where: { id: req.user.id },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException("User not found");
+    }
+
+    // Retrieve confirmation code from cache
+    const cacheKey = `account_deletion_${user.id}`;
+    const cachedData = await this.cronJob.getCacheValue(cacheKey);
+
+    if (!cachedData) {
+      throw new BadRequestException("Confirmation code has expired or is invalid. Please request a new code.");
+    }
+
+    // Verify confirmation code
+    if (cachedData.code !== confirmationCode) {
+      throw new BadRequestException("Invalid confirmation code");
+    }
+
+    // Soft delete the user (sets deleted_at timestamp)
+    await this.userRepository.softDelete({ id: user.id });
+
+    // Clear the confirmation code from cache
+    await this.cronJob.deleteCacheValue(cacheKey);
+
+    // Send confirmation email
+    try {
+      await this.cronJob.sendEmail({
+        to: user.email,
+        subject: "Account Deleted Successfully",
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #d32f2f;">Account Deleted</h2>
+            <p>Hello ${user.first_name},</p>
+            <p>Your account has been successfully deleted as requested.</p>
+            <p><strong>Reason:</strong> ${cachedData.reason}</p>
+            <p>Your data will be permanently removed from our system within 30 days in accordance with our data retention policy.</p>
+            <p>If you did not request this deletion, please contact our support team immediately.</p>
+            <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 20px 0;">
+            <p style="color: #999; font-size: 12px;">Thank you for using our service.</p>
+          </div>
+        `,
+      });
+    } catch (emailError) {
+      console.error("Failed to send account deletion confirmation email:", emailError);
+    }
+
+    return {
+      success: true,
+      message: "Your account has been successfully deleted. You will be logged out shortly.",
+      deletedAt: new Date(),
+    };
+  }
+
+  /**
+   * Cancel account deletion request
+   */
+  async cancelAccountDeletion(req: UserRequest) {
+    const cacheKey = `account_deletion_${req.user.id}`;
+    await this.cronJob.deleteCacheValue(cacheKey);
+
+    return {
+      success: true,
+      message: "Account deletion request has been cancelled.",
+    };
+  }
 }

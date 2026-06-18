@@ -148,4 +148,38 @@ export class UsersController {
       message: "You have been logged out of this session",
     });
   }
+
+  // ====================================
+  // ACCOUNT DELETION ENDPOINTS
+  // ====================================
+
+  @Post("request-account-deletion")
+  @UsePipes(new JoiValidationPipe(require("../validations").DeleteAccountValidation))
+  async requestAccountDeletion(
+    @Body() body: { password: string; reason?: string },
+    @Req() req: UserRequest,
+  ) {
+    return await this.usersService.requestAccountDeletion(
+      body.password,
+      body.reason,
+      req,
+    );
+  }
+
+  @Post("confirm-account-deletion")
+  @UsePipes(new JoiValidationPipe(require("../validations").ConfirmDeleteAccountValidation))
+  async confirmAccountDeletion(
+    @Body() body: { confirmationCode: string },
+    @Req() req: UserRequest,
+  ) {
+    return await this.usersService.confirmAccountDeletion(
+      body.confirmationCode,
+      req,
+    );
+  }
+
+  @Post("cancel-account-deletion")
+  async cancelAccountDeletion(@Req() req: UserRequest) {
+    return await this.usersService.cancelAccountDeletion(req);
+  }
 }
