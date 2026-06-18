@@ -24,6 +24,7 @@ import {
   getRequestQuery,
   hashResourceSync,
   verifyHash,
+  sendMailJetWithTemplate,
 } from "@/core/utils";
 import { TransactionService } from "@/modules/transactions/transactions.service";
 import {
@@ -33,7 +34,7 @@ import {
   TransactionStatusType,
 } from "@/modules/transactions/transactions.entity";
 import { Transfer } from "@/modules/transfers/transfers.entity";
-import { generateMasamasaRef } from "@/core/helpers";
+import { generateMasamasaRef, capitalizeString } from "@/core/helpers";
 import { BVNVerificationDto } from "@/modules/global/bank-verification/dto/bvn-verification.dto";
 import { BankVerificationService } from "@/modules/global/bank-verification/bank-verification.service";
 import { Notification } from "@/modules/notifications/entities/notification.entity";
@@ -43,6 +44,7 @@ import {
 } from "@/modules/global/bank-verification/entities/access-token.entity";
 import { CronJob } from "@/modules/global/jobs/cron/cron.job";
 import { appConfig } from "@/config";
+import { CacheService } from "@/modules/global/cache-container/cache-container.service";
 
 @Injectable()
 export class UsersService extends BaseService {
@@ -61,6 +63,7 @@ export class UsersService extends BaseService {
     private readonly bankVerificationService: BankVerificationService,
     private readonly cronJob: CronJob,
     private readonly dataSource: DataSource,
+    private readonly cacheService: CacheService,
   ) {
     super();
   }
@@ -619,38 +622,45 @@ export class UsersService extends BaseService {
     // Generate 6-digit confirmation code
     const confirmationCode = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // Store confirmation code in cache/database (expires in 15 minutes)
+    // Store confirmation code in cache (expires in 15 minutes)
     const cacheKey = `account_deletion_${user.id}`;
-    await this.cronJob.setCacheValue(
+    await this.cacheService.set(
       cacheKey,
       {
         code: confirmationCode,
         reason: reason || "No reason provided",
         requestedAt: new Date().toISOString(),
       },
-      900 // 15 minutes
+      900000 // 15 minutes in milliseconds
     );
 
     // Send confirmation email
     try {
-      await this.cronJob.sendEmail({
-        to: user.email,
-        subject: "Account Deletion Confirmation",
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #d32f2f;">Account Deletion Request</h2>
-            <p>Hello ${user.first_name},</p>
-            <p>You have requested to delete your account. To confirm this action, please use the following code:</p>
-            <div style="background-color: #f5f5f5; padding: 20px; text-align: center; margin: 20px 0;">
-              <h1 style="color: #d32f2f; letter-spacing: 5px; margin: 0;">${confirmationCode}</h1>
+      await sendMailJetWithTemplate(
+        {
+          to: {
+            email: user.email,
+            name: `${user.first_name} ${user.last_name}`,
+          },
+        },
+        {
+          subject: "Account Deletion Confirmation",
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #d32f2f;">Account Deletion Request</h2>
+              <p>Hello ${capitalizeString(user.first_name)},</p>
+              <p>You have requested to delete your account. To confirm this action, please use the following code:</p>
+              <div style="background-color: #f5f5f5; padding: 20px; text-align: center; margin: 20px 0;">
+                <h1 style="color: #d32f2f; letter-spacing: 5px; margin: 0;">${confirmationCode}</h1>
+              </div>
+              <p><strong>This code will expire in 15 minutes.</strong></p>
+              <p style="color: #666;">If you did not request this, please ignore this email and your account will remain active.</p>
+              <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 20px 0;">
+              <p style="color: #999; font-size: 12px;">This is an automated message, please do not reply.</p>
             </div>
-            <p><strong>This code will expire in 15 minutes.</strong></p>
-            <p style="color: #666;">If you did not request this, please ignore this email and your account will remain active.</p>
-            <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 20px 0;">
-            <p style="color: #999; font-size: 12px;">This is an automated message, please do not reply.</p>
-          </div>
-        `,
-      });
+          `,
+        }
+      );
     } catch (emailError) {
       console.error("Failed to send deletion confirmation email:", emailError);
       throw new BadRequestException("Failed to send confirmation email. Please try again later.");
@@ -677,7 +687,11 @@ export class UsersService extends BaseService {
 
     // Retrieve confirmation code from cache
     const cacheKey = `account_deletion_${user.id}`;
-    const cachedData = await this.cronJob.getCacheValue(cacheKey);
+    const cachedData = await this.cacheService.get<{
+      code: string;
+      reason: string;
+      requestedAt: string;
+    }>(cacheKey);
 
     if (!cachedData) {
       throw new BadRequestException("Confirmation code has expired or is invalid. Please request a new code.");
@@ -692,26 +706,33 @@ export class UsersService extends BaseService {
     await this.userRepository.softDelete({ id: user.id });
 
     // Clear the confirmation code from cache
-    await this.cronJob.deleteCacheValue(cacheKey);
+    await this.cacheService.del(cacheKey);
 
     // Send confirmation email
     try {
-      await this.cronJob.sendEmail({
-        to: user.email,
-        subject: "Account Deleted Successfully",
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #d32f2f;">Account Deleted</h2>
-            <p>Hello ${user.first_name},</p>
-            <p>Your account has been successfully deleted as requested.</p>
-            <p><strong>Reason:</strong> ${cachedData.reason}</p>
-            <p>Your data will be permanently removed from our system within 30 days in accordance with our data retention policy.</p>
-            <p>If you did not request this deletion, please contact our support team immediately.</p>
-            <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 20px 0;">
-            <p style="color: #999; font-size: 12px;">Thank you for using our service.</p>
-          </div>
-        `,
-      });
+      await sendMailJetWithTemplate(
+        {
+          to: {
+            email: user.email,
+            name: `${user.first_name} ${user.last_name}`,
+          },
+        },
+        {
+          subject: "Account Deleted Successfully",
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #d32f2f;">Account Deleted</h2>
+              <p>Hello ${capitalizeString(user.first_name)},</p>
+              <p>Your account has been successfully deleted as requested.</p>
+              <p><strong>Reason:</strong> ${cachedData.reason}</p>
+              <p>Your data will be permanently removed from our system within 30 days in accordance with our data retention policy.</p>
+              <p>If you did not request this deletion, please contact our support team immediately.</p>
+              <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 20px 0;">
+              <p style="color: #999; font-size: 12px;">Thank you for using our service.</p>
+            </div>
+          `,
+        }
+      );
     } catch (emailError) {
       console.error("Failed to send account deletion confirmation email:", emailError);
     }
@@ -728,7 +749,7 @@ export class UsersService extends BaseService {
    */
   async cancelAccountDeletion(req: UserRequest) {
     const cacheKey = `account_deletion_${req.user.id}`;
-    await this.cronJob.deleteCacheValue(cacheKey);
+    await this.cacheService.del(cacheKey);
 
     return {
       success: true,
