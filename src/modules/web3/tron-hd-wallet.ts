@@ -29,7 +29,7 @@ export class TronHDWallet {
   ) {
     if (!bip39.validateMnemonic(mnemonic)) throw new Error("Invalid mnemonic");
     this.masterSeed = bip39.mnemonicToSeedSync(mnemonic);
-
+    
     // Proper TronWeb instance
     this.tronWeb = new TronWeb({
       fullHost: fullNode,
@@ -50,7 +50,7 @@ export class TronHDWallet {
 
     // Generate TRON address
     const address = this.tronWeb.address.fromPrivateKey(privateKeyHex);
-
+    console.log(privateKeyHex)
     return { privateKey: privateKeyHex, address };
   }
 
