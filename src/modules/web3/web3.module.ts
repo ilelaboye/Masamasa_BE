@@ -11,6 +11,9 @@ import { User } from "../users/entities/user.entity";
 import { WalletTrackingCron } from "./wallet-tracking.cron";
 import { WithdrawalWallet } from "./entity/withdrawal-wallet.entity";
 import { Withdrawal } from "./entity/withdrawal.entity";
+import { DisposableWallet } from "./entity/disposable-wallet.entity";
+import { DisposableWalletService } from "./services/disposable-wallet.service";
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -19,6 +22,7 @@ import { Withdrawal } from "./entity/withdrawal.entity";
       User,
       WithdrawalWallet,
       Withdrawal,
+      DisposableWallet,
     ]),
     PublicModule,
   ],
@@ -28,7 +32,8 @@ import { Withdrawal } from "./entity/withdrawal.entity";
     WalletService,
     TransactionService,
     WalletTrackingCron,
+    DisposableWalletService,
   ],
-  exports: [WalletService, TransactionService, Web3Service],
+  exports: [WalletService, TransactionService, Web3Service, DisposableWalletService],
 })
 export class Web3Module {}
