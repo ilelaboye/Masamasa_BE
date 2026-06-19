@@ -20,5 +20,5 @@ export class ConfirmDeleteAccountDto {
     description: "Confirmation value (must be 1 to confirm deletion)",
     example: 1,
   })
-  confirmation: number;
+  confirmation: number | string;
 }

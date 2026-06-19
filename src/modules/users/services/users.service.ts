@@ -647,7 +647,7 @@ export class UsersService extends BaseService {
   /**
    * Confirm and execute account deletion with confirmation value (1)
    */
-  async confirmAccountDeletion(confirmation: number, req: UserRequest) {
+  async confirmAccountDeletion(confirmation: number | string, req: UserRequest) {
     const user = await this.userRepository.findOne({
       where: { id: req.user.id },
     });
@@ -655,6 +655,9 @@ export class UsersService extends BaseService {
     if (!user) {
       throw new UnauthorizedException("User not found");
     }
+
+    // Convert string to number if necessary
+    const confirmationNumber = typeof confirmation === 'string' ? Number(confirmation) : confirmation;
 
     // Verify confirmation value
     if (confirmation != 1) {
