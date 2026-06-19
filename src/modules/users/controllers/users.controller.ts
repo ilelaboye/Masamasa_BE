@@ -169,7 +169,7 @@ export class UsersController {
   @Post("confirm-account-deletion")
   @UsePipes(new JoiValidationPipe(require("../validations").ConfirmDeleteAccountValidation))
   async confirmAccountDeletion(
-    @Body() body: { confirmation: number },
+    @Body() body: { confirmation: number | string },
     @Req() req: UserRequest,
   ) {
     return await this.usersService.confirmAccountDeletion(
