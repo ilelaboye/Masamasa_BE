@@ -17,8 +17,8 @@ export class DeleteAccountDto {
 
 export class ConfirmDeleteAccountDto {
   @ApiProperty({
-    description: "6-digit confirmation code sent to email",
-    example: "123456",
+    description: "Confirmation value (must be 1 to confirm deletion)",
+    example: 1,
   })
-  confirmationCode: string;
+  confirmation: number;
 }

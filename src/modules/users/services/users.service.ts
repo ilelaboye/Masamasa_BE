@@ -596,7 +596,7 @@ export class UsersService extends BaseService {
   }
 
   /**
-   * Request account deletion - sends confirmation code to email
+   * Request account deletion - validates password and stores deletion request
    */
   async requestAccountDeletion(password: string, reason: string | undefined, req: UserRequest) {
     const user = await this.userRepository
@@ -619,64 +619,29 @@ export class UsersService extends BaseService {
       throw new BadRequestException("Invalid password");
     }
 
-    // Generate 6-digit confirmation code
-    const confirmationCode = Math.floor(100000 + Math.random() * 900000).toString();
-
-    // Store confirmation code in cache (expires in 15 minutes)
+    // Store deletion request in cache (expires in 15 minutes)
     const cacheKey = `account_deletion_${user.id}`;
     await this.cacheService.set(
       cacheKey,
       {
-        code: confirmationCode,
+        verified: true,
         reason: reason || "No reason provided",
         requestedAt: new Date().toISOString(),
       },
       900000 // 15 minutes in milliseconds
     );
 
-    // Send confirmation email
-    try {
-      await sendMailJetWithTemplate(
-        {
-          to: {
-            email: user.email,
-            name: `${user.first_name} ${user.last_name}`,
-          },
-        },
-        {
-          subject: "Account Deletion Confirmation",
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #d32f2f;">Account Deletion Request</h2>
-              <p>Hello ${capitalizeString(user.first_name)},</p>
-              <p>You have requested to delete your account. To confirm this action, please use the following code:</p>
-              <div style="background-color: #f5f5f5; padding: 20px; text-align: center; margin: 20px 0;">
-                <h1 style="color: #d32f2f; letter-spacing: 5px; margin: 0;">${confirmationCode}</h1>
-              </div>
-              <p><strong>This code will expire in 15 minutes.</strong></p>
-              <p style="color: #666;">If you did not request this, please ignore this email and your account will remain active.</p>
-              <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 20px 0;">
-              <p style="color: #999; font-size: 12px;">This is an automated message, please do not reply.</p>
-            </div>
-          `,
-        }
-      );
-    } catch (emailError) {
-      console.error("Failed to send deletion confirmation email:", emailError);
-      throw new BadRequestException("Failed to send confirmation email. Please try again later.");
-    }
-
     return {
       success: true,
-      message: "A confirmation code has been sent to your email. Please check your inbox and use the code to confirm account deletion.",
+      message: "Password verified. Please confirm the deletion to proceed.",
       expiresIn: "15 minutes",
     };
   }
 
   /**
-   * Confirm and execute account deletion with confirmation code
+   * Confirm and execute account deletion with confirmation value (1)
    */
-  async confirmAccountDeletion(confirmationCode: string, req: UserRequest) {
+  async confirmAccountDeletion(confirmation: number, req: UserRequest) {
     const user = await this.userRepository.findOne({
       where: { id: req.user.id },
     });
@@ -685,27 +650,27 @@ export class UsersService extends BaseService {
       throw new UnauthorizedException("User not found");
     }
 
-    // Retrieve confirmation code from cache
+    // Verify confirmation value
+    if (confirmation !== 1) {
+      throw new BadRequestException("Invalid confirmation value. Must be 1 to proceed.");
+    }
+
+    // Retrieve deletion request from cache
     const cacheKey = `account_deletion_${user.id}`;
     const cachedData = await this.cacheService.get<{
-      code: string;
+      verified: boolean;
       reason: string;
       requestedAt: string;
     }>(cacheKey);
 
-    if (!cachedData) {
-      throw new BadRequestException("Confirmation code has expired or is invalid. Please request a new code.");
-    }
-
-    // Verify confirmation code
-    if (cachedData.code !== confirmationCode) {
-      throw new BadRequestException("Invalid confirmation code");
+    if (!cachedData || !cachedData.verified) {
+      throw new BadRequestException("Deletion request has expired or is invalid. Please request account deletion again.");
     }
 
     // Soft delete the user (sets deleted_at timestamp)
     await this.userRepository.softDelete({ id: user.id });
 
-    // Clear the confirmation code from cache
+    // Clear the deletion request from cache
     await this.cacheService.del(cacheKey);
 
     // Send confirmation email
