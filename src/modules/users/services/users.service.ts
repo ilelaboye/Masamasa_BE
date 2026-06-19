@@ -598,7 +598,11 @@ export class UsersService extends BaseService {
   /**
    * Request account deletion - validates password and stores deletion request
    */
-  async requestAccountDeletion(password: string, reason: string | undefined, req: UserRequest) {
+  async requestAccountDeletion(
+    password: string,
+    reason: string | undefined,
+    req: UserRequest,
+  ) {
     const user = await this.userRepository
       .createQueryBuilder("user")
       .addSelect("user.password")
@@ -611,7 +615,9 @@ export class UsersService extends BaseService {
 
     // Verify password
     if (!user.password) {
-      throw new BadRequestException("Password authentication not set up for this account");
+      throw new BadRequestException(
+        "Password authentication not set up for this account",
+      );
     }
 
     const isPasswordValid = await verifyHash(password, user.password);
@@ -628,7 +634,7 @@ export class UsersService extends BaseService {
         reason: reason || "No reason provided",
         requestedAt: new Date().toISOString(),
       },
-      900000 // 15 minutes in milliseconds
+      900000, // 15 minutes in milliseconds
     );
 
     return {
@@ -654,8 +660,10 @@ export class UsersService extends BaseService {
     const confirmationNumber = typeof confirmation === 'string' ? Number(confirmation) : confirmation;
 
     // Verify confirmation value
-    if (confirmationNumber !== 1) {
-      throw new BadRequestException("Invalid confirmation value. Must be 1 to proceed.");
+    if (confirmation != 1) {
+      throw new BadRequestException(
+        "Invalid confirmation value. Must be 1 to proceed.",
+      );
     }
 
     // Retrieve deletion request from cache
@@ -667,7 +675,9 @@ export class UsersService extends BaseService {
     }>(cacheKey);
 
     if (!cachedData || !cachedData.verified) {
-      throw new BadRequestException("Deletion request has expired or is invalid. Please request account deletion again.");
+      throw new BadRequestException(
+        "Deletion request has expired or is invalid. Please request account deletion again.",
+      );
     }
 
     // Soft delete the user (sets deleted_at timestamp)
@@ -699,15 +709,19 @@ export class UsersService extends BaseService {
               <p style="color: #999; font-size: 12px;">Thank you for using our service.</p>
             </div>
           `,
-        }
+        },
       );
     } catch (emailError) {
-      console.error("Failed to send account deletion confirmation email:", emailError);
+      console.error(
+        "Failed to send account deletion confirmation email:",
+        emailError,
+      );
     }
 
     return {
       success: true,
-      message: "Your account has been successfully deleted. You will be logged out shortly.",
+      message:
+        "Your account has been successfully deleted. You will be logged out shortly.",
       deletedAt: new Date(),
     };
   }
