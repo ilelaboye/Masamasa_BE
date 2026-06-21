@@ -49,6 +49,9 @@ export class Wallet {
   })
   status: Status;
 
+  @Column({ type: "timestamp", nullable: true })
+  expired_at: Date | null;
+
   @CreateDateColumn({ type: "timestamp" })
   created_at!: Date;
 
