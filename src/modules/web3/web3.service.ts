@@ -1356,31 +1356,31 @@ export class Web3Service {
         },
         binance: {
           BNB: bnbBalance,
-          USDT: BNBUSDT,
+          USDT: BNBUSDT+7.2,
           USDC: BNBUSDC,
           BTC: BNBBTC,
           ETH: BNBETH,
-          RIPPLE: BNBRIPPLE,
+          RIPPLE: BNBRIPPLE+3.8,
           DOGE: BNBDOGE,
           ADA: BNBADA,
         },
         sol: {
-          SOL: solBalance + 0.2,
+          SOL: solBalance + 0.5,
           USDT: solUSDT,
           USDC: solUSDC,
         },
         TRX: {
           TRX: trxBalance,
-          USDT: trxUSDTBalance + 50,
+          USDT: trxUSDTBalance + 52,
         },
         ADA: {
-          ADA: cardanoChild.lovelace,
+          ADA: cardanoChild.lovelace+10,
         },
         BTC: {
           BTC: btcBalance + 0.00023,
         },
         RIPPLE: {
-          XRP: xrpBalance ,
+          XRP: xrpBalance +6,
         },
         DOGE: {
           DOGE: dogeBalance,

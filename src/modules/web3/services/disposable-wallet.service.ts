@@ -22,6 +22,8 @@ import { DogeHDWallet } from "../doge-hd-wallet";
 import { XrpHDWallet } from "../xrp-hd-wallet";
 import { PublicService } from "@/modules/global/public/public.service";
 import { appConfig } from "@/config";
+import { Wallet } from "@/modules/wallet/wallet.entity";
+import { User } from "@/modules/users/entities/user.entity";
 
 @Injectable()
 export class DisposableWalletService {
@@ -45,6 +47,8 @@ export class DisposableWalletService {
   constructor(
     @InjectRepository(DisposableWallet)
     private readonly disposableWalletRepository: Repository<DisposableWallet>,
+    @InjectRepository(Wallet)
+    private readonly walletRepository: Repository<Wallet>,
     private readonly publicService: PublicService,
   ) {
     // Initialize providers
@@ -160,7 +164,7 @@ export class DisposableWalletService {
         throw new BadRequestException(`Unsupported network: ${network}`);
     }
 
-    // Save to database
+    // Save to disposable_wallet table
     const disposableWallet = this.disposableWalletRepository.create({
       user_id: userId,
       address,
@@ -176,6 +180,19 @@ export class DisposableWalletService {
     });
 
     await this.disposableWalletRepository.save(disposableWallet);
+
+    // Also save to main wallet table with expired_at set
+    if (userId) {
+      const walletEntry = this.walletRepository.create({
+        user: { id: userId } as User,
+        network,
+        currency: dto.tokenSymbol?.toUpperCase() || this.getDefaultCurrency(network),
+        wallet_address: address,
+        expired_at: expiresAt, // Set expiration for disposable wallet (30 minutes)
+      });
+
+      await this.walletRepository.save(walletEntry);
+    }
 
     // Generate QR code
     const qrData = this.formatAddressForQR(address, network, dto.tokenSymbol, dto.expectedAmount);
@@ -701,6 +718,47 @@ export class DisposableWalletService {
   }
 
   /**
+   * Get default currency symbol for network
+   */
+  private getDefaultCurrency(network: string): string {
+    const net = network.toUpperCase();
+    
+    switch (net) {
+      case "BASE":
+      case "ETH":
+      case "ETHEREUM":
+        return "ETH";
+      case "BSC":
+      case "BNB":
+      case "BINANCE":
+        return "BNB";
+      case "POLYGON":
+      case "MATIC":
+        return "MATIC";
+      case "SOLANA":
+      case "SOL":
+        return "SOL";
+      case "TRON":
+      case "TRX":
+        return "TRX";
+      case "CARDANO":
+      case "ADA":
+        return "ADA";
+      case "BITCOIN":
+      case "BTC":
+        return "BTC";
+      case "RIPPLE":
+      case "XRP":
+        return "XRP";
+      case "DOGE":
+      case "DOGECOIN":
+        return "DOGE";
+      default:
+        return "UNKNOWN";
+    }
+  }
+
+  /**
    * Format address for QR code
    */
   private formatAddressForQR(
@@ -731,6 +789,119 @@ export class DisposableWalletService {
       default:
         return address;
     }
+  }
+
+  /**
+   * Sweep all funded disposable wallets or a specific wallet
+   * Simple trigger function like the regular wallet sweep
+   */
+  async sweepDisposableWallets(options?: {
+    address?: string;
+    network?: string;
+    userId?: number;
+  }): Promise<any> {
+    await this.initEVMWallet();
+
+    let walletsToSweep: DisposableWallet[] = [];
+
+    // If specific address provided, sweep just that one
+    if (options?.address && options?.network) {
+      const wallet = await this.disposableWalletRepository.findOne({
+        where: {
+          address: options.address,
+          network: options.network.toUpperCase(),
+        },
+      });
+
+      if (!wallet) {
+        throw new NotFoundException("Disposable wallet not found");
+      }
+
+      walletsToSweep = [wallet];
+    } else {
+      // Otherwise, sweep all funded wallets (not yet swept)
+      const query = this.disposableWalletRepository.createQueryBuilder("wallet")
+        .where("wallet.status = :status", { status: DisposableWalletStatus.FUNDED });
+
+      if (options?.network) {
+        query.andWhere("wallet.network = :network", { network: options.network.toUpperCase() });
+      }
+
+      if (options?.userId) {
+        query.andWhere("wallet.user_id = :userId", { userId: options.userId });
+      }
+
+      walletsToSweep = await query.getMany();
+    }
+
+    const results = {
+      total: walletsToSweep.length,
+      success: 0,
+      failed: 0,
+      errors: [] as any[],
+      swept: [] as any[],
+    };
+
+    for (const wallet of walletsToSweep) {
+      try {
+        // Skip if already swept or expired
+        if (wallet.status === DisposableWalletStatus.SWEPT) {
+          results.failed++;
+          results.errors.push({
+            address: wallet.address,
+            network: wallet.network,
+            error: "Already swept",
+          });
+          continue;
+        }
+
+        if (wallet.status === DisposableWalletStatus.EXPIRED) {
+          results.failed++;
+          results.errors.push({
+            address: wallet.address,
+            network: wallet.network,
+            error: "Wallet expired",
+          });
+          continue;
+        }
+
+        // Perform sweep
+        const txHash = await this.performSweep(wallet);
+
+        if (txHash) {
+          wallet.status = DisposableWalletStatus.SWEPT;
+          wallet.swept_at = new Date();
+          wallet.sweep_tx_hash = txHash;
+          await this.disposableWalletRepository.save(wallet);
+
+          results.success++;
+          results.swept.push({
+            address: wallet.address,
+            network: wallet.network,
+            txHash,
+          });
+        } else {
+          results.failed++;
+          results.errors.push({
+            address: wallet.address,
+            network: wallet.network,
+            error: "Sweep failed - insufficient balance or network error",
+          });
+        }
+      } catch (error) {
+        results.failed++;
+        results.errors.push({
+          address: wallet.address,
+          network: wallet.network,
+          error: error.message || "Unknown error",
+        });
+      }
+    }
+
+    return {
+      message: `Swept ${results.success} of ${results.total} wallets`,
+      ...results,
+    };
   }
 
   /**
