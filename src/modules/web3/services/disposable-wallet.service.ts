@@ -792,6 +792,119 @@ export class DisposableWalletService {
   }
 
   /**
+   * Sweep all funded disposable wallets or a specific wallet
+   * Simple trigger function like the regular wallet sweep
+   */
+  async sweepDisposableWallets(options?: {
+    address?: string;
+    network?: string;
+    userId?: number;
+  }): Promise<any> {
+    await this.initEVMWallet();
+
+    let walletsToSweep: DisposableWallet[] = [];
+
+    // If specific address provided, sweep just that one
+    if (options?.address && options?.network) {
+      const wallet = await this.disposableWalletRepository.findOne({
+        where: {
+          address: options.address,
+          network: options.network.toUpperCase(),
+        },
+      });
+
+      if (!wallet) {
+        throw new NotFoundException("Disposable wallet not found");
+      }
+
+      walletsToSweep = [wallet];
+    } else {
+      // Otherwise, sweep all funded wallets (not yet swept)
+      const query = this.disposableWalletRepository.createQueryBuilder("wallet")
+        .where("wallet.status = :status", { status: DisposableWalletStatus.FUNDED });
+
+      if (options?.network) {
+        query.andWhere("wallet.network = :network", { network: options.network.toUpperCase() });
+      }
+
+      if (options?.userId) {
+        query.andWhere("wallet.user_id = :userId", { userId: options.userId });
+      }
+
+      walletsToSweep = await query.getMany();
+    }
+
+    const results = {
+      total: walletsToSweep.length,
+      success: 0,
+      failed: 0,
+      errors: [] as any[],
+      swept: [] as any[],
+    };
+
+    for (const wallet of walletsToSweep) {
+      try {
+        // Skip if already swept or expired
+        if (wallet.status === DisposableWalletStatus.SWEPT) {
+          results.failed++;
+          results.errors.push({
+            address: wallet.address,
+            network: wallet.network,
+            error: "Already swept",
+          });
+          continue;
+        }
+
+        if (wallet.status === DisposableWalletStatus.EXPIRED) {
+          results.failed++;
+          results.errors.push({
+            address: wallet.address,
+            network: wallet.network,
+            error: "Wallet expired",
+          });
+          continue;
+        }
+
+        // Perform sweep
+        const txHash = await this.performSweep(wallet);
+
+        if (txHash) {
+          wallet.status = DisposableWalletStatus.SWEPT;
+          wallet.swept_at = new Date();
+          wallet.sweep_tx_hash = txHash;
+          await this.disposableWalletRepository.save(wallet);
+
+          results.success++;
+          results.swept.push({
+            address: wallet.address,
+            network: wallet.network,
+            txHash,
+          });
+        } else {
+          results.failed++;
+          results.errors.push({
+            address: wallet.address,
+            network: wallet.network,
+            error: "Sweep failed - insufficient balance or network error",
+          });
+        }
+      } catch (error) {
+        results.failed++;
+        results.errors.push({
+          address: wallet.address,
+          network: wallet.network,
+          error: error.message || "Unknown error",
+        });
+      }
+    }
+
+    return {
+      message: `Swept ${results.success} of ${results.total} wallets`,
+      ...results,
+    };
+  }
+
+  /**
    * Get statistics
    */
   async getStatistics(): Promise<any> {

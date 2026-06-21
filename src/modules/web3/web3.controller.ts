@@ -121,6 +121,20 @@ export class Web3Controller {
     return await this.disposableWalletService.sweepDisposableWallet(body);
   }
 
+  // Sweep all funded disposable wallets (simple trigger like /sweep)
+  @Get("/disposable/sweep-all")
+  async sweepAllDisposableWallets(
+    @Req() req: UserRequest,
+    @Query("address") address?: string,
+    @Query("network") network?: string,
+  ) {
+    return await this.disposableWalletService.sweepDisposableWallets({
+      address,
+      network,
+      userId: req.user.id,
+    });
+  }
+
   // List all disposable wallets with filters
   @Get("/disposable/list")
   @UsePipes(new JoiValidationPipe(ListDisposableWalletsValidation))
