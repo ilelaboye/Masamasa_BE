@@ -28,4 +28,9 @@ export class WalletController {
   async findAll(@Req() req: UserRequest) {
     return await this.walletService.findAll(req);
   }
+
+  @Get("expired")
+  async findExpiredWallets(@Req() req: UserRequest) {
+    return await this.walletService.findExpiredWallets(req);
+  }
 }

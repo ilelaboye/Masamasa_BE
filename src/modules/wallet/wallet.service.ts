@@ -50,4 +50,14 @@ export class WalletService {
 
     return Array.from(uniqueWallets.values());
   }
+
+  async findExpiredWallets(req: UserRequest) {
+    // Get all wallets that have expired_at set (disposable/temporary wallets)
+    return await this.walletRepository
+      .createQueryBuilder("wallet")
+      .where("wallet.user_id = :userId", { userId: req.user.id })
+      .andWhere("wallet.expired_at IS NOT NULL")
+      .orderBy("wallet.created_at", "DESC")
+      .getMany();
+  }
 }
