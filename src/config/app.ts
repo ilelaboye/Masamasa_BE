@@ -85,18 +85,19 @@ export const appConfig = {
     "https://rpc.ankr.com/eth",
     "https://eth-mainnet.public.blastapi.io",
     "https://1rpc.io/eth",
-    "https://eth.drpc.org"
+    "https://eth.drpc.org",
   ],
   SOL_RPC_URL: "https://api.mainnet-beta.solana.com",
   SOL_RPC_URL2: "https://solana-rpc.publicnode.com",
-  POLY_RPC_URL: process.env.POLY_RPC_URL || "https://polygon-bor-rpc.publicnode.com",
+  POLY_RPC_URL:
+    process.env.POLY_RPC_URL || "https://polygon-bor-rpc.publicnode.com",
   // Fallback Polygon RPC URLs for automatic failover on SSL/connection errors
   POLY_RPC_URLS: [
     "https://polygon-rpc.com",
     "https://polygon-bor-rpc.publicnode.com",
     "https://rpc-mainnet.matic.network",
     "https://rpc-mainnet.maticvigil.com",
-    "https://polygon-mainnet.public.blastapi.io"
+    "https://polygon-mainnet.public.blastapi.io",
   ],
   XRP_RPC_URL: process.env.XRP_RPC_URL || "wss://s1.ripple.com",
   // Alternative XRP RPC URLs for failover
@@ -104,7 +105,7 @@ export const appConfig = {
     "wss://s1.ripple.com",
     "wss://s2.ripple.com",
     "wss://xrplcluster.com",
-    "wss://xrpl.ws"
+    "wss://xrpl.ws",
   ],
   TRX_API_KEY: process.env.TRX_API_KEY ?? "",
   ETH_PRIVATE_KEY: process.env.PRIVATE_KEY ?? "",
@@ -118,4 +119,7 @@ export const appConfig = {
   NOMBA_WEBHOOK_SECRET: process.env.NOMBA_WEBHOOK_SECRET || "",
 
   MORALIS_API_KEY: process.env.MORALIS_API_KEY || "",
+
+  QUIDAX_API_KEY: process.env.QUIDAX_API_KEY || "",
+  QUIDAX_SECRET_KEY: process.env.QUIDAX_SECRET_KEY || "",
 };
