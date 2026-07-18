@@ -81,9 +81,7 @@ export function getAdminCookieData(email: string, req: AdminRequest) {
   const cookieData: string = req.cookies[_ADMIN_AUTH_COOKIE_NAME_];
   if (!cookieData) return null;
 
-  const { admin } = JSON.parse(
-    decodeURIComponent(cookieData),
-  ) as unknown as iAdminCookieData;
+  const { admin } = decryptData(cookieData) as unknown as iAdminCookieData;
   if (!admin) return null;
 
   return admin.email == email ? admin : null;
@@ -93,9 +91,7 @@ export function extractAdminDataFromCookie(request: Request): iAdminCookieData {
   const cookieData: string = request.cookies[_ADMIN_AUTH_COOKIE_NAME_];
 
   if (!cookieData) throw new UnauthorizedException("You are unauthenticated");
-  const { token, admin } = JSON.parse(
-    decodeURIComponent(cookieData),
-  ) as unknown as iAdminCookieData;
+  const { token, admin } = decryptData(cookieData) as unknown as iAdminCookieData;
 
   if (!token) throw new NotAcceptableException("You are not logged in!");
   if (!admin)

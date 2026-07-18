@@ -15,7 +15,7 @@ import {
   _AUTH_COOKIE_NAME_,
   CookieOptions,
 } from "@/constants";
-import { extractAdminForCookie } from "@/core/utils";
+import { encryptData, extractAdminForCookie } from "@/core/utils";
 import { AdminRequest } from "@/definitions";
 import { JoiValidationPipe } from "@/pipes/joi.validation.pipe";
 import { AdminLoginDto } from "../dto";
@@ -53,7 +53,7 @@ export class AdminAuthController {
     const cookieData = { token, admin: extractAdminForCookie(user) };
     res.cookie(
       _ADMIN_AUTH_COOKIE_NAME_,
-      encodeURIComponent(JSON.stringify(cookieData)),
+      encryptData(cookieData),
       CookieOptions,
     );
 
