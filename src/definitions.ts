@@ -217,3 +217,70 @@ export interface VTPassResponse {
   meterServiceCharge?: number;
   administrativeCharge?: number;
 }
+
+export interface QuidaxUser {
+  id: string;
+  sn: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  reference: string | null;
+  display_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface QuidaxWalletNetwork {
+  id: string;
+  name: string;
+  deposits_enabled: boolean;
+  withdraws_enabled: boolean;
+}
+
+export interface QuidaxWallet {
+  id: string;
+  name: string;
+  currency: string;
+  balance: string;
+  locked: string;
+  staked: string;
+  converted_balance: string;
+  reference_currency: string;
+  is_crypto: boolean;
+  blockchain_enabled: boolean;
+  default_network: string;
+  deposit_address: string | null;
+  destination_tag: string | null;
+  networks: QuidaxWalletNetwork[];
+  user: QuidaxUser;
+}
+
+export interface QuidaxResponse<T> {
+  status: "success" | "error";
+  message: string;
+  data: T;
+}
+
+// Response shape for POST /users/{id}/wallets/{currency}/addresses
+// address can be null when Quidax hasn't generated it yet — the
+// wallet.address.generated webhook will carry the actual value later.
+export interface QuidaxPaymentAddress {
+  id: string;
+  reference: string | null;
+  currency: string;
+  address: string | null;
+  network: string;
+  user: QuidaxUser;
+  destination_tag: string | null;
+  total_payments: string | null;
+  display_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface QuidaxCreateSubAccountData {
+  email: string;
+  first_name: string;
+  last_name: string;
+  phone?: string | null;
+}

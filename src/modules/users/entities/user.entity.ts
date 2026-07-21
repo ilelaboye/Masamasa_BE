@@ -93,6 +93,9 @@ export class User {
   country: string;
 
   @Column({ nullable: true })
+  quidax_id?: string;
+
+  @Column({ nullable: true })
   device_id: string;
 
   @Column({ nullable: true })

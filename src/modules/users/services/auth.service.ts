@@ -18,6 +18,12 @@ import {
   verifyHash,
 } from "@/core/utils";
 import { type UserRequest } from "@/definitions";
+import { toAppNetwork } from "@/modules/quidax/quidax.constants";
+import {
+  Status as WalletStatus,
+  Wallet,
+  WalletType,
+} from "@/modules/wallet/wallet.entity";
 import { BaseService } from "@/modules/base.service";
 import {
   BadRequestException,
@@ -28,7 +34,7 @@ import {
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { JwtService } from "@nestjs/jwt";
 import { InjectRepository } from "@nestjs/typeorm";
-import { DataSource, Repository } from "typeorm";
+import { DataSource, In, Repository } from "typeorm";
 import {
   CreateAccountDto,
   ForgotPasswordDto,
@@ -37,6 +43,7 @@ import {
   VerifyTokenDto,
 } from "../dto";
 import { CacheService } from "@/modules/global/cache-container/cache-container.service";
+import { QuidaxService } from "@/modules/quidax/quidax.service";
 import { User, Status, TokenType } from "../entities/user.entity";
 
 @Injectable()
@@ -45,9 +52,12 @@ export class AuthService extends BaseService {
     private readonly eventEmitter: EventEmitter2,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(Wallet)
+    private readonly walletRepository: Repository<Wallet>,
     private readonly dataSource: DataSource,
     private readonly jwtService: JwtService,
     private readonly cacheService: CacheService,
+    private readonly quidaxService: QuidaxService,
   ) {
     super();
   }
@@ -252,6 +262,10 @@ export class AuthService extends BaseService {
 
       await queryRunner.commitTransaction();
 
+      // Non-blocking — Quidax account + wallet addresses are provisioned
+      // after the DB commit so a slow/failing API never blocks registration.
+      this.setupQuidaxAccount(user).catch(() => {});
+
       const userData = {
         first_name: user.first_name,
         last_name: user.last_name,
@@ -432,5 +446,75 @@ export class AuthService extends BaseService {
 
     // this.userRepository.update({ id }, { remember_token: null });
     return { message: "Password reset successfully." };
+  }
+
+  private async setupQuidaxAccount(user: User): Promise<void> {
+    const quidaxUser = await this.quidaxService.createSubAccount({
+      email: user.email,
+      first_name: user.first_name,
+      last_name: user.last_name,
+      phone: user.phone,
+    });
+    await this.userRepository.update(
+      { id: user.id },
+      { quidax_id: quidaxUser.id },
+    );
+
+    const { addresses, unsupported } =
+      await this.quidaxService.createAllPaymentAddresses(quidaxUser.id);
+
+    await Promise.allSettled(
+      addresses.map(async (addr) => {
+        const appNetwork = toAppNetwork(addr.network, addr.currency);
+        const exists = await this.walletRepository.findOne({
+          where: {
+            user_id: user.id,
+            network: appNetwork,
+            currency: addr.currency,
+          },
+        });
+        if (exists) return;
+        if (!addr.address) return;
+        await this.walletRepository.save({
+          user_id: user.id,
+          currency: addr.currency,
+          network: appNetwork,
+          wallet_address: addr.address,
+          status: WalletStatus.active,
+          type: WalletType.quidax,
+        });
+      }),
+    );
+
+    if (unsupported.length === 0) return;
+
+    // Unsupported pairs are all EVM-compatible (BEP-20, Base, Polygon);
+    // they share the same HD-derived address as the user's ETH/BSC/Base wallets.
+    const evmWallet = await this.walletRepository.findOne({
+      where: {
+        user_id: user.id,
+        network: In(["ETHEREUM", "BINANCE", "BASE"]),
+        type: WalletType.quidax,
+      },
+    });
+    if (!evmWallet) return;
+
+    await Promise.allSettled(
+      unsupported.map(async ({ currency, network }) => {
+        const appNetwork = toAppNetwork(network ?? null, currency);
+        const exists = await this.walletRepository.findOne({
+          where: { user_id: user.id, network: appNetwork, currency },
+        });
+        if (exists) return;
+        await this.walletRepository.save({
+          user_id: user.id,
+          currency,
+          network: appNetwork,
+          wallet_address: evmWallet.wallet_address,
+          status: WalletStatus.active,
+          type: WalletType.self_custodian,
+        });
+      }),
+    );
   }
 }

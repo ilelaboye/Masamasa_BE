@@ -24,6 +24,10 @@ import { PublicService } from "../global/public/public.service";
 import { Withdrawal } from "./entity/withdrawal.entity";
 import { WithdrawalWallet } from "./entity/withdrawal-wallet.entity";
 import { AdminRequest } from "@/definitions";
+import {
+  QUIDAX_CURRENCIES,
+  toAppNetwork,
+} from "@/modules/quidax/quidax.constants";
 
 const TronWeb = require("tronweb");
 
@@ -242,13 +246,25 @@ export class Web3Service {
       }
 
       if (!existWalletETH) {
-        const base = this.walletRepository.create({
-          user: req.user,
-          network: "Base",
-          currency: "ETH",
-          wallet_address: childWallet.address,
-        });
-        await this.walletRepository.save(base);
+        // EVM chains all share the same derived address — save one record per pair
+        const EVM_NETWORKS = new Set([
+          "erc20", "bep20", "base", "optimism", "celo", "lisk", "arbitrum", "pol",
+        ]);
+        const EVM_NATIVE = new Set(["eth", "bnb"]);
+        const evmPairs = QUIDAX_CURRENCIES.filter(({ currency, network }) =>
+          network ? EVM_NETWORKS.has(network) : EVM_NATIVE.has(currency),
+        );
+        for (const { currency, network } of evmPairs) {
+          const appNetwork = toAppNetwork(network, currency);
+          await this.walletRepository.save(
+            this.walletRepository.create({
+              user: req.user,
+              network: appNetwork,
+              currency: currency.toUpperCase(),
+              wallet_address: childWallet.address,
+            }),
+          );
+        }
       }
 
       if (!existWalletSOL) {
@@ -1380,7 +1396,7 @@ export class Web3Service {
           BTC: btcBalance + 0.00023,
         },
         RIPPLE: {
-          XRP: xrpBalance ,
+          XRP: xrpBalance,
         },
         DOGE: {
           DOGE: dogeBalance,

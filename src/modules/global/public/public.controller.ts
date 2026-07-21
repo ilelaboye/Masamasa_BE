@@ -31,7 +31,7 @@ import { CreateWalletDto } from "@/modules/wallet/wallet.dto";
 export class PublicController {
   constructor(
     private readonly publicService: PublicService,
-    private readonly exchangeRateService: ExchangeRateService
+    private readonly exchangeRateService: ExchangeRateService,
   ) {}
 
   // @UsePipes(new JoiValidationPipe(ConfirmUserEmailValidation))
@@ -65,7 +65,7 @@ export class PublicController {
     @Headers("nomba-sig-value") sigValue: string,
     @Headers("nomba-signature-algorithm") algorithm: string,
     @Headers("nomba-signature-version") version: string,
-    @Headers("nomba-timestamp") timestamp: string
+    @Headers("nomba-timestamp") timestamp: string,
   ) {
     // MASA3GNKTdmJsv001768505755079
     console.log("NOMBA TRANSFER WEBHOOK", webhook);
@@ -76,6 +76,21 @@ export class PublicController {
     console.log("NOMBA TRANSFER WEBHOOK timestamp", timestamp);
     verifyNombaWebhook(webhook, signature, timestamp);
     return await this.publicService.nombaTransferWebhook(webhook);
+  }
+
+  @Post("webhook/quidax")
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async quidaxWebhook(@Headers() headers: any, @Body() payload: any) {
+    console.log("QUIDAX WEBHOOK headers", JSON.stringify(headers, null, 2));
+    console.log("QUIDAX WEBHOOK payload", JSON.stringify(payload, null, 2));
+    await this.publicService.handleQuidaxWebhook(payload);
+    return { received: true };
+  }
+
+  @Get("quidax/test")
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async test() {
+    return await this.publicService.test();
   }
 
   @Post("webhook/transaction")
@@ -91,10 +106,10 @@ export class PublicController {
   @UsePipes(new JoiValidationPipe(BankAccountVerificationValidation))
   @Post("bank-verification/verify-account-details")
   async verifyAccountNumber(
-    @Body() bankAccountVerificationDto: BankAccountVerificationDto
+    @Body() bankAccountVerificationDto: BankAccountVerificationDto,
   ) {
     return await this.publicService.verifyAccountNumber(
-      bankAccountVerificationDto
+      bankAccountVerificationDto,
     );
   }
 

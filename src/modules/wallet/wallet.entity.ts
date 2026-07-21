@@ -17,6 +17,11 @@ export enum Status {
   disabled = "disabled",
 }
 
+export enum WalletType {
+  quidax = "quidax",
+  self_custodian = "self_custodian",
+}
+
 export enum TokenType {
   email_verification = "email_verification",
   forgot_password = "forgot_password",
@@ -40,7 +45,7 @@ export class Wallet {
   @Column({ nullable: true })
   currency: string;
 
-  @Column({ unique: true })
+  @Column({ nullable: false })
   wallet_address: string;
 
   @Column({
@@ -48,6 +53,12 @@ export class Wallet {
     default: Status.active,
   })
   status: Status;
+
+  @Column({
+    type: "varchar",
+    default: WalletType.self_custodian,
+  })
+  type: WalletType;
 
   @CreateDateColumn({ type: "timestamp" })
   created_at!: Date;

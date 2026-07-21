@@ -122,4 +122,7 @@ export const appConfig = {
 
   QUIDAX_API_KEY: process.env.QUIDAX_API_KEY || "",
   QUIDAX_SECRET_KEY: process.env.QUIDAX_SECRET_KEY || "",
+  QUIDAX_BASE_URL:
+    process.env.QUIDAX_BASE_URL ||
+    "https://openapi.quidax.io/exchange-open-api/api/v1",
 };

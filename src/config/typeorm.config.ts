@@ -13,7 +13,7 @@ export const dataSource = {
   logging: false,
   entities: [__dirname + "/../modules/**/*.entity{.ts,.js}"],
   migrations: [__dirname + "/../db/migrations/*.{ts,js}"],
-  seeds: [__dirname + "/../db/seeds/*.js"],
+  seeds: [__dirname + "/../db/seeds/*.{ts,js}"],
   factories: [__dirname + "/../db/factories/*.{ts,js}"],
 } as DataSourceOptions;
 

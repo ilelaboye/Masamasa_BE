@@ -18,6 +18,7 @@ import { ProviderService } from "../purchases/services/providers.service";
 import { Administrator } from "../administrator/entities/administrator.entity";
 import { AdminLogs } from "../administrator/entities/admin-logs.entity";
 import { WithdrawalWallet } from "../web3/entity/withdrawal-wallet.entity";
+import { Wallet } from "../wallet/wallet.entity";
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { WithdrawalWallet } from "../web3/entity/withdrawal-wallet.entity";
       Administrator,
       AdminLogs,
       WithdrawalWallet,
+      Wallet,
     ]),
     EventEmitterModule.forRoot(),
   ],

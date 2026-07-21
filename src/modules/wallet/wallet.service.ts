@@ -1,7 +1,7 @@
 import { UserRequest } from "@/definitions";
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { CreateWalletDto } from "./wallet.dto";
-import { Wallet } from "./wallet.entity";
+import { Status, Wallet } from "./wallet.entity";
 import { Repository } from "typeorm";
 import { InjectRepository } from "@nestjs/typeorm";
 
@@ -30,7 +30,7 @@ export class WalletService {
 
   async findAll(req: UserRequest) {
     return await this.walletRepository.find({
-      where: { user: { id: req.user.id } },
+      where: { user: { id: req.user.id }, status: Status.active },
     });
   }
 }
