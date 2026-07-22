@@ -182,4 +182,9 @@ export class UsersController {
   async cancelAccountDeletion(@Req() req: UserRequest) {
     return await this.usersService.cancelAccountDeletion(req);
   }
+
+  @Post("mfa")
+  async updateMfa(@Req() req: UserRequest) {
+    return await this.usersService.updateMfa(req);
+  }
 }

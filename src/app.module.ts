@@ -25,6 +25,7 @@ import {
   PurchasesModule,
   Web3Module,
   NotificationsModule,
+  QuidaxModule,
 } from "./modules";
 import { ConfigModuleSchema } from "./validations";
 
@@ -73,6 +74,7 @@ import { ConfigModuleSchema } from "./validations";
     PurchasesModule,
     Web3Module,
     NotificationsModule,
+    QuidaxModule,
   ],
   providers: [JwtService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

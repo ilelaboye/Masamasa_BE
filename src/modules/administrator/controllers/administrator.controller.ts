@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   Res,
   UseGuards,
@@ -31,6 +32,7 @@ import { CreateUpdateExchangeRateValidation } from "../validations/admin.validat
 import { Web3Service } from "@/modules/web3/web3.service";
 import { WithdrawTokenDto } from "@/modules/web3/web3.dto";
 import { WithdrawTokenValidation } from "@/modules/web3/web3.validation";
+import { QuidaxService } from "@/modules/quidax/quidax.service";
 
 @ApiTags("Admin")
 @ApiCookieAuth(_ADMIN_AUTH_COOKIE_NAME_)
@@ -42,11 +44,26 @@ export class AdministratorController {
     private readonly cacheService: CacheService,
     private readonly exchangeRateService: ExchangeRateService,
     private readonly web3Service: Web3Service,
+    private readonly quidaxService: QuidaxService,
   ) {}
 
   @Get("users")
   async users(@Req() req: AdminRequest) {
     return this.administratorService.getUsers(req);
+  }
+
+  @ApiOperation({ summary: "List all Quidax sub-accounts" })
+  @ApiQuery({ name: "page", required: false, type: Number })
+  @ApiQuery({ name: "per_page", required: false, type: Number })
+  @Get("quidax/sub-accounts")
+  async quidaxSubAccounts(
+    @Query("page") page?: string,
+    @Query("per_page") perPage?: string,
+  ) {
+    return this.quidaxService.listSubAccounts(
+      page ? parseInt(page, 10) : 1,
+      perPage ? parseInt(perPage, 10) : 20,
+    );
   }
 
   @ApiOperation({ summary: "Get a single user details" })

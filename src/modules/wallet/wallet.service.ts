@@ -1,7 +1,7 @@
 import { UserRequest } from "@/definitions";
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { CreateWalletDto } from "./wallet.dto";
-import { Wallet } from "./wallet.entity";
+import { Status, Wallet } from "./wallet.entity";
 import { Repository } from "typeorm";
 import { InjectRepository } from "@nestjs/typeorm";
 
@@ -39,10 +39,10 @@ export class WalletService {
 
     // Group by network and currency, keeping only the earliest wallet
     const uniqueWallets = new Map<string, Wallet>();
-    
+
     for (const wallet of wallets) {
       const key = `${wallet.network}_${wallet.currency}`;
-      
+
       if (!uniqueWallets.has(key)) {
         uniqueWallets.set(key, wallet);
       }

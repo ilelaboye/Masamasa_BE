@@ -22,4 +22,6 @@ export const ZohoMailTemplates = {
     "2d6f.7b2fb6a80c080b10.k1.d608a9c0-c856-11f0-87e5-aeb2e8ed505e.19ab03ff65c",
   forgot_password:
     "2d6f.7b2fb6a80c080b10.k1.83153ca0-d473-11f0-9139-fae9afc80e45.19affa08d6a",
+  coins_deposit_confirmed:
+    "2d6f.7b2fb6a80c080b10.k1.c1f29b71-85d0-11f1-93af-5254005934b4.19f8a005ea7",
 };

@@ -15,9 +15,16 @@ import {
   hashResourceSync,
   sendMailJetWithTemplate,
   sendZohoMailWithTemplate,
+  timeIsAfter,
   verifyHash,
 } from "@/core/utils";
 import { type UserRequest } from "@/definitions";
+import { toAppNetwork } from "@/modules/quidax/quidax.constants";
+import {
+  Status as WalletStatus,
+  Wallet,
+  WalletType,
+} from "@/modules/wallet/wallet.entity";
 import { BaseService } from "@/modules/base.service";
 import {
   BadRequestException,
@@ -28,7 +35,7 @@ import {
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { JwtService } from "@nestjs/jwt";
 import { InjectRepository } from "@nestjs/typeorm";
-import { DataSource, Repository } from "typeorm";
+import { DataSource, In, Repository } from "typeorm";
 import {
   CreateAccountDto,
   ForgotPasswordDto,
@@ -37,6 +44,7 @@ import {
   VerifyTokenDto,
 } from "../dto";
 import { CacheService } from "@/modules/global/cache-container/cache-container.service";
+import { QuidaxService } from "@/modules/quidax/quidax.service";
 import { User, Status, TokenType } from "../entities/user.entity";
 
 @Injectable()
@@ -45,9 +53,12 @@ export class AuthService extends BaseService {
     private readonly eventEmitter: EventEmitter2,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(Wallet)
+    private readonly walletRepository: Repository<Wallet>,
     private readonly dataSource: DataSource,
     private readonly jwtService: JwtService,
     private readonly cacheService: CacheService,
+    private readonly quidaxService: QuidaxService,
   ) {
     super();
   }
@@ -90,6 +101,7 @@ export class AuthService extends BaseService {
     // if(loginStaffDto.google_id ){
     // if user does not have google id but is trying to login with google id, save the google ID
     if (!fetch.google_id && loginStaffDto.google_id) {
+      //come back to verify the google_id with the google api to make sure it is valid
       await this.userRepository.update(
         { id: fetch.id },
         { google_id: loginStaffDto.google_id },
@@ -106,6 +118,32 @@ export class AuthService extends BaseService {
         throw new NotAcceptableException(
           "Incorrect details given, please try again",
         );
+
+      // MFA only applies to email+password logins, not Google sign-in
+      if (fetch.mfa) {
+        const otp = generateRandomNumberString(6);
+        await this.userRepository.update(
+          { id: fetch.id },
+          { remember_token: otp, token_created_at: new Date() },
+        );
+        sendZohoMailWithTemplate(
+          {
+            to: {
+              name: `${capitalizeString(fetch.first_name)} ${capitalizeString(fetch.last_name)}`,
+              email: fetch.email,
+            },
+          },
+          {
+            subject: "Login Verification Code",
+            templateId: ZohoMailTemplates.verify_email,
+            variables: {
+              firstName: capitalizeString(fetch.first_name),
+              token: otp,
+            },
+          },
+        );
+        return { mfa_required: true as const, email: fetch.email };
+      }
     }
 
     delete fetch.password;
@@ -277,23 +315,15 @@ export class AuthService extends BaseService {
             },
           },
         );
-        // sendMailJetWithTemplate(
-        //   {
-        //     to: {
-        //       name: `${capitalizeString(user.first_name)} ${capitalizeString(user.last_name)}`,
-        //       email,
-        //     },
-        //   },
-        //   {
-        //     subject: "Verification Code",
-        //     templateId: MAILJETTemplates.verify_email,
-        //     variables: {
-        //       firstName: capitalizeString(user.first_name),
-        //       token: rememberToken,
-        //     },
-        //   }
-        // );
       }
+
+      // Non-blocking — Quidax account + wallet addresses are provisioned
+      // after the DB commit so a slow/failing API never blocks registration.
+      // this.setupQuidaxAccount(user).catch(() => {});
+
+      // Non-blocking — Quidax sub-account + USDT/TRC20 address provisioned
+      // after DB commit so a slow/failing Quidax API never blocks registration.
+      await this.provisionQuidaxWallet(user).catch(() => {});
 
       const data = {
         user: userData,
@@ -432,5 +462,140 @@ export class AuthService extends BaseService {
 
     // this.userRepository.update({ id }, { remember_token: null });
     return { message: "Password reset successfully." };
+  }
+
+  async verifyMfaLogin(email: string, token: string) {
+    const fetch = await this.userRepository
+      .createQueryBuilder("user")
+      .addSelect("user.remember_token")
+      .addSelect("user.pin")
+      .where("user.email = :email", { email: email.toLowerCase() })
+      .getOne();
+
+    if (!fetch)
+      throw new NotAcceptableException("User with this email not found.");
+
+    if (fetch.remember_token !== token) {
+      throw new BadRequestException("Invalid or expired verification code.");
+    }
+
+    if (!fetch.token_created_at || timeIsAfter(fetch.token_created_at, 15)) {
+      throw new BadRequestException("Invalid or expired verification code.");
+    }
+
+    await this.userRepository.update(
+      { id: fetch.id },
+      { remember_token: null, token_created_at: null },
+    );
+
+    const user = { ...fetch, hasPin: fetch.pin ? true : false };
+    delete user.pin;
+
+    const jwtToken = this.jwtService.sign({ ...user });
+    return { user, token: jwtToken };
+  }
+
+  private async provisionQuidaxWallet(user: User): Promise<void> {
+    try {
+      const quidaxUser = await this.quidaxService.createSubAccount({
+        email: `${user.email}`,
+        first_name: user.first_name,
+        last_name: user.last_name,
+      });
+      console.log(`Quidax user created`, quidaxUser);
+      await this.userRepository.update(
+        { id: user.id },
+        { quidax_id: quidaxUser.id },
+      );
+
+      const addr = await this.quidaxService.createPaymentAddress(
+        quidaxUser.id,
+        "usdt",
+        "trc20",
+      );
+
+      if (!addr.address) return;
+
+      await this.walletRepository.save({
+        user_id: user.id,
+        currency: "usdt",
+        network: "TRON",
+        wallet_address: addr.address,
+        status: WalletStatus.active,
+        type: WalletType.quidax,
+      });
+    } catch (error) {
+      console.log(`errorr`, error);
+    }
+  }
+
+  private async setupQuidaxAccount(user: User): Promise<void> {
+    const quidaxUser = await this.quidaxService.createSubAccount({
+      email: user.email,
+      first_name: user.first_name,
+      last_name: user.last_name,
+      phone: user.phone,
+    });
+    await this.userRepository.update(
+      { id: user.id },
+      { quidax_id: quidaxUser.id },
+    );
+
+    const { addresses, unsupported } =
+      await this.quidaxService.createAllPaymentAddresses(quidaxUser.id);
+
+    await Promise.allSettled(
+      addresses.map(async (addr) => {
+        const appNetwork = toAppNetwork(addr.network, addr.currency);
+        const exists = await this.walletRepository.findOne({
+          where: {
+            user_id: user.id,
+            network: appNetwork,
+            currency: addr.currency,
+          },
+        });
+        if (exists) return;
+        if (!addr.address) return;
+        await this.walletRepository.save({
+          user_id: user.id,
+          currency: addr.currency,
+          network: appNetwork,
+          wallet_address: addr.address,
+          status: WalletStatus.active,
+          type: WalletType.quidax,
+        });
+      }),
+    );
+
+    if (unsupported.length === 0) return;
+
+    // Unsupported pairs are all EVM-compatible (BEP-20, Base, Polygon);
+    // they share the same HD-derived address as the user's ETH/BSC/Base wallets.
+    const evmWallet = await this.walletRepository.findOne({
+      where: {
+        user_id: user.id,
+        network: In(["ETHEREUM", "BINANCE", "BASE"]),
+        type: WalletType.quidax,
+      },
+    });
+    if (!evmWallet) return;
+
+    await Promise.allSettled(
+      unsupported.map(async ({ currency, network }) => {
+        const appNetwork = toAppNetwork(network ?? null, currency);
+        const exists = await this.walletRepository.findOne({
+          where: { user_id: user.id, network: appNetwork, currency },
+        });
+        if (exists) return;
+        await this.walletRepository.save({
+          user_id: user.id,
+          currency,
+          network: appNetwork,
+          wallet_address: evmWallet.wallet_address,
+          status: WalletStatus.active,
+          type: WalletType.self_custodian,
+        });
+      }),
+    );
   }
 }

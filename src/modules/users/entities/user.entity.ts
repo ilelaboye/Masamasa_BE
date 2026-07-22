@@ -47,6 +47,9 @@ export class User {
   })
   status: Status;
 
+  @Column({ default: false })
+  mfa: boolean;
+
   @Column({
     type: "varchar",
     default: KycStatus.none,
@@ -93,6 +96,9 @@ export class User {
   country: string;
 
   @Column({ nullable: true })
+  quidax_id?: string;
+
+  @Column({ nullable: true })
   device_id: string;
 
   @Column({ nullable: true })
@@ -103,6 +109,9 @@ export class User {
 
   @Column({ type: "timestamp", nullable: true })
   email_verified_at?: Date | null;
+
+  @Column({ type: "timestamp", nullable: true })
+  token_created_at?: Date | null;
 
   @DeleteDateColumn({ type: "timestamp", nullable: true, select: false })
   deleted_at?: Date | null;

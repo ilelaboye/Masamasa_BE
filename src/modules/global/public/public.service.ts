@@ -1,6 +1,5 @@
 import { appConfig } from "@/config";
 import { MAILJETTemplates, ZohoMailTemplates } from "@/constants";
-import { capitalizeString } from "@/core/helpers";
 import {
   axiosClient,
   getBanks,
@@ -8,11 +7,11 @@ import {
   sendZohoMailWithTemplate,
 } from "@/core/utils";
 import { User } from "@/modules/users/entities/user.entity";
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { BankAccountVerificationDto, TransactionWebhookDto } from "./dto";
-import { Wallet } from "@/modules/wallet/wallet.entity";
+import { Status, Wallet } from "@/modules/wallet/wallet.entity";
 import {
   TransactionEntityType,
   TransactionModeType,
@@ -30,9 +29,13 @@ import {
   AccessTokenType,
 } from "../bank-verification/entities/access-token.entity";
 import { CronJob } from "../jobs/cron/cron.job";
+import { toAppNetwork } from "@/modules/quidax/quidax.constants";
+import { capitalizeString } from "@/core/helpers";
 
 @Injectable()
 export class PublicService {
+  private readonly logger = new Logger(PublicService.name);
+
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
@@ -46,10 +49,11 @@ export class PublicService {
     private readonly accessTokenRepository: Repository<AccessToken>,
     private readonly exchangeRateService: ExchangeRateService,
     private readonly notificationsService: NotificationsService,
-    private readonly cronJob: CronJob
-  ) { }
+    private readonly cronJob: CronJob,
+  ) {}
 
   async transactionWebhook(transactionWebhook: TransactionWebhookDto) {
+    console.log("transactionWebhook", transactionWebhook);
     const { address, network, amount, token_symbol, hash } = transactionWebhook;
 
     const find = await this.webhookRepository.findOne({
@@ -68,11 +72,12 @@ export class PublicService {
 
     const wallet = await this.walletRepository.findOne({
       where: { wallet_address: address },
+      relations: ["user"],
     });
     if (!wallet) throw new BadRequestException("Wallet address not found");
 
     const rate = await this.exchangeRateService.getCurrencyActiveRate(
-      token_symbol.toLowerCase()
+      token_symbol.toLowerCase(),
     );
     let exchange = 0;
     console.log("rate", rate);
@@ -82,7 +87,7 @@ export class PublicService {
     console.log("exchange", exchange);
     let coin_price = 0;
     const price: { status: boolean; price: any } = await this.getPrice(
-      `${token_symbol}`
+      `${token_symbol}`,
     );
     console.log("price", price);
     if (price.status) {
@@ -105,6 +110,26 @@ export class PublicService {
       coin_exchange_rate: coin_price,
     } as unknown as Transactions);
 
+    sendZohoMailWithTemplate(
+      {
+        to: {
+          name: `${capitalizeString(wallet.user.first_name)}`,
+          email: wallet.user.email,
+        },
+      },
+      {
+        subject: `${token_symbol} Deposit Confirmed`,
+        templateId: ZohoMailTemplates.coins_deposit_confirmed,
+        variables: {
+          firstName: capitalizeString(wallet.user.first_name),
+          coin: token_symbol,
+          network: network,
+          amount: `NGN ${amount}`,
+          address: address,
+        },
+      },
+    );
+
     this.notificationsService.create({
       userId: wallet.user_id,
       message: `Your deposit of ${amount} ${token_symbol} is confirmed`,
@@ -126,7 +151,7 @@ export class PublicService {
         if (webhook.data.status == "FAILED") {
           this.transactionsRepository.update(
             { id: transaction.id },
-            { status: TransactionStatusType.failed }
+            { status: TransactionStatusType.failed },
           );
         }
       }
@@ -157,7 +182,7 @@ export class PublicService {
             {
               status: TransactionStatusType.success,
               metadata: { ...transaction.metadata, nomba_resp: webhook.data },
-            }
+            },
           );
         } else if (
           webhook.event_type == "payout_failed" ||
@@ -168,7 +193,7 @@ export class PublicService {
             {
               status: TransactionStatusType.failed,
               metadata: { ...transaction.metadata, nomba_resp: webhook.data },
-            }
+            },
           );
         }
       }
@@ -188,13 +213,13 @@ export class PublicService {
     // }
     try {
       const coin = await axios.get(
-        `https://api.coingecko.com/api/v3/search?query=${symbol}`
+        `https://api.coingecko.com/api/v3/search?query=${symbol}`,
       );
       console.log("coin", coin.data);
       // return coin;
       const api_symbol = coin.data.coins[0].api_symbol;
       const responses = await axios.get(
-        `https://api.coingecko.com/api/v3/simple/price?ids=${api_symbol}&vs_currencies=usd`
+        `https://api.coingecko.com/api/v3/simple/price?ids=${api_symbol}&vs_currencies=usd`,
       );
       return { status: true, price: responses.data[api_symbol].usd };
     } catch (error) {
@@ -238,7 +263,7 @@ export class PublicService {
             page: 1,
             price_change_percentage: "24h",
           },
-        }
+        },
       );
 
       // Transform response into your desired format
@@ -284,7 +309,7 @@ export class PublicService {
               Authorization: `Bearer ${accessToken.token}`,
               accountId: appConfig.NOMBA_ACCOUNT_ID,
             },
-          }
+          },
         );
 
         console.log("nomba banks", resp);
@@ -362,7 +387,7 @@ export class PublicService {
             accountId: appConfig.NOMBA_ACCOUNT_ID,
             Authorization: `Bearer ${accessToken!.token}`,
           },
-        }
+        },
       );
       console.log("Nomba bank lookup", res);
       return {
@@ -392,7 +417,7 @@ export class PublicService {
             account_number: accountNumber,
           },
           headers: { "x-api-key": `${appConfig.CLAN_TOKEN}` },
-        }
+        },
       );
       if (!response.status)
         throw new BadRequestException("Account number verification failed");
@@ -407,11 +432,359 @@ export class PublicService {
   }
 
   async verifyAccountNumber(
-    bankAccountVerificationDto: BankAccountVerificationDto
+    bankAccountVerificationDto: BankAccountVerificationDto,
   ) {
     const { accountNumber, bankCode, bankName } = bankAccountVerificationDto;
     return this.verifyAccountNumberFromNomba(accountNumber, bankCode, bankName);
     // return this.verifyAccountNumberFromClan(accountNumber, bankCode, bankName);
+  }
+
+  async test() {
+    try {
+      const res = await axios.get(
+        `https://openapi.quidax.io/exchange-open-api/api/v1/users/ujhoruuq/wallets/usdt/address`,
+
+        {
+          headers: {
+            Authorization: `Bearer ZSKTsErViB1iY2nfVgzS6nv26kJLAjqL`,
+            "Content-Type": "application/json",
+          },
+          timeout: 15000,
+        },
+      );
+      console.log("quidax test", res);
+      return res;
+    } catch (error) {
+      console.log("quidax test error", error.response?.data);
+      console.log("quidax test error", error);
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async handleQuidaxWebhook(payload: any): Promise<void> {
+    const { event, data } = payload ?? {};
+    if (!event || !data) return;
+
+    switch (event) {
+      case "wallet.address.generated":
+        return this.handleWalletAddressGenerated(data);
+      case "wallet.updated":
+        // Balance change event — fires on incoming deposit or outgoing transfer.
+        // Deposit records are created by deposit.* events; we only audit-log here.
+        return this.handleWalletUpdated(data);
+      case "deposit.transaction.confirmation":
+        return this.handleDepositTransactionConfirmation(data);
+      case "deposit.successful":
+        return this.handleDepositSuccessful(data);
+      case "deposit.on_hold":
+        return this.handleDepositOnHold(data);
+      case "deposit.failed_aml":
+      case "deposit.rejected":
+        return this.handleDepositFailed(data, event);
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private async handleWalletAddressGenerated(data: any): Promise<void> {
+    const { currency, address, network, user: quidaxUser } = data;
+    console.log(currency, address, network, quidaxUser);
+    if (!address || !quidaxUser?.id) return;
+
+    console.log(
+      `[QuidaxWebhook] wallet.address.generated — user: ${quidaxUser.id}, currency: ${currency}, network: ${network}, address: ${address}`,
+    );
+
+    const user = await this.userRepository.findOne({
+      where: { quidax_id: quidaxUser.id },
+    });
+    if (!user) return;
+
+    // Convert Quidax network id (e.g. "trc20") to app format (e.g. "TRON")
+    const appNetwork = toAppNetwork(network, currency);
+
+    // Idempotency key is (user_id, network, currency) — NOT wallet_address,
+    // because EVM-compatible chains (Ethereum, BSC, Base, Polygon) share the
+    // same address, so checking by address alone would skip valid records.
+    const existingWallet = await this.walletRepository.findOne({
+      where: {
+        user_id: user.id,
+        network: appNetwork,
+        currency,
+        status: Status.active,
+      },
+    });
+
+    if (existingWallet) {
+      // Record already exists (created by API response during registration/backfill).
+      // Idempotent: only update if the address slot is still empty.
+      console.log(
+        `[QuidaxWebhook] wallet already exists for user ${user.id} (${currency}/${appNetwork})`,
+      );
+      if (!existingWallet.wallet_address) {
+        await this.walletRepository.update(
+          { id: existingWallet.id },
+          { wallet_address: address },
+        );
+      }
+    } else {
+      await this.walletRepository.save({
+        user_id: user.id,
+        network: appNetwork,
+        currency,
+        wallet_address: address,
+        status: Status.active,
+      });
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private handleWalletUpdated(data: any): void {
+    // wallet.updated fires on any balance change (deposit received, transfer sent).
+    // We do not write transaction records here — deposit.* events own that.
+    this.logger.log(
+      `wallet.updated — user: ${data?.user?.id}, currency: ${data?.currency}, balance: ${data?.balance}`,
+    );
+  }
+
+  // Extracts the consistent fields from all deposit event payloads.
+  // Idempotency key is data.id (Quidax deposit record ID — same value across
+  // deposit.transaction.confirmation, deposit.successful, deposit.on_hold, etc.
+  // for the same physical deposit).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private extractDepositFields(data: any) {
+    return {
+      depositId: data.id as string, // idempotency key
+      txid: data.txid as string, // blockchain hash (metadata only)
+      currency: data.currency as string,
+      amount: data.amount as string,
+      address: data.payment_address?.address as string, // the user's deposit address
+      network: data.payment_address?.network as string,
+    };
+  }
+
+  // Incoming TX detected on-chain — not yet confirmed.
+  // Creates a processing transaction so the user sees the pending deposit immediately.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private async handleDepositTransactionConfirmation(data: any): Promise<void> {
+    const { depositId, currency, amount, address, network } =
+      this.extractDepositFields(data);
+    if (!depositId || !address) return;
+
+    // Idempotency — skip if deposit.successful already beat us to it
+    const existingWebhook = await this.webhookRepository.findOne({
+      where: { hash: depositId },
+    });
+    if (existingWebhook) return;
+
+    const wallet = await this.walletRepository.findOne({
+      where: { wallet_address: address },
+    });
+    if (!wallet) return;
+
+    const wb = await this.webhookRepository.save({
+      address,
+      entity_type: WebhookEntityType.deposit,
+      hash: depositId,
+      metadata: data,
+    });
+
+    await this.transactionsRepository.save({
+      user_id: wallet.user_id,
+      network,
+      coin_amount: parseFloat(amount) || 0,
+      wallet_address: address,
+      mode: TransactionModeType.credit,
+      entity_type: TransactionEntityType.deposit,
+      metadata: data,
+      currency,
+      entity_id: wb.id,
+      dollar_amount: 0,
+      amount: 0,
+      coin_exchange_rate: 0,
+      status: TransactionStatusType.processing,
+    } as unknown as Transactions);
+
+    this.notificationsService.create({
+      userId: wallet.user_id,
+      message: `Incoming ${currency.toUpperCase()} deposit of ${amount} detected — awaiting blockchain confirmation`,
+      tag: NotificationTag.deposit,
+      metadata: data,
+    });
+  }
+
+  // Blockchain has confirmed the deposit.
+  // If deposit.transaction.confirmation already ran → upgrade the processing
+  // transaction to success with real amounts.
+  // If not (confirmation missed) → create a fresh success transaction.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private async handleDepositSuccessful(data: any): Promise<void> {
+    const { depositId, currency, amount, address, network } =
+      this.extractDepositFields(data);
+    if (!depositId || !address) return;
+
+    const wallet = await this.walletRepository.findOne({
+      where: { wallet_address: address },
+    });
+    if (!wallet) return;
+
+    const rate = await this.exchangeRateService.getCurrencyActiveRate(
+      currency.toLowerCase(),
+    );
+    const exchange = rate?.rate ?? 0;
+    const priceResult = await this.getPrice(currency);
+    const coinPrice = priceResult.status ? (priceResult.price ?? 0) : 0;
+    const coinAmount = parseFloat(amount) || 0;
+    const dollarAmount = coinPrice * coinAmount;
+
+    const existingWebhook = await this.webhookRepository.findOne({
+      where: { hash: depositId },
+    });
+
+    if (existingWebhook) {
+      // Upgrade the processing record created by deposit.transaction.confirmation
+      await this.transactionsRepository
+        .createQueryBuilder()
+        .update(Transactions)
+        .set({
+          status: TransactionStatusType.success,
+          dollar_amount: dollarAmount,
+          amount: dollarAmount * exchange,
+          coin_exchange_rate: coinPrice,
+          exchange_rate_id: rate ? rate.id : null,
+          metadata: data,
+        })
+        .where("entity_id = :entityId", { entityId: existingWebhook.id })
+        .andWhere("entity_type = :type", {
+          type: TransactionEntityType.deposit,
+        })
+        .andWhere("status = :status", {
+          status: TransactionStatusType.processing,
+        })
+        .execute();
+    } else {
+      // Confirmation event was missed — create a fresh success transaction
+      const wb = await this.webhookRepository.save({
+        address,
+        entity_type: WebhookEntityType.deposit,
+        hash: depositId,
+        metadata: data,
+      });
+
+      await this.transactionsRepository.save({
+        user_id: wallet.user_id,
+        network,
+        coin_amount: coinAmount,
+        wallet_address: address,
+        mode: TransactionModeType.credit,
+        entity_type: TransactionEntityType.deposit,
+        metadata: data,
+        exchange_rate_id: rate ? rate.id : null,
+        currency,
+        entity_id: wb.id,
+        dollar_amount: dollarAmount,
+        amount: dollarAmount * exchange,
+        coin_exchange_rate: coinPrice,
+        status: TransactionStatusType.success,
+      } as unknown as Transactions);
+    }
+
+    this.notificationsService.create({
+      userId: wallet.user_id,
+      message: `Your deposit of ${amount} ${currency.toUpperCase()} has been confirmed`,
+      tag: NotificationTag.deposit,
+      metadata: data,
+    });
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private async handleDepositOnHold(data: any): Promise<void> {
+    const { depositId, currency, amount, address, network } =
+      this.extractDepositFields(data);
+    if (!depositId || !address) return;
+
+    const wallet = await this.walletRepository.findOne({
+      where: { wallet_address: address },
+    });
+
+    const existingWebhook = await this.webhookRepository.findOne({
+      where: { hash: depositId },
+    });
+
+    if (existingWebhook) {
+      // Downgrade processing → pending (confirmation fired but deposit is now on_hold)
+      if (wallet) {
+        await this.transactionsRepository
+          .createQueryBuilder()
+          .update(Transactions)
+          .set({ status: TransactionStatusType.pending, metadata: data })
+          .where("entity_id = :entityId", { entityId: existingWebhook.id })
+          .andWhere("entity_type = :type", {
+            type: TransactionEntityType.deposit,
+          })
+          .execute();
+      }
+    } else {
+      // No prior confirmation — create webhook + pending transaction
+      const wb = await this.webhookRepository.save({
+        address,
+        entity_type: WebhookEntityType.deposit,
+        hash: depositId,
+        metadata: data,
+      });
+
+      if (wallet) {
+        await this.transactionsRepository.save({
+          user_id: wallet.user_id,
+          network,
+          coin_amount: parseFloat(amount) || 0,
+          wallet_address: address,
+          mode: TransactionModeType.credit,
+          entity_type: TransactionEntityType.deposit,
+          metadata: data,
+          currency,
+          entity_id: wb.id,
+          dollar_amount: 0,
+          amount: 0,
+          coin_exchange_rate: 0,
+          status: TransactionStatusType.pending,
+        } as unknown as Transactions);
+      }
+    }
+
+    if (wallet) {
+      this.notificationsService.create({
+        userId: wallet.user_id,
+        message: `Your ${currency.toUpperCase()} deposit of ${amount} is on hold — amount is below the minimum deposit threshold`,
+        tag: NotificationTag.deposit,
+        metadata: data,
+      });
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private async handleDepositFailed(data: any, event: string): Promise<void> {
+    const { depositId, currency, amount, address, txid } =
+      this.extractDepositFields(data);
+
+    this.logger.warn(
+      `Deposit ${event} — depositId: ${depositId}, txid: ${txid}, address: ${address}, currency: ${currency}, amount: ${amount}`,
+    );
+
+    // Update the processing transaction to failed if confirmation had already fired
+    const existingWebhook = await this.webhookRepository.findOne({
+      where: { hash: depositId },
+    });
+    if (existingWebhook) {
+      await this.transactionsRepository
+        .createQueryBuilder()
+        .update(Transactions)
+        .set({ status: TransactionStatusType.failed, metadata: data })
+        .where("entity_id = :entityId", { entityId: existingWebhook.id })
+        .andWhere("entity_type = :type", {
+          type: TransactionEntityType.deposit,
+        })
+        .execute();
+    }
   }
 
   async testMail() {
@@ -429,7 +802,7 @@ export class PublicService {
         variables: {
           token: "1234",
         },
-      }
+      },
     );
   }
 }

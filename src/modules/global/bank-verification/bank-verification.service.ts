@@ -50,15 +50,18 @@ export class BankVerificationService {
       delete existingVerification.hashed_value;
 
       if (verify) {
-        const detailsVerification = this.verifyUserDetailsWithBvn(
-          existingVerification.metadata,
-          bvnUserDto,
+        throw new BadRequestException(
+          "BVN has already been verified for another user",
         );
-        delete existingVerification.hashed_value;
+        // const detailsVerification = this.verifyUserDetailsWithBvn(
+        //   existingVerification.metadata,
+        //   bvnUserDto,
+        // );
+        // delete existingVerification.hashed_value;
 
-        if (!detailsVerification)
-          return { success: false, data: existingVerification };
-        return { success: true, data: existingVerification };
+        // if (!detailsVerification)
+        //   return { success: false, data: existingVerification };
+        // return { success: true, data: existingVerification };
       }
     }
 
@@ -81,6 +84,14 @@ export class BankVerificationService {
       delete response.data.number;
       delete response.data.base64Image;
 
+      const detailsVerification = this.verifyUserDetailsWithBvn(
+        response.data,
+        bvnUserDto,
+      );
+      // if (!detailsVerification) return { success: false, data: verification };
+      if (!detailsVerification)
+        throw new BadRequestException("BVN details do not match user details");
+
       const verification = this.bankVerificationRepository.create({
         type: BankVerificationType.bvn,
         value: bvnExcerpt,
@@ -90,12 +101,6 @@ export class BankVerificationService {
 
       await this.bankVerificationRepository.save(verification);
       delete verification.hashed_value;
-
-      const detailsVerification = this.verifyUserDetailsWithBvn(
-        response.data,
-        bvnUserDto,
-      );
-      if (!detailsVerification) return { success: false, data: verification };
 
       return { success: true, data: verification };
     } catch (error) {

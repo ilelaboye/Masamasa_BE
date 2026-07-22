@@ -10,3 +10,4 @@ export * from "./exchange-rates/exchange-rates.module";
 export * from "./transfers/transfers.module";
 export * from "./purchases/purchases.module";
 export * from "./web3/web3.module";
+export * from "./quidax/quidax.module";
