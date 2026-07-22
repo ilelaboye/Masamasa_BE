@@ -30,6 +30,7 @@ import {
   ForgotPasswordValidation,
   LoginValidation,
   ResetPasswordValidation,
+  VerifyMfaValidation,
 } from "../validations";
 
 @ApiTags("User Authentication")
@@ -47,7 +48,16 @@ export class AuthController {
   ) {
     res.clearCookie(_AUTH_COOKIE_NAME_);
 
-    const { token, user } = await this.authService.login(loginStaffDto, req);
+    const result = await this.authService.login(loginStaffDto, req);
+
+    if ("mfa_required" in result) {
+      return {
+        data: { mfa_required: true, email: result.email },
+        message: "Verification code sent to your email.",
+      };
+    }
+
+    const { token, user } = result;
 
     if (!token || !user) {
       res.status(HttpStatus.NOT_ACCEPTABLE).json({
@@ -58,9 +68,19 @@ export class AuthController {
     const cookieData = { token, user: extractUserForCookie(user) };
     res.cookie(_AUTH_COOKIE_NAME_, encryptData(cookieData), CookieOptions);
 
-    return {
-      data: user,
-    };
+    return { data: user };
+  }
+
+  @UsePipes(new JoiValidationPipe(VerifyMfaValidation))
+  @Post("verify-mfa")
+  async verifyMfa(
+    @Body() body: { email: string; token: string },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { token, user } = await this.authService.verifyMfaLogin(body.email, body.token);
+    const cookieData = { token, user: extractUserForCookie(user) };
+    res.cookie(_AUTH_COOKIE_NAME_, encryptData(cookieData), CookieOptions);
+    return { data: user };
   }
 
   @UsePipes(new JoiValidationPipe(CreateAccountValidation))

@@ -93,11 +93,11 @@ export const QUIDAX_CURRENCIES: Array<{ currency: string; network?: string }> =
     { currency: "usdt", network: "erc20" },
     { currency: "usdt", network: "bep20" },
     { currency: "usdt", network: "trc20" },
-    { currency: "usdt", network: "ton" },
-    { currency: "usdt", network: "optimism" },
-    { currency: "usdt", network: "celo" },
-    { currency: "usdt", network: "lisk" },
-    { currency: "usdt", network: "arbitrum" },
+    // { currency: "usdt", network: "ton" },
+    // { currency: "usdt", network: "optimism" },
+    // { currency: "usdt", network: "celo" },
+    // { currency: "usdt", network: "lisk" },
+    // { currency: "usdt", network: "arbitrum" },
     { currency: "usdt", network: "pol" },
     { currency: "usdt", network: "sol" },
 
@@ -110,8 +110,8 @@ export const QUIDAX_CURRENCIES: Array<{ currency: string; network?: string }> =
     { currency: "eth" },
     { currency: "eth", network: "bep20" },
     { currency: "eth", network: "base" },
-    { currency: "eth", network: "lisk" },
-    { currency: "eth", network: "arbitrum" },
+    // { currency: "eth", network: "lisk" },
+    // { currency: "eth", network: "arbitrum" },
 
     // ── ADA: CARDANO (native) ────────────────────────────────────────────────
     { currency: "ada" },

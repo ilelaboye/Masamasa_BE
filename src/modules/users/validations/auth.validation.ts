@@ -32,6 +32,11 @@ export const ConfirmUserEmailValidation = Joi.object().keys({
   type: Joi.string().required(),
 });
 
+export const VerifyMfaValidation = Joi.object().keys({
+  email: Joi.string().email().required(),
+  token: Joi.string().required(),
+});
+
 export const WithdrawalValidation = Joi.object().keys({
   accountNumber: Joi.string().max(10).required().label("Account number"),
   bankCode: Joi.string().max(50).required().label("Bank code"),

@@ -784,4 +784,12 @@ export class UsersService extends BaseService {
       message: "Account deletion request has been cancelled.",
     };
   }
+
+  async updateMfa(req: UserRequest) {
+    const user = await this.userRepository.findOne({ where: { id: req.user.id } });
+    if (!user) throw new UnauthorizedException("User not found");
+    const mfa = !user.mfa;
+    await this.userRepository.update({ id: req.user.id }, { mfa });
+    return { message: `MFA has been ${mfa ? "enabled" : "disabled"}.` };
+  }
 }

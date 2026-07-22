@@ -15,6 +15,7 @@ import {
   hashResourceSync,
   sendMailJetWithTemplate,
   sendZohoMailWithTemplate,
+  timeIsAfter,
   verifyHash,
 } from "@/core/utils";
 import { type UserRequest } from "@/definitions";
@@ -100,6 +101,7 @@ export class AuthService extends BaseService {
     // if(loginStaffDto.google_id ){
     // if user does not have google id but is trying to login with google id, save the google ID
     if (!fetch.google_id && loginStaffDto.google_id) {
+      //come back to verify the google_id with the google api to make sure it is valid
       await this.userRepository.update(
         { id: fetch.id },
         { google_id: loginStaffDto.google_id },
@@ -116,6 +118,32 @@ export class AuthService extends BaseService {
         throw new NotAcceptableException(
           "Incorrect details given, please try again",
         );
+
+      // MFA only applies to email+password logins, not Google sign-in
+      if (fetch.mfa) {
+        const otp = generateRandomNumberString(6);
+        await this.userRepository.update(
+          { id: fetch.id },
+          { remember_token: otp, token_created_at: new Date() },
+        );
+        sendZohoMailWithTemplate(
+          {
+            to: {
+              name: `${capitalizeString(fetch.first_name)} ${capitalizeString(fetch.last_name)}`,
+              email: fetch.email,
+            },
+          },
+          {
+            subject: "Login Verification Code",
+            templateId: ZohoMailTemplates.verify_email,
+            variables: {
+              firstName: capitalizeString(fetch.first_name),
+              token: otp,
+            },
+          },
+        );
+        return { mfa_required: true as const, email: fetch.email };
+      }
     }
 
     delete fetch.password;
@@ -262,10 +290,6 @@ export class AuthService extends BaseService {
 
       await queryRunner.commitTransaction();
 
-      // Non-blocking — Quidax account + wallet addresses are provisioned
-      // after the DB commit so a slow/failing API never blocks registration.
-      this.setupQuidaxAccount(user).catch(() => {});
-
       const userData = {
         first_name: user.first_name,
         last_name: user.last_name,
@@ -308,6 +332,14 @@ export class AuthService extends BaseService {
         //   }
         // );
       }
+
+      // Non-blocking — Quidax account + wallet addresses are provisioned
+      // after the DB commit so a slow/failing API never blocks registration.
+      // this.setupQuidaxAccount(user).catch(() => {});
+
+      // Non-blocking — Quidax sub-account + USDT/TRC20 address provisioned
+      // after DB commit so a slow/failing Quidax API never blocks registration.
+      await this.provisionQuidaxWallet(user).catch(() => {});
 
       const data = {
         user: userData,
@@ -446,6 +478,68 @@ export class AuthService extends BaseService {
 
     // this.userRepository.update({ id }, { remember_token: null });
     return { message: "Password reset successfully." };
+  }
+
+  async verifyMfaLogin(email: string, token: string) {
+    const fetch = await this.userRepository
+      .createQueryBuilder("user")
+      .addSelect("user.remember_token")
+      .addSelect("user.pin")
+      .where("user.email = :email", { email: email.toLowerCase() })
+      .getOne();
+
+    if (!fetch)
+      throw new NotAcceptableException("User with this email not found.");
+
+    if (fetch.remember_token !== token) {
+      throw new BadRequestException("Invalid or expired verification code.");
+    }
+
+    if (!fetch.token_created_at || timeIsAfter(fetch.token_created_at, 15)) {
+      throw new BadRequestException("Invalid or expired verification code.");
+    }
+
+    await this.userRepository.update(
+      { id: fetch.id },
+      { remember_token: null, token_created_at: null },
+    );
+
+    const user = { ...fetch, hasPin: fetch.pin ? true : false };
+    delete user.pin;
+
+    const jwtToken = this.jwtService.sign({ ...user });
+    return { user, token: jwtToken };
+  }
+
+  private async provisionQuidaxWallet(user: User): Promise<void> {
+    console.log(`Call Quidax`, user);
+    const quidaxUser = await this.quidaxService.createSubAccount({
+      email: `quidax9+${user.email}`,
+      first_name: user.first_name,
+      last_name: user.last_name,
+      phone: user.phone,
+    });
+    await this.userRepository.update(
+      { id: user.id },
+      { quidax_id: quidaxUser.id },
+    );
+
+    const addr = await this.quidaxService.createPaymentAddress(
+      quidaxUser.id,
+      "usdt",
+      "trc20",
+    );
+
+    if (!addr.address) return;
+
+    await this.walletRepository.save({
+      user_id: user.id,
+      currency: "usdt",
+      network: "TRON",
+      wallet_address: addr.address,
+      status: WalletStatus.active,
+      type: WalletType.quidax,
+    });
   }
 
   private async setupQuidaxAccount(user: User): Promise<void> {

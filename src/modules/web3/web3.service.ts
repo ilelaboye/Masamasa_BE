@@ -201,6 +201,7 @@ export class Web3Service {
       const existWalletETH = await this.walletRepository.findOne({
         where: { wallet_address: childWallet.address },
       });
+      console.log("childWallet.address", childWallet.address);
       const existWalletSOL = await this.walletRepository.findOne({
         where: { wallet_address: solChildWallet },
       });
@@ -246,15 +247,23 @@ export class Web3Service {
       }
 
       if (!existWalletETH) {
-        // EVM chains all share the same derived address — save one record per pair
         const EVM_NETWORKS = new Set([
-          "erc20", "bep20", "base", "optimism", "celo", "lisk", "arbitrum", "pol",
+          "erc20",
+          "bep20",
+          "base",
+          "optimism",
+          "celo",
+          "lisk",
+          "arbitrum",
+          "pol",
         ]);
         const EVM_NATIVE = new Set(["eth", "bnb"]);
         const evmPairs = QUIDAX_CURRENCIES.filter(({ currency, network }) =>
           network ? EVM_NETWORKS.has(network) : EVM_NATIVE.has(currency),
         );
+        console.log("evmPairs", evmPairs);
         for (const { currency, network } of evmPairs) {
+          console.log(`Creating wallet for ${currency} - ${network}`);
           const appNetwork = toAppNetwork(network, currency);
           await this.walletRepository.save(
             this.walletRepository.create({
