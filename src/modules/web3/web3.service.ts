@@ -247,6 +247,13 @@ export class Web3Service {
       }
 
       if (!existWalletETH) {
+        const base = this.walletRepository.create({
+          user: req.user,
+          network: "Base",
+          currency: "ETH",
+          wallet_address: childWallet.address,
+        });
+        await this.walletRepository.save(base);
         const EVM_NETWORKS = new Set([
           "erc20",
           "bep20",

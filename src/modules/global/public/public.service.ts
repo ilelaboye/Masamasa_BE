@@ -30,6 +30,7 @@ import {
 } from "../bank-verification/entities/access-token.entity";
 import { CronJob } from "../jobs/cron/cron.job";
 import { toAppNetwork } from "@/modules/quidax/quidax.constants";
+import { capitalizeString } from "@/core/helpers";
 
 @Injectable()
 export class PublicService {
@@ -52,6 +53,7 @@ export class PublicService {
   ) {}
 
   async transactionWebhook(transactionWebhook: TransactionWebhookDto) {
+    console.log("transactionWebhook", transactionWebhook);
     const { address, network, amount, token_symbol, hash } = transactionWebhook;
 
     const find = await this.webhookRepository.findOne({
@@ -70,6 +72,7 @@ export class PublicService {
 
     const wallet = await this.walletRepository.findOne({
       where: { wallet_address: address },
+      relations: ["user"],
     });
     if (!wallet) throw new BadRequestException("Wallet address not found");
 
@@ -106,6 +109,26 @@ export class PublicService {
       amount: coin_price * amount * exchange,
       coin_exchange_rate: coin_price,
     } as unknown as Transactions);
+
+    sendZohoMailWithTemplate(
+      {
+        to: {
+          name: `${capitalizeString(wallet.user.first_name)}`,
+          email: wallet.user.email,
+        },
+      },
+      {
+        subject: `${token_symbol} Deposit Confirmed`,
+        templateId: ZohoMailTemplates.coins_deposit_confirmed,
+        variables: {
+          firstName: capitalizeString(wallet.user.first_name),
+          coin: token_symbol,
+          network: network,
+          amount: `NGN ${amount}`,
+          address: address,
+        },
+      },
+    );
 
     this.notificationsService.create({
       userId: wallet.user_id,

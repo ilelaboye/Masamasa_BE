@@ -315,22 +315,6 @@ export class AuthService extends BaseService {
             },
           },
         );
-        // sendMailJetWithTemplate(
-        //   {
-        //     to: {
-        //       name: `${capitalizeString(user.first_name)} ${capitalizeString(user.last_name)}`,
-        //       email,
-        //     },
-        //   },
-        //   {
-        //     subject: "Verification Code",
-        //     templateId: MAILJETTemplates.verify_email,
-        //     variables: {
-        //       firstName: capitalizeString(user.first_name),
-        //       token: rememberToken,
-        //     },
-        //   }
-        // );
       }
 
       // Non-blocking — Quidax account + wallet addresses are provisioned
@@ -512,34 +496,37 @@ export class AuthService extends BaseService {
   }
 
   private async provisionQuidaxWallet(user: User): Promise<void> {
-    console.log(`Call Quidax`, user);
-    const quidaxUser = await this.quidaxService.createSubAccount({
-      email: `quidax9+${user.email}`,
-      first_name: user.first_name,
-      last_name: user.last_name,
-      phone: user.phone,
-    });
-    await this.userRepository.update(
-      { id: user.id },
-      { quidax_id: quidaxUser.id },
-    );
+    try {
+      const quidaxUser = await this.quidaxService.createSubAccount({
+        email: `${user.email}`,
+        first_name: user.first_name,
+        last_name: user.last_name,
+      });
+      console.log(`Quidax user created`, quidaxUser);
+      await this.userRepository.update(
+        { id: user.id },
+        { quidax_id: quidaxUser.id },
+      );
 
-    const addr = await this.quidaxService.createPaymentAddress(
-      quidaxUser.id,
-      "usdt",
-      "trc20",
-    );
+      const addr = await this.quidaxService.createPaymentAddress(
+        quidaxUser.id,
+        "usdt",
+        "trc20",
+      );
 
-    if (!addr.address) return;
+      if (!addr.address) return;
 
-    await this.walletRepository.save({
-      user_id: user.id,
-      currency: "usdt",
-      network: "TRON",
-      wallet_address: addr.address,
-      status: WalletStatus.active,
-      type: WalletType.quidax,
-    });
+      await this.walletRepository.save({
+        user_id: user.id,
+        currency: "usdt",
+        network: "TRON",
+        wallet_address: addr.address,
+        status: WalletStatus.active,
+        type: WalletType.quidax,
+      });
+    } catch (error) {
+      console.log(`errorr`, error);
+    }
   }
 
   private async setupQuidaxAccount(user: User): Promise<void> {
