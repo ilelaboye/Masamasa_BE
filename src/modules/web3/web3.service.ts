@@ -291,6 +291,14 @@ export class Web3Service {
           wallet_address: solChildWallet,
         });
         await this.walletRepository.save(sol);
+
+        const usdt = this.walletRepository.create({
+          user: req.user,
+          network: "SOLANA",
+          currency: "USDT",
+          wallet_address: solChildWallet,
+        });
+        await this.walletRepository.save(usdt);
       }
 
       if (!existWalletTRX) {
@@ -1397,13 +1405,13 @@ export class Web3Service {
           ADA: BNBADA,
         },
         sol: {
-          SOL: solBalance ,
+          SOL: solBalance,
           USDT: solUSDT,
           USDC: solUSDC,
         },
         TRX: {
           TRX: trxBalance,
-          USDT: trxUSDTBalance ,
+          USDT: trxUSDTBalance,
         },
         ADA: {
           ADA: cardanoChild.lovelace,

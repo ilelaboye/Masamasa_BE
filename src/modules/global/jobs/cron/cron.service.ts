@@ -22,8 +22,8 @@ export class CronService {
     this.cronJob.verifyProcessingVtpassTransactions();
   }
 
-  // @Cron("*/20 * * * *")
-  // async generateNombaAccessToken() {
-  //   await this.cronJob.generateNombaAccessToken();
-  // }
+  @Cron("*/20 * * * *")
+  async generateNombaAccessToken() {
+    await this.cronJob.generateNombaAccessToken();
+  }
 }
