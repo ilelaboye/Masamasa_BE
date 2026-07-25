@@ -258,11 +258,7 @@ export class Web3Service {
           "erc20",
           "bep20",
           "base",
-          "optimism",
-          "celo",
-          "lisk",
-          "arbitrum",
-          "pol",
+            "pol",
         ]);
         const EVM_NATIVE = new Set(["eth", "bnb"]);
         const evmPairs = QUIDAX_CURRENCIES.filter(({ currency, network }) =>
