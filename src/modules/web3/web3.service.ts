@@ -621,6 +621,7 @@ export class Web3Service {
             "BINANCE CHAIN",
             "SOL",
           );
+          console.log(childWallet2)
         } catch (e) {}
 
         try {
