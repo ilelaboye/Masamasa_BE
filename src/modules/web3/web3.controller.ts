@@ -2,6 +2,7 @@ import { _AUTH_COOKIE_NAME_ } from "@/constants";
 import { UserRequest } from "@/definitions";
 import { AuthGuard } from "@/guards";
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -78,7 +79,10 @@ export class Web3Controller {
   // Get recent transactions
   @Get("/recent-transactions")
   async getRecentTransactions() {
-    return await this.web3Service.getRecentTransactions();
+    throw new BadRequestException(
+      "Recent transactions feature requires a deployed WalletManager contract. Please configure WALLET_MANAGER_CONTRACT_ADDRESS in your .env file."
+    );
+    // return await this.web3Service.getRecentTransactions();
   }
 
   // Get last 3 transactions from blockchain

@@ -120,6 +120,9 @@ export const appConfig = {
 
   MORALIS_API_KEY: process.env.MORALIS_API_KEY || "",
 
+  // Smart Contract Addresses (optional)
+  WALLET_MANAGER_CONTRACT_ADDRESS: process.env.WALLET_MANAGER_CONTRACT_ADDRESS,
+
   QUIDAX_API_KEY: process.env.QUIDAX_API_KEY || "",
   QUIDAX_SECRET_KEY: process.env.QUIDAX_SECRET_KEY || "",
   QUIDAX_BASE_URL:
