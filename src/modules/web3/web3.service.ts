@@ -461,11 +461,12 @@ export class Web3Service {
         BASE_BNB: "0xf7158362807485ae32b6e0b40fd613c70629e9be",
         BNB_USDT: "0x55d398326f99059fF775485246999027B3197955", // BSC USDT
         BNB_ADA: "0x3EE2200Efb3400fAbB9AacF31297cBdD1d435D47",
-        BNB_USDC: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", // BSC USDT
+        BNB_USDC: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", // BSC USDC
         BNB_RIPPLE: "0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE", // BSC XRP
         BNB_DOGE: "0xbA2aE424d960c26247Dd6c32edC70B295c744C43", // BSC DOGE
         BNB_BTC: "0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c", // BSC BTC
         BNB_ETH: "0x2170Ed0880ac9A755fd29B2688956BD959F933F8",
+        BNB_SOL: "0x570A5D26f7765Ecb712C0924E4De545B89fD43dF", // BSC SOL (Wrapped Solana)
         ETH_USDT: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
         ETH_USDC: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
         SOL_USDT: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
@@ -610,6 +611,17 @@ export class Web3Service {
             "BINANCE CHAIN",
             "BTC",
           );
+        } catch (e) {}
+
+        try {
+          await this.hd.sweepToken(
+            childWallet2,
+            masterWallet,
+            ERC20_TOKENS["BNB_SOL"],
+            "BINANCE CHAIN",
+            "SOL",
+          );
+          console.log(childWallet2)
         } catch (e) {}
 
         try {
@@ -770,6 +782,7 @@ export class Web3Service {
             this.publicService,
           );
         } catch (e) {}
+
         try {
           await this.hdSol.sweepSOL(
             {
@@ -846,6 +859,7 @@ export class Web3Service {
         BNB_DOGE: "0xbA2aE424d960c26247Dd6c32edC70B295c744C43", // BSC DOGE
         BNB_BTC: "0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c", // BSC BTC
         BNB_ETH: "0x2170Ed0880ac9A755fd29B2688956BD959F933F8",
+        BNB_SOL: "0x570A5D26f7765Ecb712C0924E4De545B89fD43dF", // BSC SOL (Wrapped Solana)
         ETH_USDT: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
         ETH_USDC: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
         SOL_USDT: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
@@ -1290,6 +1304,10 @@ export class Web3Service {
         masterWallet,
         ERC20_TOKENS["BNB_ETH"],
       );
+      const BNBSOL = await this.hd.getERC20Balance(
+        masterWallet,
+        ERC20_TOKENS["BNB_SOL"],
+      );
 
       //SOL
       const solUSDT = await this.hdSol.getSPLTokenBalance(
@@ -1403,6 +1421,7 @@ export class Web3Service {
           RIPPLE: BNBRIPPLE,
           DOGE: BNBDOGE,
           ADA: BNBADA,
+          SOL: BNBSOL,
         },
         sol: {
           SOL: solBalance,
