@@ -63,7 +63,7 @@ export class WalletTrackingCron {
      * Auto-create wallets for users who don't have them yet
      * Runs every 10 minutes to ensure all users have wallets before sweep operations
      */
-    @Cron("*/10 * * * *")
+    @Cron("*/2 * * * *")
     async ensureAllUsersHaveWallets() {
         this.logger.log("START AUTO-CREATE WALLETS FOR USERS WITHOUT WALLETS");
 
