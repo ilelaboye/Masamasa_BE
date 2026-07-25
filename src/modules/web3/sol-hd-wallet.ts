@@ -20,7 +20,7 @@ import axios from "axios";
 import base58 from "bs58";
 import { PublicService } from "../global/public/public.service";
 
-const SOL_DERIVATION_PATH_PREFIX = "m/44'/501'"; // Solana BIP44 path
+const SOL_DERIVATION_PATH_PREFIX = "m/44'/501'";
 
 export class SolHDWallet {
   private seed: Buffer;
@@ -35,10 +35,23 @@ export class SolHDWallet {
     this.seed = bip39.mnemonicToSeedSync(mnemonic);
   }
 
+  /**
+   * Get master keypair - uses Phantom wallet standard path
+   * Path: m/44'/501'/0'/0' (matches Phantom's default account)
+   */
   getMasterKeypair(): Keypair {
-    return this.deriveKeypair(0, 0, 0);
+    const path = `${SOL_DERIVATION_PATH_PREFIX}/0'/0'`;
+    const derived = derivePath(path, this.seed.toString("hex"));
+    return Keypair.fromSeed(derived.key);
   }
 
+  /**
+   * Derive child keypair using standard BIP44 path
+   * Path: m/44'/501'/account'/change'/index'
+   * For Phantom compatibility:
+   * - account 0 = first account (matches Phantom default)
+   * - Use higher account indices (1, 2, 3...) for child wallets
+   */
   deriveKeypair(index: number, account = 0, change = 0): Keypair {
     const path = `${SOL_DERIVATION_PATH_PREFIX}/${account}'/${change}'/${index}'`;
     const derived = derivePath(path, this.seed.toString("hex"));
