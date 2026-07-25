@@ -317,6 +317,16 @@ export class Web3Service {
         await this.walletRepository.save(doge);
       }
 
+      if (!existWalletXRP) {
+        const xrp = this.walletRepository.create({
+          user: req.user,
+          network: "RIPPLE",
+          currency: "XRP",
+          wallet_address: xrpWalletAddress,
+        });
+        await this.walletRepository.save(xrp);
+      }
+
       return {
         eth: childWallet.address,
         sol: solChildWallet,
@@ -660,7 +670,7 @@ export class Web3Service {
               childWalletPoly,
               masterWalletPoly,
               ERC20_TOKENS["POLY_USDT"],
-              "POLYGON",
+              "Polygon",
               "USDT",
             );
             break; // Success, exit retry loop
@@ -703,7 +713,7 @@ export class Web3Service {
               childWalletPoly,
               masterWalletPoly,
               ERC20_TOKENS["POLY_USDC"],
-              "POLYGON",
+              "Polygon",
               "USDC",
             );
             break; // Success, exit retry loop
@@ -744,7 +754,7 @@ export class Web3Service {
           await this.hd.sweep(
             childWalletPoly,
             masterWalletPoly,
-            "POLYGON",
+            "Polygon",
             "POL",
           );
         } catch (e) {}
@@ -873,7 +883,7 @@ export class Web3Service {
       // Normalize network names for token lookup
       if (network === "BINANCE" || network === "BSC") {
         network = "BNB";
-      } else if (network === "POLYGON" || network === "MATIC") {
+      } else if (network === "Polygon" || network === "MATIC") {
         network = "POLY";
       } else if (network === "ETHEREUM") {
         network = "ETH";
@@ -1844,14 +1854,14 @@ export class Web3Service {
           history.push(
             ...polyTxs.map((tx) => ({
               ...tx,
-              network: "POLYGON",
+              network: "Polygon",
               address: masterWalletPoly.address,
             })),
           );
         } else {
           const polyTxs = await this.hd.getChildTransactionHistory(
             0,
-            "POLYGON",
+            "Polygon",
             50,
           );
           history.push(...polyTxs);
