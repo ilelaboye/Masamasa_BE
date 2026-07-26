@@ -8,7 +8,7 @@ const QUIDAX_TO_APP: Record<string, string> = {
   bep20: "BINANCE",
   base: "BASE",
   trc20: "TRON",
-  pol: "POLYGON",
+  pol: "Polygon",
   sol: "SOLANA",
   ton: "TON",
   optimism: "OPTIMISM",
@@ -27,7 +27,7 @@ const CURRENCY_TO_APP: Record<string, string> = {
   ada: "CARDANO",
   xrp: "RIPPLE",
   doge: "DOGE",
-  matic: "POLYGON",
+  matic: "Polygon",
 };
 
 // App format → Quidax network string (undefined means native / no network param)
@@ -37,6 +37,7 @@ const APP_TO_QUIDAX: Record<string, string | undefined> = {
   BASE: "base",
   TRON: "trc20",
   POLYGON: "pol",
+  Polygon: "pol",
   SOLANA: "sol",
   TON: "ton",
   OPTIMISM: "optimism",
@@ -101,10 +102,11 @@ export const QUIDAX_CURRENCIES: Array<{ currency: string; network?: string }> =
     { currency: "usdt", network: "pol" },
     { currency: "usdt", network: "sol" },
 
-    // ── USDC: ETHEREUM, BINANCE, BASE ────────────────────────────────────────
+    // ── USDC: ETHEREUM, BINANCE, BASE, POLYGON ──────────────────────────────
     { currency: "usdc", network: "erc20" },
     { currency: "usdc", network: "bep20" },
     { currency: "usdc", network: "base" },
+    { currency: "usdc", network: "pol" },
 
     // ── ETH: ETHEREUM (native), BINANCE, BASE ────────────────────────────────
     { currency: "eth" },
