@@ -8,6 +8,7 @@ import {
 
 export enum AccessTokenType {
   "nomba" = "nomba",
+  "others" = "others",
 }
 
 @Entity("access_tokens")
