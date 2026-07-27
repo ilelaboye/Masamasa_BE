@@ -28,6 +28,7 @@ const CURRENCY_TO_APP: Record<string, string> = {
   xrp: "RIPPLE",
   doge: "DOGE",
   matic: "Polygon",
+  pol: "Polygon",
 };
 
 // App format → Quidax network string (undefined means native / no network param)
@@ -78,45 +79,28 @@ export function toQuidaxNetwork(appNetwork: string): string | undefined {
   return APP_TO_QUIDAX[appNetwork.toUpperCase()];
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Currency list
-// ─────────────────────────────────────────────────────────────────────────────
-
-// One entry per (currency, network) pair — each gets its own deposit address.
-// Native single-network coins omit the network field (Quidax uses the default).
-// Network identifiers match Quidax API values:
-//   erc20 = Ethereum  |  bep20 = BNB Smart Chain  |  trc20 = Tron
-//   base  = Base      |  ton   = TON               |  optimism = Optimism
-//   celo  = Celo      |  lisk  = Lisk              |  arbitrum = Arbitrum
 export const QUIDAX_CURRENCIES: Array<{ currency: string; network?: string }> =
   [
-    // ── USDT: ETHEREUM, BINANCE, TRON, TON, OPTIMISM, CELO, LISK, ARBITRUM ──
-    { currency: "usdt", network: "erc20" },
+    // ── USDT: BEP20, ERC20, TRC20, POLYGON, SOLANA ───────────────────────────
     { currency: "usdt", network: "bep20" },
+    { currency: "usdt", network: "erc20" },
     { currency: "usdt", network: "trc20" },
-    // { currency: "usdt", network: "ton" },
-    // { currency: "usdt", network: "optimism" },
-    // { currency: "usdt", network: "celo" },
-    // { currency: "usdt", network: "lisk" },
-    // { currency: "usdt", network: "arbitrum" },
-    { currency: "usdt", network: "pol" },
-    { currency: "usdt", network: "sol" },
+    // { currency: "usdt", network: "pol" },
+    // { currency: "usdt", network: "sol" },
 
-    // ── USDC: ETHEREUM, BINANCE, BASE, POLYGON ──────────────────────────────
-    { currency: "usdc", network: "erc20" },
+    // ── USDC: BEP20, ERC20, TRC20, POLYGON, SOLANA ───────────────────────────
     { currency: "usdc", network: "bep20" },
-    { currency: "usdc", network: "base" },
-    { currency: "usdc", network: "pol" },
+    { currency: "usdc", network: "erc20" },
+    // { currency: "usdc", network: "trc20" },
+    // { currency: "usdc", network: "pol" },
+    // { currency: "usdc", network: "sol" },
 
-    // ── ETH: ETHEREUM (native), BINANCE, BASE ────────────────────────────────
+    // ── ETH: ERC20 (native), BEP20 ───────────────────────────────────────────
     { currency: "eth" },
     { currency: "eth", network: "bep20" },
-    { currency: "eth", network: "base" },
-    // { currency: "eth", network: "lisk" },
-    // { currency: "eth", network: "arbitrum" },
 
-    // ── ADA: CARDANO (native) ────────────────────────────────────────────────
-    { currency: "ada" },
+    // ── BNB: BEP20 (native) ──────────────────────────────────────────────────
+    { currency: "bnb" },
 
     // ── XRP: RIPPLE (native) ─────────────────────────────────────────────────
     { currency: "xrp" },
@@ -124,14 +108,30 @@ export const QUIDAX_CURRENCIES: Array<{ currency: string; network?: string }> =
     // ── DOGE: DOGE (native) ──────────────────────────────────────────────────
     { currency: "doge" },
 
-    // ── BTC: BITCOIN (native), BINANCE ───────────────────────────────────────
+    // ── TRX: TRC20 (native) ──────────────────────────────────────────────────
+    { currency: "trx" },
+
+    // ── POL: POLYGON (native), BEP20 ─────────────────────────────────────────
+    { currency: "pol" },
+    // { currency: "pol", network: "bep20" },
+
+    // ── BTC: BITCOIN (native), BEP20 ─────────────────────────────────────────
     { currency: "btc" },
     { currency: "btc", network: "bep20" },
 
-    // ── SOL: SOLANA (native) ─────────────────────────────────────────────────
+    // ── ADA: CARDANO (native) ────────────────────────────────────────────────
+    { currency: "ada" },
+
+    // ── SOL: SOLANA (native), BEP20 ──────────────────────────────────────────
     { currency: "sol" },
     { currency: "sol", network: "bep20" },
-
-    // ── BNB: BEP20 (native) ──────────────────────────────────────────────────
-    { currency: "bnb" },
   ];
+
+// Set of "CURRENCY|APP_NETWORK" pairs (both uppercased) accepted via Quidax.
+// Wallet rows outside this set are unsupported legacy (self-custody) entries.
+export const SUPPORTED_WALLET_PAIRS: ReadonlySet<string> = new Set(
+  QUIDAX_CURRENCIES.map(
+    ({ currency, network }) =>
+      `${currency.toUpperCase()}|${toAppNetwork(network ?? null, currency).toUpperCase()}`,
+  ),
+);

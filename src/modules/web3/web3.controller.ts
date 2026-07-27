@@ -51,17 +51,23 @@ export class Web3Controller {
   ) { }
 
   // Create new wallet
+  // Self-custody wallet generation is retired — wallets are provisioned via
+  // Quidax at registration (and backfilled by QuidaxWalletCron). The route
+  // stays and returns 200 because the mobile app still calls it on login.
   @Post("/")
   @UsePipes(new JoiValidationPipe(CreateWalletValidation))
   async createWallet(@Req() req: UserRequest, @Body() body: CreateWalletDto) {
-    return await this.web3Service.createWallet(req, body);
+    return { message: "Wallets are provisioned via Quidax" };
   }
 
   // Withdraw ETH
-  @Get("/sweep")
-  async sweepWallets(@Req() req: UserRequest) {
-    return await this.web3Service.sweepWallets(req);
-  }
+  // Sweeping is disabled — the mobile app calls this on every balance
+  // refresh (walletTracker()), so disabling the route stops all
+  // client-triggered sweeps immediately.
+  // @Get("/sweep")
+  // async sweepWallets(@Req() req: UserRequest) {
+  //   return await this.web3Service.sweepWallets(req);
+  // }
 
   // Withdraw ETH
   @Get("/track")

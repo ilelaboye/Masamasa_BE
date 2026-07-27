@@ -67,7 +67,7 @@ export class AuthService extends BaseService {
     // const user = await this.userRepository.findOne({
     //   where: { email: loginStaffDto.email },
     // });
-
+    console.log("login", loginStaffDto);
     if (loginStaffDto.google_id) {
       const fetch = await this.userRepository
         .createQueryBuilder("user")
@@ -317,13 +317,11 @@ export class AuthService extends BaseService {
         );
       }
 
-      // Non-blocking — Quidax account + wallet addresses are provisioned
-      // after the DB commit so a slow/failing API never blocks registration.
-      // this.setupQuidaxAccount(user).catch(() => {});
-
-      // Non-blocking — Quidax sub-account + USDT/TRC20 address provisioned
-      // after DB commit so a slow/failing Quidax API never blocks registration.
-      await this.provisionQuidaxWallet(user).catch(() => {});
+      // Non-blocking — Quidax sub-account + all accepted deposit addresses
+      // are provisioned after the DB commit so a slow/failing Quidax API
+      // never blocks registration. The hourly QuidaxWalletCron backfills
+      // any pair that fails here.
+      this.setupQuidaxAccount(user).catch(() => {});
 
       const data = {
         user: userData,
@@ -495,40 +493,9 @@ export class AuthService extends BaseService {
     return { user, token: jwtToken };
   }
 
-  private async provisionQuidaxWallet(user: User): Promise<void> {
-    try {
-      const quidaxUser = await this.quidaxService.createSubAccount({
-        email: `${user.email}`,
-        first_name: user.first_name,
-        last_name: user.last_name,
-      });
-      console.log(`Quidax user created`, quidaxUser);
-      await this.userRepository.update(
-        { id: user.id },
-        { quidax_id: quidaxUser.id },
-      );
-
-      const addr = await this.quidaxService.createPaymentAddress(
-        quidaxUser.id,
-        "usdt",
-        "trc20",
-      );
-
-      if (!addr.address) return;
-
-      await this.walletRepository.save({
-        user_id: user.id,
-        currency: "usdt",
-        network: "TRON",
-        wallet_address: addr.address,
-        status: WalletStatus.active,
-        type: WalletType.quidax,
-      });
-    } catch (error) {
-      console.log(`errorr`, error);
-    }
-  }
-
+  // Creates the Quidax sub-account and a deposit address for every accepted
+  // currency/network pair (QUIDAX_CURRENCIES). Self-custody wallets are no
+  // longer generated — Quidax is the only wallet provider.
   private async setupQuidaxAccount(user: User): Promise<void> {
     const quidaxUser = await this.quidaxService.createSubAccount({
       email: user.email,
@@ -541,59 +508,32 @@ export class AuthService extends BaseService {
       { quidax_id: quidaxUser.id },
     );
 
-    const { addresses, unsupported } =
-      await this.quidaxService.createAllPaymentAddresses(quidaxUser.id);
+    const { addresses } = await this.quidaxService.createAllPaymentAddresses(
+      quidaxUser.id,
+    );
 
     await Promise.allSettled(
       addresses.map(async (addr) => {
-        const appNetwork = toAppNetwork(addr.network, addr.currency);
-        const exists = await this.walletRepository.findOne({
-          where: {
-            user_id: user.id,
-            network: appNetwork,
-            currency: addr.currency,
-          },
-        });
-        if (exists) return;
         if (!addr.address) return;
+        const appNetwork = toAppNetwork(addr.network, addr.currency);
+        const exists = await this.walletRepository
+          .createQueryBuilder("wallet")
+          .where("wallet.user_id = :userId", { userId: user.id })
+          .andWhere("UPPER(wallet.network) = :network", {
+            network: appNetwork.toUpperCase(),
+          })
+          .andWhere("UPPER(wallet.currency) = :currency", {
+            currency: addr.currency.toUpperCase(),
+          })
+          .getOne();
+        if (exists) return;
         await this.walletRepository.save({
           user_id: user.id,
-          currency: addr.currency,
+          currency: addr.currency.toUpperCase(),
           network: appNetwork,
           wallet_address: addr.address,
           status: WalletStatus.active,
           type: WalletType.quidax,
-        });
-      }),
-    );
-
-    if (unsupported.length === 0) return;
-
-    // Unsupported pairs are all EVM-compatible (BEP-20, Base, Polygon);
-    // they share the same HD-derived address as the user's ETH/BSC/Base wallets.
-    const evmWallet = await this.walletRepository.findOne({
-      where: {
-        user_id: user.id,
-        network: In(["ETHEREUM", "BINANCE", "BASE"]),
-        type: WalletType.quidax,
-      },
-    });
-    if (!evmWallet) return;
-
-    await Promise.allSettled(
-      unsupported.map(async ({ currency, network }) => {
-        const appNetwork = toAppNetwork(network ?? null, currency);
-        const exists = await this.walletRepository.findOne({
-          where: { user_id: user.id, network: appNetwork, currency },
-        });
-        if (exists) return;
-        await this.walletRepository.save({
-          user_id: user.id,
-          currency,
-          network: appNetwork,
-          wallet_address: evmWallet.wallet_address,
-          status: WalletStatus.active,
-          type: WalletType.self_custodian,
         });
       }),
     );

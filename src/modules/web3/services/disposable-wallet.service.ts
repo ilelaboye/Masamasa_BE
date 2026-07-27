@@ -610,7 +610,7 @@ export class DisposableWalletService {
   /**
    * Auto-sweep cron job - runs every 5 minutes
    */
-  @Cron(CronExpression.EVERY_5_MINUTES)
+  // @Cron(CronExpression.EVERY_5_MINUTES)
   async autoSweepFundedWallets() {
     console.log("Running auto-sweep for funded disposable wallets...");
 
@@ -667,7 +667,7 @@ export class DisposableWalletService {
   /**
    * Expire old wallets - runs daily
    */
-  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  // @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async expireOldWallets() {
     console.log("Expiring old disposable wallets...");
 

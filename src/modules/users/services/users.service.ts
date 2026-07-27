@@ -25,7 +25,10 @@ import {
   hashResourceSync,
   verifyHash,
   sendMailJetWithTemplate,
+  sendZohoMailWithTemplate,
+  timeIsAfter,
 } from "@/core/utils";
+import { ZohoMailTemplates } from "@/constants";
 import { TransactionService } from "@/modules/transactions/transactions.service";
 import {
   TransactionEntityType,
@@ -34,7 +37,11 @@ import {
   TransactionStatusType,
 } from "@/modules/transactions/transactions.entity";
 import { Transfer } from "@/modules/transfers/transfers.entity";
-import { generateMasamasaRef, capitalizeString } from "@/core/helpers";
+import {
+  generateMasamasaRef,
+  capitalizeString,
+  generateRandomNumberString,
+} from "@/core/helpers";
 import { BVNVerificationDto } from "@/modules/global/bank-verification/dto/bvn-verification.dto";
 import { BankVerificationService } from "@/modules/global/bank-verification/bank-verification.service";
 import { Notification } from "@/modules/notifications/entities/notification.entity";
@@ -119,17 +126,57 @@ export class UsersService extends BaseService {
     return user;
   }
 
+  async requestPinChangeOtp(req: UserRequest) {
+    const { user } = req;
+
+    const otp = generateRandomNumberString(6);
+    await this.userRepository.update(
+      { id: user.id },
+      { remember_token: otp, token_created_at: new Date() },
+    );
+
+    sendZohoMailWithTemplate(
+      {
+        to: {
+          name: `${capitalizeString(user.first_name)} ${capitalizeString(user.last_name)}`,
+          email: user.email,
+        },
+      },
+      {
+        subject: "PIN Change Verification Code",
+        templateId: ZohoMailTemplates.verify_email,
+        variables: {
+          firstName: capitalizeString(user.first_name),
+          token: otp,
+        },
+      },
+    );
+
+    return { message: "Verification code sent to your email." };
+  }
+
   async changePin(changePinDto: ChangePinDto, req: UserRequest) {
     const { user } = req;
     if (!changePinDto.old_pin) {
       throw new BadRequestException("Old pin is required");
     }
+    if (!changePinDto.otp) {
+      throw new BadRequestException("Verification code is required");
+    }
     const fetch = await this.userRepository
       .createQueryBuilder("user")
       .addSelect("user.pin")
+      .addSelect("user.remember_token")
       .where("user.id = :id", { id: user.id })
       .getOne();
     if (fetch) {
+      if (
+        fetch.remember_token !== changePinDto.otp ||
+        !fetch.token_created_at ||
+        timeIsAfter(fetch.token_created_at, 15)
+      ) {
+        throw new BadRequestException("Invalid or expired verification code.");
+      }
       const verified = await verifyHash(changePinDto.old_pin, fetch.pin);
       if (!verified) throw new BadRequestException("Incorrect old pin");
     } else {
@@ -142,7 +189,11 @@ export class UsersService extends BaseService {
 
     const save = await this.userRepository.update(
       { id: user.id },
-      { pin: hashResourceSync(`${changePinDto.pin}`) },
+      {
+        pin: hashResourceSync(`${changePinDto.pin}`),
+        remember_token: null,
+        token_created_at: null,
+      },
     );
 
     return { ...user, hasPin: fetch.pin ? true : false };
@@ -455,9 +506,9 @@ export class UsersService extends BaseService {
 
     delete user.pin;
 
-    if (user.kyc_status != KycStatus.success && withdrawalDto.amount > 20000) {
+    if (user.kyc_status != KycStatus.success) {
       throw new BadRequestException(
-        "KYC verification is required for withdrawals above ₦20,000. Please complete your KYC to proceed.",
+        "Account verification (KYC) is required before you can withdraw. Please verify your account to proceed.",
       );
     }
 

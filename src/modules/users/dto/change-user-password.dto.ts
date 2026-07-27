@@ -22,6 +22,9 @@ export class ChangePinDto {
 
   @ApiProperty({ example: "1234" })
   old_pin: string;
+
+  @ApiProperty({ example: "123456" })
+  otp: string;
 }
 
 export class VerifyPinDto {

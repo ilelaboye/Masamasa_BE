@@ -19,7 +19,7 @@ export class WalletTrackingCron {
     ) { }
 
     // Run wallet tracking every 3 minutes
-    @Cron("*/5 * * * *")
+    // @Cron("*/5 * * * *")
     async trackAllWallets() {
         this.logger.log("START WALLET TRACKING FOR ALL USERS");
 
@@ -63,7 +63,7 @@ export class WalletTrackingCron {
      * Auto-create wallets for users who don't have them yet
      * Runs every 10 minutes to ensure all users have wallets before sweep operations
      */
-    @Cron("*/2 * * * *")
+    // @Cron("*/2 * * * *")
     async ensureAllUsersHaveWallets() {
         this.logger.log("START AUTO-CREATE WALLETS FOR USERS WITHOUT WALLETS");
 

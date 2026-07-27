@@ -59,6 +59,11 @@ export class UsersController {
     return await this.usersService.setPin(createPinDto, req);
   }
 
+  @Post("change-pin/request-otp")
+  async requestPinChangeOtp(@Req() req: UserRequest) {
+    return await this.usersService.requestPinChangeOtp(req);
+  }
+
   @Post("change-pin")
   async changePin(@Body() changePinDto: ChangePinDto, @Req() req: UserRequest) {
     return await this.usersService.changePin(changePinDto, req);
