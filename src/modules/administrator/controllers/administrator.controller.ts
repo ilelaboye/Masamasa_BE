@@ -25,7 +25,13 @@ import { AdminAuthGuard } from "@/guards/admin-auth.guard";
 import { AdminRequest, SystemCache } from "@/definitions";
 import { CacheService } from "@/modules/global/cache-container/cache-container.service";
 import { ExchangeRateService } from "@/modules/exchange-rates/exchange-rates.service";
-import { CreateExchangeRateDto, DeclineKycDto } from "../dto/admin.dto";
+import {
+  BroadcastNotificationDto,
+  CreateExchangeRateDto,
+  DeclineKycDto,
+} from "../dto/admin.dto";
+import { NotificationsService } from "@/modules/notifications/notifications.service";
+import { BroadcastNotificationValidation } from "../validations/admin.validation";
 import { PublicService } from "@/modules/global/public/public.service";
 import { JoiValidationPipe } from "@/pipes/joi.validation.pipe";
 import { CreateUpdateExchangeRateValidation } from "../validations/admin.validation";
@@ -45,6 +51,7 @@ export class AdministratorController {
     private readonly exchangeRateService: ExchangeRateService,
     private readonly web3Service: Web3Service,
     private readonly quidaxService: QuidaxService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   @Get("users")
@@ -109,6 +116,25 @@ export class AdministratorController {
     @Req() req: AdminRequest,
   ) {
     return this.administratorService.declineKyc(declineKycDto, req);
+  }
+
+  @ApiOperation({ summary: "List notifications broadcast to users" })
+  @Get("notifications")
+  async listBroadcastNotifications() {
+    return await this.notificationsService.listBroadcasts();
+  }
+
+  @ApiOperation({ summary: "Send a custom notification to all users" })
+  @Post("notifications/broadcast")
+  @UsePipes(new JoiValidationPipe(BroadcastNotificationValidation))
+  async broadcastNotification(
+    @Body() body: BroadcastNotificationDto,
+    @Req() req: AdminRequest,
+  ) {
+    return await this.notificationsService.broadcastToAll(
+      body.message,
+      req.admin.id,
+    );
   }
 
   @ApiOperation({ summary: "Get a single transaction details" })

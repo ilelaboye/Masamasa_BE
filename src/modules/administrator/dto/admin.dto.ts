@@ -17,3 +17,8 @@ export class DeclineKycDto {
   @ApiProperty({ example: "Image not clear" })
   reason: string;
 }
+
+export class BroadcastNotificationDto {
+  @ApiProperty({ example: "We have a new feature!" })
+  message: string;
+}

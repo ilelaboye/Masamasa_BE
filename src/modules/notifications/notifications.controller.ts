@@ -17,6 +17,11 @@ export class NotificationsController {
     return await this.notificationsService.findAll(req);
   }
 
+  @Post("mark-all-read")
+  async markAllAsRead(@Req() req: UserRequest) {
+    return await this.notificationsService.markAllAsRead(req);
+  }
+
   @Get(":id")
   async findOne(@Param("id") id: string, @Req() req: UserRequest) {
     return await this.notificationsService.findOne(+id, req);

@@ -7,3 +7,7 @@ export const CreateUpdateExchangeRateValidation = Joi.object().keys({
     .valid(...Object.values(CurrencyCoin))
     .required(),
 });
+
+export const BroadcastNotificationValidation = Joi.object().keys({
+  message: Joi.string().trim().min(1).max(500).required().label("Message"),
+});
