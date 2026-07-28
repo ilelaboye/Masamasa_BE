@@ -8,8 +8,8 @@ import { AdminRequest } from "@/definitions";
 import { CreateExchangeRateDto, DeclineKycDto } from "../dto/admin.dto";
 import { ExchangeRateService } from "@/modules/exchange-rates/exchange-rates.service";
 import { KycStatus, Status, User } from "@/modules/users/entities/user.entity";
-import { endOfDay, getRequestQuery } from "@/core/utils";
-import { paginate } from "@/core/helpers";
+import { endOfDay, getRequestQuery, sendZohoMail } from "@/core/utils";
+import { capitalizeString, paginate } from "@/core/helpers";
 import {
   TransactionModeType,
   Transactions,
@@ -213,6 +213,52 @@ export class AdministratorService {
     this.createAdminLog(null, req.admin, AdminLogEntities.KYC_STATUS, msg);
 
     return update;
+  }
+
+  async updateUserStatus(
+    id: number,
+    status: Status.active | Status.deactivated,
+    req: AdminRequest,
+  ) {
+    const user = await this.userRepository.findOne({ where: { id } });
+    if (!user) throw new BadRequestException("User not found");
+
+    if (user.status === status) {
+      throw new BadRequestException(
+        `User is already ${status === Status.active ? "active" : "deactivated"}`,
+      );
+    }
+
+    await this.userRepository.update({ id: user.id }, { status });
+
+    const activated = status === Status.active;
+    const msg = `${req.admin.first_name} ${req.admin.last_name} ${activated ? "activated" : "deactivated"} ${user.first_name} ${user.last_name}'s account`;
+    this.createAdminLog(null, req.admin, AdminLogEntities.USER_STATUS, msg);
+
+    sendZohoMail(
+      {
+        to: {
+          name: `${capitalizeString(user.first_name)} ${capitalizeString(user.last_name)}`,
+          email: user.email,
+        },
+      },
+      {
+        subject: activated
+          ? "Your MasaMasa account has been activated"
+          : "Your MasaMasa account has been deactivated",
+        html: activated
+          ? `<p>Hello ${capitalizeString(user.first_name)},</p>
+             <p>Good news — your MasaMasa account has been activated. You can now log in and use all features of the app.</p>
+             <p>If you have any questions, please contact our support team.</p>`
+          : `<p>Hello ${capitalizeString(user.first_name)},</p>
+             <p>Your MasaMasa account has been deactivated. You will not be able to log in or perform any transactions.</p>
+             <p>If you believe this is a mistake, please reach out to our support team to have your account reactivated.</p>`,
+      },
+    );
+
+    return {
+      message: `User ${activated ? "activated" : "deactivated"} successfully`,
+    };
   }
 
   async transaction(id: number, req: AdminRequest) {

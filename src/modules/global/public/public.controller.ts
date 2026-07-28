@@ -93,10 +93,10 @@ export class PublicController {
     return await this.publicService.test();
   }
 
-  @Post("webhook/transaction")
-  async transaction(@Body() transactionWebhookDto: TransactionWebhookDto) {
-    return await this.publicService.transactionWebhook(transactionWebhookDto);
-  }
+  // @Post("webhook/transaction")
+  // async transaction(@Body() transactionWebhookDto: TransactionWebhookDto) {
+  //   return await this.publicService.transactionWebhook(transactionWebhookDto);
+  // }
 
   @Get("banks")
   async banks() {

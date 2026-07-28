@@ -34,7 +34,11 @@ import { NotificationsService } from "@/modules/notifications/notifications.serv
 import { BroadcastNotificationValidation } from "../validations/admin.validation";
 import { PublicService } from "@/modules/global/public/public.service";
 import { JoiValidationPipe } from "@/pipes/joi.validation.pipe";
-import { CreateUpdateExchangeRateValidation } from "../validations/admin.validation";
+import {
+  CreateUpdateExchangeRateValidation,
+  UpdateUserStatusValidation,
+} from "../validations/admin.validation";
+import { Status } from "@/modules/users/entities/user.entity";
 import { Web3Service } from "@/modules/web3/web3.service";
 import { WithdrawTokenDto } from "@/modules/web3/web3.dto";
 import { WithdrawTokenValidation } from "@/modules/web3/web3.validation";
@@ -116,6 +120,21 @@ export class AdministratorController {
     @Req() req: AdminRequest,
   ) {
     return this.administratorService.declineKyc(declineKycDto, req);
+  }
+
+  @ApiOperation({ summary: "Activate or deactivate a user account" })
+  @Patch("user/:id/status")
+  @UsePipes(new JoiValidationPipe(UpdateUserStatusValidation))
+  async updateUserStatus(
+    @Param("id") id: string,
+    @Body() body: { status: "active" | "deactivated" },
+    @Req() req: AdminRequest,
+  ) {
+    return await this.administratorService.updateUserStatus(
+      +id,
+      body.status as Status.active | Status.deactivated,
+      req,
+    );
   }
 
   @ApiOperation({ summary: "List notifications broadcast to users" })

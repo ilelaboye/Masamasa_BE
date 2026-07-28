@@ -16,6 +16,7 @@ export enum Status {
   active = "active",
   pending = "pending",
   archived = "archived",
+  deactivated = "deactivated",
 }
 
 export enum KycStatus {

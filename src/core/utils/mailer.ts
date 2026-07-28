@@ -129,6 +129,35 @@ export async function sendMailJetWithTemplate(
     });
 }
 
+/** Sends a plain-HTML email through ZeptoMail (no template needed). */
+export async function sendZohoMail(
+  {
+    to,
+    from = { name: appConfig.ZOHO_FROM_NAME, email: appConfig.ZOHO_FROM },
+  }: MailerOptions,
+  mailData: { subject: string; html: string },
+) {
+  await axiosClient(`https://api.zeptomail.com/v1.1/email`, {
+    method: "POST",
+    body: {
+      from: { address: from.email, name: from.name },
+      to: [
+        {
+          email_address: {
+            address: to.email,
+            name: to.name,
+          },
+        },
+      ],
+      subject: mailData.subject,
+      htmlbody: mailData.html,
+    },
+    headers: {
+      authorization: `Zoho-enczapikey ${appConfig.ZOHO_MAIL_CLIENT_ID}`,
+    },
+  });
+}
+
 export async function sendZohoMailWithTemplate(
   {
     to,

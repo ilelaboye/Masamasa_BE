@@ -1,6 +1,7 @@
 import { appConfig } from "@/config";
 import { _AUTH_COOKIE_NAME_ } from "@/constants";
 import { extractDataFromCookie } from "@/core/utils";
+import { Status, User } from "@/modules/users/entities/user.entity";
 import {
   CanActivate,
   ExecutionContext,
@@ -9,10 +10,14 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
+import { DataSource } from "typeorm";
 
 @Injectable()
 export class AuthGuard implements CanActivate {
-  constructor(private jwtService: JwtService) {}
+  constructor(
+    private jwtService: JwtService,
+    private dataSource: DataSource,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest();
@@ -30,6 +35,19 @@ export class AuthGuard implements CanActivate {
       res.clearCookie(_AUTH_COOKIE_NAME_);
       throw new UnauthorizedException(
         "Your session has expired, please login to continue"
+      );
+    }
+
+    // Deactivated users are cut off on every request — the cleared cookie
+    // plus the 401 forces the app to log them out.
+    const dbUser = await this.dataSource.getRepository(User).findOne({
+      where: { id: req.user.id },
+      select: ["id", "status"],
+    });
+    if (!dbUser || dbUser.status === Status.deactivated) {
+      res.clearCookie(_AUTH_COOKIE_NAME_);
+      throw new UnauthorizedException(
+        "Your account has been deactivated. Please reach out to the admin to be activated.",
       );
     }
 

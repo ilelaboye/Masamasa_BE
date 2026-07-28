@@ -6,7 +6,9 @@ import {
   QuidaxResponse,
   QuidaxUser,
   QuidaxWallet,
+  QuidaxWithdrawal,
 } from "@/definitions";
+import { generateMasamasaRef } from "@/core/helpers";
 import { Injectable, Logger } from "@nestjs/common";
 import { QUIDAX_CURRENCIES } from "./quidax.constants";
 
@@ -73,6 +75,71 @@ export class QuidaxService {
     );
   }
 
+  /**
+   * Creates a withdrawal from a Quidax account.
+   * https://docs.quidax.io/reference/create-withdrawal
+   *
+   * `userId` is the account to debit (a sub-account id, or "me" for the
+   * master account). `fundUid` is the destination — a crypto address, a
+   * sub-account user id, or "me" for the master account (internal transfer,
+   * no on-chain fee).
+   */
+  async createWithdrawal(params: {
+    userId: string;
+    currency: string;
+    amount: string;
+    fundUid: string;
+    reference?: string;
+    network?: string;
+    transactionNote?: string;
+    narration?: string;
+    fundUid2?: string;
+  }): Promise<QuidaxWithdrawal> {
+    const body: Record<string, unknown> = {
+      currency: params.currency.toLowerCase(),
+      amount: params.amount,
+      fund_uid: params.fundUid,
+      reference: params.reference ?? generateMasamasaRef(),
+    };
+    if (params.network) body.network = params.network;
+    if (params.transactionNote) body.transaction_note = params.transactionNote;
+    if (params.narration) body.narration = params.narration;
+    if (params.fundUid2) body.fund_uid2 = params.fundUid2;
+
+    return this.request<QuidaxWithdrawal>(
+      "POST",
+      `/users/${params.userId}/withdraws`,
+      body,
+    );
+  }
+
+  /**
+   * Moves crypto from a user's sub-account into the master account —
+   * called after every confirmed deposit so funds are held centrally.
+   */
+  async sweepToMasterAccount(
+    subAccountUserId: string,
+    currency: string,
+    amount: string,
+    network?: string,
+  ): Promise<QuidaxWithdrawal> {
+    const withdrawal = await this.createWithdrawal({
+      userId: subAccountUserId,
+      currency,
+      amount,
+      // "me" addresses the master account — an internal Quidax transfer.
+      fundUid: appConfig.QUIDAX_ID,
+      network,
+      transactionNote: "Deposit sweep to master account",
+    });
+
+    this.logger.log(
+      `Swept ${amount} ${currency} from sub-account ${subAccountUserId} to master (withdrawal ${withdrawal.id}, status ${withdrawal.status})`,
+    );
+
+    return withdrawal;
+  }
+
   async createPaymentAddress(
     quidaxUserId: string,
     currency: string,
@@ -115,7 +182,9 @@ export class QuidaxService {
             result.reason?.response?.data?.message ??
             result.reason?.message ??
             "";
-          if (msg.toLowerCase().includes("blockchain deposits are not available")) {
+          if (
+            msg.toLowerCase().includes("blockchain deposits are not available")
+          ) {
             unsupported.push({ currency, network });
           } else {
             this.logger.error(

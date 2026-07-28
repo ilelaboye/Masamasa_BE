@@ -261,6 +261,26 @@ export interface QuidaxResponse<T> {
   data: T;
 }
 
+// Response shape for POST /users/{id}/withdraws
+export interface QuidaxWithdrawal {
+  id: string;
+  reference: string | null;
+  type: string;
+  currency: string;
+  amount: string;
+  fee: string;
+  total: string;
+  txid: string | null;
+  status: string;
+  narration: string | null;
+  created_at: string;
+  recipient?: {
+    type: string;
+    details: Record<string, unknown>;
+  };
+  user?: QuidaxUser;
+}
+
 // Response shape for POST /users/{id}/wallets/{currency}/addresses
 // address can be null when Quidax hasn't generated it yet — the
 // wallet.address.generated webhook will carry the actual value later.

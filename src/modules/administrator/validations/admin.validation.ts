@@ -11,3 +11,7 @@ export const CreateUpdateExchangeRateValidation = Joi.object().keys({
 export const BroadcastNotificationValidation = Joi.object().keys({
   message: Joi.string().trim().min(1).max(500).required().label("Message"),
 });
+
+export const UpdateUserStatusValidation = Joi.object().keys({
+  status: Joi.string().valid("active", "deactivated").required().label("Status"),
+});

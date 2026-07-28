@@ -98,6 +98,12 @@ export class AuthService extends BaseService {
         "User with this login details was not found, please try again",
       );
     }
+
+    if (fetch.status === Status.deactivated) {
+      throw new NotAcceptableException(
+        "Your account has been deactivated. Please reach out to the admin to be activated.",
+      );
+    }
     // if(loginStaffDto.google_id ){
     // if user does not have google id but is trying to login with google id, save the google ID
     if (!fetch.google_id && loginStaffDto.google_id) {

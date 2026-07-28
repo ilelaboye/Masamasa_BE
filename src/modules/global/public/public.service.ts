@@ -30,7 +30,12 @@ import {
 } from "../bank-verification/entities/access-token.entity";
 import { CronJob } from "../jobs/cron/cron.job";
 import { toAppNetwork } from "@/modules/quidax/quidax.constants";
+import { QuidaxService } from "@/modules/quidax/quidax.service";
+import { CacheService } from "../cache-container/cache-container.service";
 import { capitalizeString } from "@/core/helpers";
+
+// Nomba's bank list rarely changes — cached under this key for all users.
+const NOMBA_BANKS_CACHE_KEY = "NOMBA_BANKS_LIST";
 
 @Injectable()
 export class PublicService {
@@ -50,6 +55,8 @@ export class PublicService {
     private readonly exchangeRateService: ExchangeRateService,
     private readonly notificationsService: NotificationsService,
     private readonly cronJob: CronJob,
+    private readonly quidaxService: QuidaxService,
+    private readonly cacheService: CacheService,
   ) {}
 
   async transactionWebhook(transactionWebhook: TransactionWebhookDto) {
@@ -122,9 +129,9 @@ export class PublicService {
         templateId: ZohoMailTemplates.coins_deposit_confirmed,
         variables: {
           firstName: capitalizeString(wallet.user.first_name),
-          coin: token_symbol,
+          coin: `${amount} ${token_symbol}`,
           network: network,
-          amount: `NGN ${amount}`,
+          amount: `NGN ${coin_price * amount * exchange}`,
           address: address,
         },
       },
@@ -290,31 +297,44 @@ export class PublicService {
   }
 
   async getBanksFromNomba() {
-    console.log("getBanksFromNomba called");
-    const accessToken = await this.accessTokenRepository.findOne({
+    // Bank list rarely changes — serve from cache and only hit Nomba on a miss.
+    const cached = await this.cacheService.get(NOMBA_BANKS_CACHE_KEY);
+    if (cached) return cached;
+
+    let accessToken = await this.accessTokenRepository.findOne({
       where: { type: AccessTokenType.nomba },
     });
-    console.log("accessToken", accessToken);
     if (!accessToken) {
-      console.log("No access token found, generating new one");
-      const get = await this.cronJob.generateNombaAccessToken();
-      console.log("Generated access token", get);
+      await this.cronJob.generateNombaAccessToken();
+      accessToken = await this.accessTokenRepository.findOne({
+        where: { type: AccessTokenType.nomba },
+      });
     }
-    try {
-      if (accessToken) {
-        const resp = await axiosClient(
-          `${appConfig.NOMBA_BASE_URL}/v1/transfers/banks`,
-          {
-            headers: {
-              Authorization: `Bearer ${accessToken.token}`,
-              accountId: appConfig.NOMBA_ACCOUNT_ID,
-            },
-          },
-        );
+    if (!accessToken) {
+      throw new BadRequestException(
+        "Unable to authenticate with the bank provider, please try again",
+      );
+    }
 
-        console.log("nomba banks", resp);
-        return resp.data;
-      }
+    try {
+      const resp = await axiosClient(
+        `${appConfig.NOMBA_BASE_URL}/v1/transfers/banks`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken.token}`,
+            accountId: appConfig.NOMBA_ACCOUNT_ID,
+          },
+        },
+      );
+
+      // 24h TTL (falls back to the cache default if ttl is ignored).
+      this.cacheService.set(
+        NOMBA_BANKS_CACHE_KEY,
+        resp.data,
+        24 * 60 * 60 * 1000,
+      );
+
+      return resp.data;
     } catch (error) {
       throw new BadRequestException(error.response.data.description);
     }
@@ -442,7 +462,7 @@ export class PublicService {
   async test() {
     try {
       const res = await axios.get(
-        `https://openapi.quidax.io/exchange-open-api/api/v1/users/ujhoruuq/wallets/usdt/address`,
+        `https://openapi.quidax.io/exchange-open-api/api/v1/users/me`,
 
         {
           headers: {
@@ -624,6 +644,7 @@ export class PublicService {
 
     const wallet = await this.walletRepository.findOne({
       where: { wallet_address: address },
+      relations: ["user"],
     });
     if (!wallet) return;
 
@@ -688,12 +709,46 @@ export class PublicService {
       } as unknown as Transactions);
     }
 
+    sendZohoMailWithTemplate(
+      {
+        to: {
+          name: `${capitalizeString(wallet.user.first_name)}`,
+          email: wallet.user.email,
+        },
+      },
+      {
+        subject: `${wallet.currency} Deposit Confirmed`,
+        templateId: ZohoMailTemplates.coins_deposit_confirmed,
+        variables: {
+          firstName: capitalizeString(wallet.user.first_name),
+          coin: `${amount} ${wallet.currency}`,
+          network: network,
+          amount: `NGN ${dollarAmount * exchange}`,
+          address: address,
+          subject: `${wallet.currency} Deposit Confirmed`,
+        },
+      },
+    );
+
     this.notificationsService.create({
       userId: wallet.user_id,
       message: `Your deposit of ${amount} ${currency.toUpperCase()} has been confirmed`,
       tag: NotificationTag.deposit,
       metadata: data,
     });
+
+    // Move the deposited crypto from the user's Quidax sub-account into the
+    // master account. Non-blocking — a sweep failure must never fail the
+    // webhook (Quidax would retry it and double-process the deposit).
+    // if (wallet.user.quidax_id) {
+    //   this.quidaxService
+    //     .sweepToMasterAccount(wallet.user.quidax_id, currency, amount, network)
+    //     .catch((err) => {
+    //       this.logger.error(
+    //         `Sweep to master failed for deposit ${depositId} (user ${wallet.user_id}, ${amount} ${currency}): ${err?.response?.data?.message ?? err?.message}`,
+    //       );
+    //     });
+    // }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

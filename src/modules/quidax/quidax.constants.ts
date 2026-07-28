@@ -85,15 +85,15 @@ export const QUIDAX_CURRENCIES: Array<{ currency: string; network?: string }> =
     { currency: "usdt", network: "bep20" },
     { currency: "usdt", network: "erc20" },
     { currency: "usdt", network: "trc20" },
-    // { currency: "usdt", network: "pol" },
-    // { currency: "usdt", network: "sol" },
+    { currency: "usdt", network: "polygon" },
+    { currency: "usdt", network: "solana" },
 
     // ── USDC: BEP20, ERC20, TRC20, POLYGON, SOLANA ───────────────────────────
     { currency: "usdc", network: "bep20" },
     { currency: "usdc", network: "erc20" },
     // { currency: "usdc", network: "trc20" },
-    // { currency: "usdc", network: "pol" },
-    // { currency: "usdc", network: "sol" },
+    { currency: "usdc", network: "polygon" },
+    { currency: "usdc", network: "solana" },
 
     // ── ETH: ERC20 (native), BEP20 ───────────────────────────────────────────
     { currency: "eth" },
