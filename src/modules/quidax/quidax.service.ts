@@ -116,12 +116,14 @@ export class QuidaxService {
   /**
    * Moves crypto from a user's sub-account into the master account —
    * called after every confirmed deposit so funds are held centrally.
+   * The network is required: multi-network coins (USDT, USDC, …) cannot be
+   * moved without specifying which chain's balance to withdraw.
    */
   async sweepToMasterAccount(
     subAccountUserId: string,
     currency: string,
     amount: string,
-    network?: string,
+    network: string,
   ): Promise<QuidaxWithdrawal> {
     const withdrawal = await this.createWithdrawal({
       userId: subAccountUserId,

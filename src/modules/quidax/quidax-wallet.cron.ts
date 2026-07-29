@@ -28,8 +28,7 @@ export class QuidaxWalletCron {
    * the master account. Safety net for deposits whose webhook-triggered
    * sweep failed or never fired.
    */
-  // @Cron("*/20 * * * *")
-  @Interval(10000)
+  @Cron("*/30 * * * *")
   async sweepSubAccountsToMaster() {
     // A large user base can take longer than the interval — never overlap.
     if (this.sweepRunning) {
@@ -39,61 +38,79 @@ export class QuidaxWalletCron {
     this.sweepRunning = true;
 
     try {
-      const resp = await this.quidaxService.sweepToMasterAccount(
-        "9fg51a5r",
-        "USDT",
-        "3",
-        "trc20",
-      );
-      console.log("resp jjjf", resp);
-      //  const resp = await this.quidaxService.createPaymentAddress(
+      // const resp = await this.quidaxService.sweepToMasterAccount(
       //   "9fg51a5r",
       //   "USDT",
-      //   "polygon",
+      //   "3",
+      //   "trc20",
       // );
+      // console.log("resp jjjf", resp);
       // console.log("bccc", resp);
       // await this.quidaxService.sweepToMasterAccount("9fg51a5r", "USDT", "3");
-      // const users = await this.userRepository.find({
-      //   where: { quidax_id: Not(IsNull()) },
-      //   select: ["id", "quidax_id"],
-      // });
-      // let sweptCount = 0;
-      // for (const user of users) {
-      //   const quidaxId = user.quidax_id;
-      //   if (!quidaxId) continue;
-      //   try {
-      //     const wallets = await this.quidaxService.listWallets(quidaxId);
-      //     await this.sleep(120);
-      //     for (const wallet of wallets ?? []) {
-      //       const balance = parseFloat(wallet.balance);
-      //       const currency = (wallet.currency ?? "").toLowerCase();
-      //       if (!currency || FIAT_CURRENCIES.has(currency)) continue;
-      //       if (!balance || balance <= 0) continue;
-      //       try {
-      //         await this.quidaxService.sweepToMasterAccount(
-      //           quidaxId,
-      //           currency,
-      //           wallet.balance,
-      //         );
-      //         sweptCount++;
-      //       } catch (err) {
-      //         this.logger.error(
-      //           `Sweep failed for user ${user.id} (${wallet.balance} ${currency}): ${err?.response?.data?.message ?? err?.message}`,
-      //         );
-      //       }
-      //       await this.sleep(120);
-      //     }
-      //   } catch (err) {
-      //     this.logger.error(
-      //       `Could not list wallets for user ${user.id}: ${err?.response?.data?.message ?? err?.message}`,
-      //     );
-      //   }
-      // }
-      // if (sweptCount > 0) {
-      //   this.logger.log(
-      //     `Sub-account sweep done — ${sweptCount} balance(s) moved to master`,
-      //   );
-      // }
+      const users = await this.userRepository.find({
+        where: { quidax_id: Not(IsNull()) },
+        select: ["id", "quidax_id"],
+      });
+      let sweptCount = 0;
+      for (const user of users) {
+        const quidaxId = user.quidax_id;
+        if (!quidaxId) continue;
+        try {
+          const wallets = await this.quidaxService.listWallets(quidaxId);
+          await this.sleep(120);
+          for (const wallet of wallets ?? []) {
+            const balance = parseFloat(wallet.balance);
+            const currency = (wallet.currency ?? "").toLowerCase();
+            if (!wallet.is_crypto || !currency) continue;
+            if (FIAT_CURRENCIES.has(currency)) continue;
+            if (!balance || balance <= 0) continue;
+
+            // Pick the network to move the balance over. default_network is
+            // NOT always withdrawable (e.g. SOL defaults to bep20 with
+            // withdrawals disabled while solana is enabled), so validate it
+            // against the networks list and fall back to the first network
+            // that allows withdrawals.
+            const networks = wallet.networks ?? [];
+            const defaultNet = networks.find(
+              (n) => n.id === wallet.default_network && n.withdraws_enabled,
+            );
+            const network = (
+              defaultNet ?? networks.find((n) => n.withdraws_enabled)
+            )?.id;
+
+            if (!network) {
+              this.logger.warn(
+                `No withdrawable network for user ${user.id} ${currency} — skipping sweep`,
+              );
+              continue;
+            }
+
+            try {
+              await this.quidaxService.sweepToMasterAccount(
+                quidaxId,
+                currency,
+                wallet.balance,
+                network,
+              );
+              sweptCount++;
+            } catch (err) {
+              this.logger.error(
+                `Sweep failed for user ${user.id} (${wallet.balance} ${currency}/${network}): ${err?.response?.data?.message ?? err?.message}`,
+              );
+            }
+            await this.sleep(120);
+          }
+        } catch (err) {
+          this.logger.error(
+            `Could not list wallets for user ${user.id}: ${err?.response?.data?.message ?? err?.message}`,
+          );
+        }
+      }
+      if (sweptCount > 0) {
+        this.logger.log(
+          `Sub-account sweep done — ${sweptCount} balance(s) moved to master`,
+        );
+      }
     } catch (e) {
       console.log("llll", e);
     } finally {

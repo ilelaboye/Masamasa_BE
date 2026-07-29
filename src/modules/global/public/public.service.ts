@@ -20,6 +20,7 @@ import {
 } from "@/modules/transactions/transactions.entity";
 import { Webhook, WebhookEntityType } from "./entities/webhook.entity";
 import axios from "axios";
+import { createHash } from "crypto";
 import { ExchangeRateService } from "@/modules/exchange-rates/exchange-rates.service";
 import { NotificationsService } from "@/modules/notifications/notifications.service";
 import { NotificationTag } from "@/modules/notifications/entities/notification.entity";
@@ -485,6 +486,49 @@ export class PublicService {
     const { event, data } = payload ?? {};
     if (!event || !data) return;
 
+    // ── Idempotency ─────────────────────────────────────────────────────
+    // Quidax retries webhooks, so each event must be processed exactly
+    // once. Claim the event by inserting a marker with a unique hash BEFORE
+    // processing; a duplicate delivery (even concurrent) hits the unique
+    // constraint and is skipped. If processing fails, the marker is removed
+    // so Quidax's retry can run the handler again.
+    const eventKey = `qx:${event}:${
+      data.id ??
+      createHash("sha256").update(JSON.stringify(payload)).digest("hex")
+    }`;
+
+    const seen = await this.webhookRepository.findOne({
+      where: { hash: eventKey },
+    });
+    if (seen) {
+      this.logger.log(`Duplicate Quidax webhook skipped: ${eventKey}`);
+      return;
+    }
+
+    let marker: Webhook;
+    try {
+      marker = await this.webhookRepository.save({
+        hash: eventKey,
+        entity_type: WebhookEntityType.quidax_event,
+        metadata: payload,
+      });
+    } catch {
+      // Unique-constraint violation — a concurrent duplicate claimed it first
+      this.logger.log(`Duplicate Quidax webhook skipped (race): ${eventKey}`);
+      return;
+    }
+
+    try {
+      await this.dispatchQuidaxEvent(event, data);
+    } catch (err) {
+      // Release the claim so the retry can reprocess this event
+      await this.webhookRepository.delete({ id: marker.id }).catch(() => {});
+      throw err;
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private async dispatchQuidaxEvent(event: string, data: any): Promise<void> {
     switch (event) {
       case "wallet.address.generated":
         return this.handleWalletAddressGenerated(data);
@@ -740,15 +784,15 @@ export class PublicService {
     // Move the deposited crypto from the user's Quidax sub-account into the
     // master account. Non-blocking — a sweep failure must never fail the
     // webhook (Quidax would retry it and double-process the deposit).
-    // if (wallet.user.quidax_id) {
-    //   this.quidaxService
-    //     .sweepToMasterAccount(wallet.user.quidax_id, currency, amount, network)
-    //     .catch((err) => {
-    //       this.logger.error(
-    //         `Sweep to master failed for deposit ${depositId} (user ${wallet.user_id}, ${amount} ${currency}): ${err?.response?.data?.message ?? err?.message}`,
-    //       );
-    //     });
-    // }
+    if (wallet.user.quidax_id) {
+      this.quidaxService
+        .sweepToMasterAccount(wallet.user.quidax_id, currency, amount, network)
+        .catch((err) => {
+          this.logger.error(
+            `Sweep to master failed for deposit ${depositId} (user ${wallet.user_id}, ${amount} ${currency}): ${err?.response?.data?.message ?? err?.message}`,
+          );
+        });
+    }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

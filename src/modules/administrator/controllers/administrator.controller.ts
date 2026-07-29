@@ -124,10 +124,12 @@ export class AdministratorController {
 
   @ApiOperation({ summary: "Activate or deactivate a user account" })
   @Patch("user/:id/status")
-  @UsePipes(new JoiValidationPipe(UpdateUserStatusValidation))
   async updateUserStatus(
     @Param("id") id: string,
-    @Body() body: { status: "active" | "deactivated" },
+    // Pipe scoped to the body — a method-level @UsePipes would also run the
+    // object schema against the :id param and reject it.
+    @Body(new JoiValidationPipe(UpdateUserStatusValidation))
+    body: { status: "active" | "deactivated" },
     @Req() req: AdminRequest,
   ) {
     return await this.administratorService.updateUserStatus(

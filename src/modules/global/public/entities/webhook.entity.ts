@@ -7,6 +7,8 @@ import {
 
 export enum WebhookEntityType {
   deposit = "deposit",
+  // Idempotency marker — one row per processed Quidax webhook event
+  quidax_event = "quidax_event",
 }
 
 @Entity({ name: "webhooks" })

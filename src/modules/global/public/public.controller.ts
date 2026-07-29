@@ -1,4 +1,9 @@
-import { successResponse, verifyNombaWebhook } from "@/core/utils";
+import {
+  successResponse,
+  verifyNombaWebhook,
+  verifyQuidaxWebhook,
+} from "@/core/utils";
+import { UnauthorizedException } from "@nestjs/common";
 import { JoiValidationPipe } from "@/pipes/joi.validation.pipe";
 import { CacheInterceptor } from "@nestjs/cache-manager";
 import {
@@ -79,10 +84,17 @@ export class PublicController {
   }
 
   @Post("webhook/quidax")
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  async quidaxWebhook(@Headers() headers: any, @Body() payload: any) {
-    console.log("QUIDAX WEBHOOK headers", JSON.stringify(headers, null, 2));
+  async quidaxWebhook(
+    @Headers("quidax-signature") signature: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    @Body() payload: any,
+  ) {
     console.log("QUIDAX WEBHOOK payload", JSON.stringify(payload, null, 2));
+
+    if (!verifyQuidaxWebhook(payload, signature)) {
+      throw new UnauthorizedException("Invalid webhook signature");
+    }
+
     await this.publicService.handleQuidaxWebhook(payload);
     return { received: true };
   }

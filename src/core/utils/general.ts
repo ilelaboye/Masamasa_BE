@@ -2,6 +2,54 @@ import { appConfig } from "@/config";
 import { generateAlphaNumericString } from "../helpers";
 import crypto from "crypto";
 
+/**
+ * Verifies a Quidax webhook signature (https://docs.quidax.io).
+ * Header `quidax-signature` has the form `t={timestamp},s={signature}`;
+ * the signature is HMAC-SHA256 over `{timestamp}.{JSON body}` using the
+ * webhook signing secret (QUIDAX_SIGNATURE).
+ */
+export const verifyQuidaxWebhook = (
+  payload: unknown,
+  signatureHeader: string | undefined,
+): boolean => {
+  const secret = appConfig.QUIDAX_SIGNATURE;
+  if (!secret) {
+    // Validation is only enforced once the secret is configured — log loudly
+    // so an unset env var doesn't silently disable it.
+    console.warn(
+      "[QuidaxWebhook] QUIDAX_SIGNATURE is not set — webhook signature NOT verified",
+    );
+    return true;
+  }
+
+  if (!signatureHeader) return false;
+
+  const parts: Record<string, string> = {};
+  for (const piece of signatureHeader.split(",")) {
+    const [key, ...rest] = piece.split("=");
+    parts[key?.trim()] = rest.join("=").trim();
+  }
+  const timestamp = parts["t"];
+  const signature = parts["s"];
+  if (!timestamp || !signature) return false;
+
+  const signedPayload = `${timestamp}.${JSON.stringify(payload)}`;
+  const expected = crypto
+    .createHmac("sha256", secret)
+    .update(signedPayload)
+    .digest("hex");
+
+  try {
+    return crypto.timingSafeEqual(
+      Buffer.from(expected, "hex"),
+      Buffer.from(signature, "hex"),
+    );
+  } catch {
+    // Malformed / wrong-length signature
+    return false;
+  }
+};
+
 export const generateVtpassRequestId = (user_id) => {
   const now = new Date();
   const year = now.getFullYear();
