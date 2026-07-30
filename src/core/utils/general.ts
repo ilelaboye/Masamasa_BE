@@ -1,6 +1,8 @@
 import { appConfig } from "@/config";
 import { generateAlphaNumericString } from "../helpers";
-import crypto from "crypto";
+// Namespace import — a default import compiles to `crypto_1.default`, which
+// is undefined at runtime for CommonJS modules without esModuleInterop.
+import * as crypto from "crypto";
 
 /**
  * Verifies a Quidax webhook signature (https://docs.quidax.io).
