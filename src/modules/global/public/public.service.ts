@@ -337,6 +337,7 @@ export class PublicService {
 
       return resp.data;
     } catch (error) {
+      console.log("banks", error);
       throw new BadRequestException(error.response.data.description);
     }
   }

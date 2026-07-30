@@ -26,6 +26,8 @@ export const verifyQuidaxWebhook = (
 
   if (!signatureHeader) return false;
 
+  console.log("signatureHeader", signatureHeader);
+
   const parts: Record<string, string> = {};
   for (const piece of signatureHeader.split(",")) {
     const [key, ...rest] = piece.split("=");
@@ -36,6 +38,7 @@ export const verifyQuidaxWebhook = (
   if (!timestamp || !signature) return false;
 
   const signedPayload = `${timestamp}.${JSON.stringify(payload)}`;
+  console.log("signedPayload", signedPayload);
   const expected = crypto
     .createHmac("sha256", secret)
     .update(signedPayload)
