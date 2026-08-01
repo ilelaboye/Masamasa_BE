@@ -224,6 +224,9 @@ export class PublicService {
     // } catch {
     //   return { status: false };
     // }
+    if (symbol.toLowerCase() === "pol") {
+      symbol = "POL (ex-MATIC)";
+    }
     try {
       const coin = await axios.get(
         `https://api.coingecko.com/api/v3/search?query=${symbol}`,
@@ -468,19 +471,22 @@ export class PublicService {
 
   async test() {
     try {
-      const res = await axios.get(
-        `https://openapi.quidax.io/exchange-open-api/api/v1/users/1cs4v97s/wallets/xrp`,
+      const priceResult = await this.getPrice("POL");
+      console.log("priceResult", priceResult);
+      return priceResult;
+      // const res = await axios.get(
+      //   `https://openapi.quidax.io/exchange-open-api/api/v1/users/1cs4v97s/wallets/xrp`,
 
-        {
-          headers: {
-            Authorization: `Bearer ZSKTsErViB1iY2nfVgzS6nv26kJLAjqL`,
-            "Content-Type": "application/json",
-          },
-          timeout: 15000,
-        },
-      );
-      console.log("quidax test", res);
-      return res;
+      //   {
+      //     headers: {
+      //       Authorization: `Bearer ZSKTsErViB1iY2nfVgzS6nv26kJLAjqL`,
+      //       "Content-Type": "application/json",
+      //     },
+      //     timeout: 15000,
+      //   },
+      // );
+      // console.log("quidax test", res);
+      // return res;
     } catch (error) {
       console.log("quidax test error", error.response?.data);
       console.log("quidax test error", error);
@@ -507,7 +513,7 @@ export class PublicService {
       where: { hash: eventKey },
     });
     if (seen) {
-      this.logger.log(`Duplicate Quidax webhook skipped: ${eventKey}`);
+      console.log(`Duplicate Quidax webhook skipped: ${eventKey}`);
       return;
     }
 
@@ -520,7 +526,7 @@ export class PublicService {
       });
     } catch {
       // Unique-constraint violation — a concurrent duplicate claimed it first
-      this.logger.log(`Duplicate Quidax webhook skipped (race): ${eventKey}`);
+      console.log(`Duplicate Quidax webhook skipped (race): ${eventKey}`);
       return;
     }
 
@@ -556,7 +562,13 @@ export class PublicService {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async handleWalletAddressGenerated(data: any): Promise<void> {
-    const { currency, address, network, destination_tag, user: quidaxUser } = data;
+    const {
+      currency,
+      address,
+      network,
+      destination_tag,
+      user: quidaxUser,
+    } = data;
     console.log(currency, address, network, quidaxUser);
     if (!address || !quidaxUser?.id) return;
 
