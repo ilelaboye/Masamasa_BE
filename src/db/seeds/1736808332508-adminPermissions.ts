@@ -97,6 +97,12 @@ export class AdminPermissions1736808332508 implements Seeder {
     //     currency: CurrencyCoin.xrp,
     //     status: ExchangeRateStatus.active,
     //   },
+    // {
+    //     admin_id: 1,
+    //     rate: 1430,
+    //     currency: CurrencyCoin.pol,
+    //     status: ExchangeRateStatus.active,
+    //   },
     // ]);
     // await rate.save(newRate);
   }

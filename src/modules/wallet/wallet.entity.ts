@@ -48,6 +48,11 @@ export class Wallet {
   @Column({ nullable: false })
   wallet_address: string;
 
+  // Tag-based chains (XRP): deposits share one master address and the
+  // destination tag routes them to the right user.
+  @Column({ type: "varchar", nullable: true })
+  destination_tag?: string | null;
+
   @Column({
     type: "varchar",
     default: Status.active,

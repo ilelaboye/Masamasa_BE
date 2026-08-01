@@ -79,6 +79,7 @@ export function toQuidaxNetwork(appNetwork: string): string | undefined {
   return APP_TO_QUIDAX[appNetwork.toUpperCase()];
 }
 
+
 export const QUIDAX_CURRENCIES: Array<{ currency: string; network?: string }> =
   [
     // ── USDT: BEP20, ERC20, TRC20, POLYGON, SOLANA ───────────────────────────

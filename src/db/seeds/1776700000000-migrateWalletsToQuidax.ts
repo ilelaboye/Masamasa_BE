@@ -80,113 +80,99 @@ export class MigrateWalletsToQuidax1776700000000 implements Seeder {
     dataSource: DataSource,
     _factories: SeederFactoryManager,
   ): Promise<void> {
-    const userRepo = dataSource.getRepository(User);
-    const walletRepo = dataSource.getRepository(Wallet);
-
-    // 1. Remove unsupported currency/network rows for ALL users in one pass.
-    const allWallets = await walletRepo.find();
-    const unsupported = allWallets.filter(
-      (w) =>
-        !SUPPORTED_WALLET_PAIRS.has(
-          `${(w.currency ?? "").toUpperCase()}|${(w.network ?? "").toUpperCase()}`,
-        ),
-    );
-    if (unsupported.length) {
-      await walletRepo.delete(unsupported.map((w) => w.id));
-      console.log(
-        `[QuidaxWalletMigration] Removed ${unsupported.length} unsupported wallet row(s).`,
-      );
-    }
-
-    // 2 & 3. Provision Quidax sub-accounts + addresses per user.
-    const users = await userRepo
-      .createQueryBuilder("user")
-      .select([
-        "user.id",
-        "user.email",
-        "user.first_name",
-        "user.last_name",
-        "user.quidax_id",
-      ])
-      .getMany();
-
-    console.log(
-      `[QuidaxWalletMigration] Provisioning wallets for ${users.length} user(s)…`,
-    );
-
-    let succeeded = 0;
-    let failed = 0;
-
-    for (const user of users) {
-      try {
-        let quidaxId = user.quidax_id;
-        if (!quidaxId) {
-          const quidaxUser = await createSubAccount(user);
-          quidaxId = quidaxUser.id;
-          await userRepo.update({ id: user.id }, { quidax_id: quidaxId });
-        }
-
-        const userWallets = await walletRepo.find({
-          where: { user_id: user.id },
-        });
-
-        for (const { currency, network } of QUIDAX_CURRENCIES) {
-          const appNetwork = toAppNetwork(network ?? null, currency);
-
-          const addr = await createPaymentAddress(quidaxId, currency, network);
-          // Respect Quidax's 10 req/s rate limit
-          await sleep(120);
-
-          if (!addr?.address) continue;
-
-          const existing = userWallets.find(
-            (w) =>
-              (w.currency ?? "").toUpperCase() === currency.toUpperCase() &&
-              (w.network ?? "").toUpperCase() === appNetwork.toUpperCase(),
-          );
-
-          if (existing) {
-            await walletRepo.update(
-              { id: existing.id },
-              {
-                wallet_address: addr.address,
-                currency: currency.toUpperCase(),
-                network: appNetwork,
-                status: Status.active,
-                type: WalletType.quidax,
-              },
-            );
-          } else {
-            await walletRepo.save({
-              user_id: user.id,
-              currency: currency.toUpperCase(),
-              network: appNetwork,
-              wallet_address: addr.address,
-              status: Status.active,
-              type: WalletType.quidax,
-            });
-          }
-        }
-
-        succeeded++;
-        console.log(
-          `[QuidaxWalletMigration] ✓ user ${user.id} (${user.email})`,
-        );
-      } catch (err) {
-        failed++;
-        const message =
-          err?.response?.data?.message ?? err?.message ?? String(err);
-        console.error(
-          `[QuidaxWalletMigration] ✗ user ${user.id} (${user.email}): ${message}`,
-        );
-      }
-
-      // Small gap between users to avoid rate-limit bursts
-      await sleep(300);
-    }
-
-    console.log(
-      `[QuidaxWalletMigration] Done — ${succeeded} succeeded, ${failed} failed out of ${users.length}.`,
-    );
+    //   const userRepo = dataSource.getRepository(User);
+    //   const walletRepo = dataSource.getRepository(Wallet);
+    //   // 1. Remove unsupported currency/network rows for ALL users in one pass.
+    //   const allWallets = await walletRepo.find();
+    //   const unsupported = allWallets.filter(
+    //     (w) =>
+    //       !SUPPORTED_WALLET_PAIRS.has(
+    //         `${(w.currency ?? "").toUpperCase()}|${(w.network ?? "").toUpperCase()}`,
+    //       ),
+    //   );
+    //   if (unsupported.length) {
+    //     await walletRepo.delete(unsupported.map((w) => w.id));
+    //     console.log(
+    //       `[QuidaxWalletMigration] Removed ${unsupported.length} unsupported wallet row(s).`,
+    //     );
+    //   }
+    //   // 2 & 3. Provision Quidax sub-accounts + addresses per user.
+    //   const users = await userRepo
+    //     .createQueryBuilder("user")
+    //     .select([
+    //       "user.id",
+    //       "user.email",
+    //       "user.first_name",
+    //       "user.last_name",
+    //       "user.quidax_id",
+    //     ])
+    //     .getMany();
+    //   console.log(
+    //     `[QuidaxWalletMigration] Provisioning wallets for ${users.length} user(s)…`,
+    //   );
+    //   let succeeded = 0;
+    //   let failed = 0;
+    //   for (const user of users) {
+    //     try {
+    //       let quidaxId = user.quidax_id;
+    //       if (!quidaxId) {
+    //         const quidaxUser = await createSubAccount(user);
+    //         quidaxId = quidaxUser.id;
+    //         await userRepo.update({ id: user.id }, { quidax_id: quidaxId });
+    //       }
+    //       const userWallets = await walletRepo.find({
+    //         where: { user_id: user.id },
+    //       });
+    //       for (const { currency, network } of QUIDAX_CURRENCIES) {
+    //         const appNetwork = toAppNetwork(network ?? null, currency);
+    //         const addr = await createPaymentAddress(quidaxId, currency, network);
+    //         // Respect Quidax's 10 req/s rate limit
+    //         await sleep(120);
+    //         if (!addr?.address) continue;
+    //         const existing = userWallets.find(
+    //           (w) =>
+    //             (w.currency ?? "").toUpperCase() === currency.toUpperCase() &&
+    //             (w.network ?? "").toUpperCase() === appNetwork.toUpperCase(),
+    //         );
+    //         if (existing) {
+    //           await walletRepo.update(
+    //             { id: existing.id },
+    //             {
+    //               wallet_address: addr.address,
+    //               currency: currency.toUpperCase(),
+    //               network: appNetwork,
+    //               status: Status.active,
+    //               type: WalletType.quidax,
+    //             },
+    //           );
+    //         } else {
+    //           await walletRepo.save({
+    //             user_id: user.id,
+    //             currency: currency.toUpperCase(),
+    //             network: appNetwork,
+    //             wallet_address: addr.address,
+    //             status: Status.active,
+    //             type: WalletType.quidax,
+    //           });
+    //         }
+    //       }
+    //       succeeded++;
+    //       console.log(
+    //         `[QuidaxWalletMigration] ✓ user ${user.id} (${user.email})`,
+    //       );
+    //     } catch (err) {
+    //       failed++;
+    //       const message =
+    //         err?.response?.data?.message ?? err?.message ?? String(err);
+    //       console.error(
+    //         `[QuidaxWalletMigration] ✗ user ${user.id} (${user.email}): ${message}`,
+    //       );
+    //     }
+    //     // Small gap between users to avoid rate-limit bursts
+    //     await sleep(300);
+    //   }
+    //   console.log(
+    //     `[QuidaxWalletMigration] Done — ${succeeded} succeeded, ${failed} failed out of ${users.length}.`,
+    //   );
   }
 }

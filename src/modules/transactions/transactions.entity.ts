@@ -30,6 +30,7 @@ export enum TokenType {
 
 export enum TransactionEntityType {
   deposit = "deposit",
+  deposit_fee = "deposit_fee",
   withdrawal = "withdrawal",
   transfer = "transfer",
   airtime = "airtime",

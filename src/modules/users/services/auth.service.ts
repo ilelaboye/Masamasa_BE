@@ -538,6 +538,8 @@ export class AuthService extends BaseService {
           currency: addr.currency.toUpperCase(),
           network: appNetwork,
           wallet_address: addr.address,
+          // Tag-based chains (XRP) need the destination tag alongside the address
+          destination_tag: addr.destination_tag ?? null,
           status: WalletStatus.active,
           type: WalletType.quidax,
         });

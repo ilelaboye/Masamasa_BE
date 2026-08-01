@@ -127,9 +127,11 @@ export class QuidaxWalletCron {
    * wallet address for every accepted currency/network pair (registration
    * provisions them non-blocking, so a Quidax hiccup can leave gaps).
    */
-  @Cron(CronExpression.EVERY_HOUR)
+  // @Cron(CronExpression.EVERY_HOUR)
+  @Interval(30000)
   async backfillNewUserWallets() {
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    console.log("START BACKFILLING");
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 3 * 1000);
 
     const users = await this.userRepository.find({
       where: { created_at: MoreThan(oneHourAgo) },
@@ -137,10 +139,6 @@ export class QuidaxWalletCron {
     });
 
     if (!users.length) return;
-
-    this.logger.log(
-      `Checking wallets for ${users.length} user(s) registered in the last hour`,
-    );
 
     for (const user of users) {
       try {
@@ -178,8 +176,9 @@ export class QuidaxWalletCron {
 
         if (!missing.length) continue;
 
-        this.logger.log(
+        console.log(
           `User ${user.id}: creating ${missing.length} missing wallet(s)`,
+          missing,
         );
 
         for (const { currency, network } of missing) {
@@ -189,18 +188,22 @@ export class QuidaxWalletCron {
               currency,
               network,
             );
+            console.log("createPaymentAddress resp", addr);
             if (addr?.address) {
               await this.walletRepository.save({
                 user_id: user.id,
                 currency: currency.toUpperCase(),
                 network: toAppNetwork(network ?? null, currency),
                 wallet_address: addr.address,
+                // Tag-based chains (XRP) need the destination tag alongside
+                // the address
+                destination_tag: addr.destination_tag ?? null,
                 status: Status.active,
                 type: WalletType.quidax,
               });
             }
           } catch (err) {
-            this.logger.error(
+            console.error(
               `User ${user.id}: failed ${currency}${network ? `/${network}` : ""} — ${err?.message}`,
             );
           }
@@ -208,6 +211,7 @@ export class QuidaxWalletCron {
           await new Promise((resolve) => setTimeout(resolve, 120));
         }
       } catch (err) {
+        console.log("eeee", err.response.data);
         this.logger.error(
           `Wallet backfill failed for user ${user.id}: ${err?.message}`,
         );

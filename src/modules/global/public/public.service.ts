@@ -1,5 +1,10 @@
 import { appConfig } from "@/config";
-import { MAILJETTemplates, ZohoMailTemplates } from "@/constants";
+import {
+  DEPOSIT_FEE_EXEMPT_CURRENCIES,
+  DEPOSIT_FEE_USD,
+  MAILJETTemplates,
+  ZohoMailTemplates,
+} from "@/constants";
 import {
   axiosClient,
   getBanks,
@@ -33,7 +38,7 @@ import { CronJob } from "../jobs/cron/cron.job";
 import { toAppNetwork } from "@/modules/quidax/quidax.constants";
 import { QuidaxService } from "@/modules/quidax/quidax.service";
 import { CacheService } from "../cache-container/cache-container.service";
-import { capitalizeString } from "@/core/helpers";
+import { capitalizeString, generateMasamasaRef } from "@/core/helpers";
 
 // Nomba's bank list rarely changes — cached under this key for all users.
 const NOMBA_BANKS_CACHE_KEY = "NOMBA_BANKS_LIST";
@@ -464,7 +469,7 @@ export class PublicService {
   async test() {
     try {
       const res = await axios.get(
-        `https://openapi.quidax.io/exchange-open-api/api/v1/users/me`,
+        `https://openapi.quidax.io/exchange-open-api/api/v1/users/1cs4v97s/wallets/xrp`,
 
         {
           headers: {
@@ -551,7 +556,7 @@ export class PublicService {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async handleWalletAddressGenerated(data: any): Promise<void> {
-    const { currency, address, network, user: quidaxUser } = data;
+    const { currency, address, network, destination_tag, user: quidaxUser } = data;
     console.log(currency, address, network, quidaxUser);
     if (!address || !quidaxUser?.id) return;
 
@@ -588,7 +593,7 @@ export class PublicService {
       if (!existingWallet.wallet_address) {
         await this.walletRepository.update(
           { id: existingWallet.id },
-          { wallet_address: address },
+          { wallet_address: address, destination_tag: destination_tag ?? null },
         );
       }
     } else {
@@ -597,6 +602,7 @@ export class PublicService {
         network: appNetwork,
         currency,
         wallet_address: address,
+        destination_tag: destination_tag ?? null,
         status: Status.active,
       });
     }
@@ -623,15 +629,39 @@ export class PublicService {
       currency: data.currency as string,
       amount: data.amount as string,
       address: data.payment_address?.address as string, // the user's deposit address
+      // Tag-based chains (XRP) share one master address — the tag is what
+      // identifies the user's wallet row.
+      destinationTag: (data.payment_address?.destination_tag ?? null) as
+        | string
+        | null,
       network: data.payment_address?.network as string,
     };
+  }
+
+  /**
+   * Finds the wallet row a deposit belongs to. For tag-based chains the
+   * shared master address alone is ambiguous, so the destination tag must
+   * match too.
+   */
+  private findDepositWallet(
+    address: string,
+    destinationTag: string | null,
+    withUser = false,
+  ) {
+    return this.walletRepository.findOne({
+      where: {
+        wallet_address: address,
+        ...(destinationTag ? { destination_tag: destinationTag } : {}),
+      },
+      ...(withUser ? { relations: ["user"] } : {}),
+    });
   }
 
   // Incoming TX detected on-chain — not yet confirmed.
   // Creates a processing transaction so the user sees the pending deposit immediately.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async handleDepositTransactionConfirmation(data: any): Promise<void> {
-    const { depositId, currency, amount, address, network } =
+    const { depositId, currency, amount, address, network, destinationTag } =
       this.extractDepositFields(data);
     if (!depositId || !address) return;
 
@@ -641,9 +671,7 @@ export class PublicService {
     });
     if (existingWebhook) return;
 
-    const wallet = await this.walletRepository.findOne({
-      where: { wallet_address: address },
-    });
+    const wallet = await this.findDepositWallet(address, destinationTag);
     if (!wallet) return;
 
     const wb = await this.webhookRepository.save({
@@ -683,14 +711,11 @@ export class PublicService {
   // If not (confirmation missed) → create a fresh success transaction.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async handleDepositSuccessful(data: any): Promise<void> {
-    const { depositId, currency, amount, address, network } =
+    const { depositId, currency, amount, address, network, destinationTag } =
       this.extractDepositFields(data);
     if (!depositId || !address) return;
 
-    const wallet = await this.walletRepository.findOne({
-      where: { wallet_address: address },
-      relations: ["user"],
-    });
+    const wallet = await this.findDepositWallet(address, destinationTag, true);
     if (!wallet) return;
 
     const rate = await this.exchangeRateService.getCurrencyActiveRate(
@@ -706,7 +731,10 @@ export class PublicService {
       where: { hash: depositId },
     });
 
+    let webhookEntityId: number;
+
     if (existingWebhook) {
+      webhookEntityId = existingWebhook.id;
       // Upgrade the processing record created by deposit.transaction.confirmation
       await this.transactionsRepository
         .createQueryBuilder()
@@ -735,6 +763,7 @@ export class PublicService {
         hash: depositId,
         metadata: data,
       });
+      webhookEntityId = wb.id;
 
       await this.transactionsRepository.save({
         user_id: wallet.user_id,
@@ -749,6 +778,38 @@ export class PublicService {
         entity_id: wb.id,
         dollar_amount: dollarAmount,
         amount: dollarAmount * exchange,
+        coin_exchange_rate: coinPrice,
+        status: TransactionStatusType.success,
+      } as unknown as Transactions);
+    }
+
+    // Flat deposit fee: the deposit is credited in full above, then the fee
+    // is taken as a separate debit row tagged deposit_fee. Capped at the
+    // deposit's value so tiny deposits never push the balance negative.
+    const feeApplies = !DEPOSIT_FEE_EXEMPT_CURRENCIES.has(
+      currency.toLowerCase(),
+    );
+    const feeUsd = feeApplies ? Math.min(DEPOSIT_FEE_USD, dollarAmount) : 0;
+
+    if (feeUsd > 0) {
+      await this.transactionsRepository.save({
+        user_id: wallet.user_id,
+        network,
+        coin_amount: coinPrice > 0 ? feeUsd / coinPrice : 0,
+        wallet_address: address,
+        mode: TransactionModeType.debit,
+        entity_type: TransactionEntityType.deposit_fee,
+        metadata: {
+          deposit_id: depositId,
+          note: "Deposit fee",
+          fee_usd: feeUsd,
+        },
+        exchange_rate_id: rate ? rate.id : null,
+        currency,
+        entity_id: webhookEntityId,
+        masamasa_ref: generateMasamasaRef(),
+        dollar_amount: feeUsd,
+        amount: feeUsd * exchange,
         coin_exchange_rate: coinPrice,
         status: TransactionStatusType.success,
       } as unknown as Transactions);
@@ -798,13 +859,11 @@ export class PublicService {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async handleDepositOnHold(data: any): Promise<void> {
-    const { depositId, currency, amount, address, network } =
+    const { depositId, currency, amount, address, network, destinationTag } =
       this.extractDepositFields(data);
     if (!depositId || !address) return;
 
-    const wallet = await this.walletRepository.findOne({
-      where: { wallet_address: address },
-    });
+    const wallet = await this.findDepositWallet(address, destinationTag);
 
     const existingWebhook = await this.webhookRepository.findOne({
       where: { hash: depositId },

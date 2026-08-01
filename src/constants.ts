@@ -13,6 +13,10 @@ export const CookieOptions = {
   maxAge: _TTL_,
 } satisfies CookieOptionsType;
 
+// Flat fee (in USD) charged on every crypto deposit except the exempt coins.
+export const DEPOSIT_FEE_USD = 1;
+export const DEPOSIT_FEE_EXEMPT_CURRENCIES = new Set(["usdt"]);
+
 export const MAILJETTemplates = {
   verify_email: 7451545,
 };
