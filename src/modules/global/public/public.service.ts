@@ -839,7 +839,7 @@ export class PublicService {
         templateId: ZohoMailTemplates.coins_deposit_confirmed,
         variables: {
           firstName: capitalizeString(wallet.user.first_name),
-          coin: `${amount} ${wallet.currency}`,
+          coin: `${amount} ${currency}`,
           network: network,
           amount: `NGN ${dollarAmount * exchange}`,
           address: address,
