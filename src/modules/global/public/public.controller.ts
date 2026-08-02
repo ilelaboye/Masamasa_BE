@@ -18,7 +18,7 @@ import {
   UseInterceptors,
   UsePipes,
 } from "@nestjs/common";
-import { ApiTags } from "@nestjs/swagger";
+import { ApiQuery, ApiTags } from "@nestjs/swagger";
 import { Response } from "express";
 import { PublicService } from "./public.service";
 import {
@@ -101,8 +101,9 @@ export class PublicController {
 
   @Get("quidax/test")
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  async test() {
-    return await this.publicService.test();
+  @ApiQuery({ name: "search", required: false })
+  async test(@Req() req) {
+    return await this.publicService.test(req);
   }
 
   // @Post("webhook/transaction")

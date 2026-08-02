@@ -8,6 +8,7 @@ import {
 import {
   axiosClient,
   getBanks,
+  getRequestQuery,
   sendMailJetWithTemplate,
   sendZohoMailWithTemplate,
 } from "@/core/utils";
@@ -470,7 +471,8 @@ export class PublicService {
     // return this.verifyAccountNumberFromClan(accountNumber, bankCode, bankName);
   }
 
-  async test() {
+  async test(req: Request) {
+    const { search } = getRequestQuery(req);
     var accessToken = await this.accessTokenRepository.findOne({
       where: { type: AccessTokenType.nomba },
     });
@@ -480,7 +482,7 @@ export class PublicService {
     }
     try {
       const res = await axiosClient(
-        `${appConfig.NOMBA_BASE_URL}/v1/transactions/accounts/single?merchantTxRef=MASAC1Q7xbt083001785587973016`,
+        `${appConfig.NOMBA_BASE_URL}/v1/transactions/accounts/single?merchantTxRef=${search}`,
         {
           headers: {
             "Content-Type": "application/json",
