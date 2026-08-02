@@ -480,7 +480,7 @@ export class PublicService {
     }
     try {
       const res = await axiosClient(
-        `${appConfig.NOMBA_BASE_URL}/v1/transactions/accounts/single?orderReference=MASAC1Q7xbt083001785587973016`,
+        `${appConfig.NOMBA_BASE_URL}/v1/transactions/accounts/single?merchantTxRef=MASAC1Q7xbt083001785587973016`,
         {
           headers: {
             "Content-Type": "application/json",
