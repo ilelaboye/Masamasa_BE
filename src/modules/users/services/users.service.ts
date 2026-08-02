@@ -296,7 +296,8 @@ export class UsersService extends BaseService {
   }
 
   async walletBalance(req: UserRequest) {
-    return this.transactionService.getAccountBalance(req);
+    const { user } = req;
+    return this.transactionService.getAccountBalance(user.id);
   }
 
   async transfer(transferDto: TransferDto, req: UserRequest) {
@@ -747,7 +748,10 @@ export class UsersService extends BaseService {
   /**
    * Confirm and execute account deletion with confirmation value (1)
    */
-  async confirmAccountDeletion(confirmation: number | string, req: UserRequest) {
+  async confirmAccountDeletion(
+    confirmation: number | string,
+    req: UserRequest,
+  ) {
     const user = await this.userRepository.findOne({
       where: { id: req.user.id },
     });
@@ -757,7 +761,8 @@ export class UsersService extends BaseService {
     }
 
     // Convert string to number if necessary
-    const confirmationNumber = typeof confirmation === 'string' ? Number(confirmation) : confirmation;
+    const confirmationNumber =
+      typeof confirmation === "string" ? Number(confirmation) : confirmation;
 
     // Verify confirmation value
     if (confirmation != 1) {
@@ -840,7 +845,9 @@ export class UsersService extends BaseService {
   }
 
   async updateMfa(req: UserRequest) {
-    const user = await this.userRepository.findOne({ where: { id: req.user.id } });
+    const user = await this.userRepository.findOne({
+      where: { id: req.user.id },
+    });
     if (!user) throw new UnauthorizedException("User not found");
     const mfa = !user.mfa;
     await this.userRepository.update({ id: req.user.id }, { mfa });

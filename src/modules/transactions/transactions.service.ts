@@ -64,8 +64,7 @@ export class TransactionService {
     return { transactions, metadata };
   }
 
-  async getAccountBalance(req: UserRequest) {
-    const { user } = req;
+  async getAccountBalance(user_id: number) {
     const result = await this.transactionRepository
       .createQueryBuilder("transaction")
       .select(
@@ -79,7 +78,7 @@ export class TransactionService {
     `,
         "balance",
       )
-      .where("transaction.user_id = :user_id", { user_id: user.id })
+      .where("transaction.user_id = :user_id", { user_id: user_id })
       .setParameters({
         credit: TransactionModeType.credit,
         debit: TransactionModeType.debit,

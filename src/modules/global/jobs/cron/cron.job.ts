@@ -24,6 +24,7 @@ import {
 import { appConfig } from "@/config";
 import { UsersService } from "@/modules/users/services/users.service";
 import { generateMasamasaRef } from "@/core/helpers";
+import { TransactionService } from "@/modules/transactions/transactions.service";
 
 @Injectable()
 export class CronJob {
@@ -36,158 +37,158 @@ export class CronJob {
     private readonly accessTokenRepository: Repository<AccessToken>,
     // private readonly adminService: AdministratorService,
     private readonly providerService: ProviderService,
+    private readonly transactionsService: TransactionService,
     // private readonly usersService: UsersService
   ) {}
 
   // Handles all notification jobs
-  // async processPaymentJob() {
-  //   Logger.log("START PROCESSING");
-  //   const transactions = await this.transactionsRepository
-  //     .createQueryBuilder("trans")
-  //     .where("trans.status = :status", {
-  //       status: TransactionStatusType.processing,
-  //     })
-  //     .andWhere("trans.entity_type = :type", {
-  //       type: TransactionEntityType.withdrawal,
-  //     })
-  //     .andWhere("trans.retry = :retry", { retry: 0 })
-  //     .getMany();
+  async processPaymentJob() {
+    Logger.log("START PROCESSING");
+    const transactions = await this.transactionsRepository
+      .createQueryBuilder("trans")
+      .where("trans.status = :status", {
+        status: TransactionStatusType.processing,
+      })
+      .andWhere("trans.entity_type = :type", {
+        type: TransactionEntityType.withdrawal,
+      })
+      .andWhere("trans.retry = :retry", { retry: 0 })
+      .getMany();
 
-  //   var accessToken = await this.accessTokenRepository.findOne({
-  //     where: { type: AccessTokenType.nomba },
-  //   });
+    var accessToken = await this.accessTokenRepository.findOne({
+      where: { type: AccessTokenType.nomba },
+    });
 
-  //   if (!accessToken) {
-  //     accessToken = await this.generateNombaAccessToken();
-  //   }
+    if (!accessToken) {
+      accessToken = await this.generateNombaAccessToken();
+    }
 
-  //   for (const trans of transactions) {
-  //     const balance = await this.adminService.getUserWalletBalance(
-  //       trans.user_id
-  //     );
-  //     if (balance < trans.amount) {
-  //       await this.transactionsRepository.update(
-  //         { id: trans.id },
-  //         {
-  //           status: TransactionStatusType.failed,
-  //           metadata: {
-  //             error: "Insufficient wallet balance",
-  //             ...trans.metadata,
-  //           },
-  //         }
-  //       );
-  //       continue;
-  //     }
-  //     // // pay with flutterwave
-  //     // try {
-  //     //   const resp = await transferWithFlutterWave({
-  //     //     amount: trans.amount,
-  //     //     bankCode: trans.metadata.bankCode,
-  //     //     accountNumber: trans.metadata.accountNumber,
-  //     //     ref: trans.masamasa_ref,
-  //     //     narration: "Transfer from Masamasa",
-  //     //   });
-  //     //   console.log("resp from transfer", resp);
-  //     //   if (resp.status) {
-  //     // await this.transactionsRepository.update(
-  //     //   { id: trans.id },
-  //     //   {
-  //     //     status: TransactionStatusType.pending,
-  //     //     retry: trans.retry + 1,
-  //     //     session_id: resp.data.data.id,
-  //     //     metadata: {
-  //     //       ...trans.metadata,
-  //     //       error: null,
-  //     //       initiate_resp: resp.data,
-  //     //     },
-  //     //   }
-  //     // );
-  //     //   } else {
-  //     //     await this.transactionsRepository.update(
-  //     //       { id: trans.id },
-  //     //       {
-  //     //         status: TransactionStatusType.failed,
-  //     //         metadata: {
-  //     //           ...trans.metadata,
-  //     //           error: resp.message,
-  //     //         },
-  //     //       }
-  //     //     );
-  //     //     console.log("eerrr", resp.data);
-  //     //   }
-  //     // } catch (e) {
-  //     //   console.log("eerrr eee", e);
-  //     // }
+    for (const trans of transactions) {
+      const balance = await this.transactionsService.getAccountBalance(
+        trans.user_id,
+      );
+      if (balance < trans.amount) {
+        await this.transactionsRepository.update(
+          { id: trans.id },
+          {
+            status: TransactionStatusType.failed,
+            metadata: {
+              error: "Insufficient wallet balance",
+              ...trans.metadata,
+            },
+          },
+        );
+        continue;
+      }
+      try {
+        const res = await axiosClient(
+          `${appConfig.NOMBA_BASE_URL}/v1/transfers/bank`,
+          {
+            method: "POST",
+            body: {
+              accountNumber: trans.metadata.accountNumber,
+              bankCode: trans.metadata.bankCode,
+              amount: trans.amount,
+              accountName: trans.metadata.accountName,
+              merchantTxRef: trans.masamasa_ref,
+              senderName: "MasaMasa",
+              narration: trans.metadata.narration,
+            },
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+              accountId: appConfig.NOMBA_ACCOUNT_ID,
+              Authorization: `Bearer ${accessToken!.token}`,
+            },
+          },
+        );
 
-  //     try {
-  //       const res = await axiosClient(
-  //         `${appConfig.NOMBA_BASE_URL}/v1/transfers/bank`,
-  //         {
-  //           method: "POST",
-  //           body: {
-  //             accountNumber: trans.metadata.accountNumber,
-  //             bankCode: trans.metadata.bankCode,
-  //             amount: trans.amount,
-  //             accountName: trans.metadata.accountName,
-  //             merchantTxRef: trans.masamasa_ref,
-  //             senderName: "MasaMasa",
-  //             narration: trans.metadata.narration,
-  //           },
-  //           headers: {
-  //             "Content-Type": "application/json",
-  //             Accept: "application/json",
-  //             accountId: appConfig.NOMBA_ACCOUNT_ID,
-  //             Authorization: `Bearer ${accessToken!.token}`,
-  //           },
-  //         }
-  //       );
+        console.log("Nomba bank transfer", res.data);
+        if (res.data.status == "SUCCESS") {
+          console.log("Nomba transfer initiated successfully");
+          await this.transactionsRepository.update(
+            { id: trans.id },
+            {
+              status: TransactionStatusType.pending,
+              retry: trans.retry + 1,
+              session_id: res.data.id,
+              metadata: {
+                ...trans.metadata,
+                error: null,
+                initiate_resp: res.data,
+              },
+            },
+          );
+        } else {
+          await this.transactionsRepository.update(
+            { id: trans.id },
+            {
+              status: TransactionStatusType.failed,
+              retry: trans.retry + 1,
+              metadata: {
+                ...trans.metadata,
+                error: res.data,
+                initiate_resp: res.data,
+              },
+            },
+          );
+        }
+        return {
+          message: "Account number verified",
+          data: {
+            bank_name: trans.metadata.bankName,
+            account_name: res.data.accountName,
+            account_number: trans.metadata.accountNumber,
+          },
+        };
+      } catch (e) {
+        console.log("Error from Nomba Transfer:", e.response);
+        // // this.monitorService.recordError(e);
 
-  //       console.log("Nomba bank transfer", res.data);
-  //       if (res.data.status == "SUCCESS") {
-  //         console.log("Nomba transfer initiated successfully");
-  //         await this.transactionsRepository.update(
-  //           { id: trans.id },
-  //           {
-  //             status: TransactionStatusType.pending,
-  //             retry: trans.retry + 1,
-  //             session_id: res.data.id,
-  //             metadata: {
-  //               ...trans.metadata,
-  //               error: null,
-  //               initiate_resp: res.data,
-  //             },
-  //           }
-  //         );
-  //       } else {
-  //         await this.transactionsRepository.update(
-  //           { id: trans.id },
-  //           {
-  //             status: TransactionStatusType.failed,
-  //             retry: trans.retry + 1,
-  //             metadata: {
-  //               ...trans.metadata,
-  //               error: res.data,
-  //               initiate_resp: res.data,
-  //             },
-  //           }
-  //         );
-  //       }
-  //       return {
-  //         message: "Account number verified",
-  //         data: {
-  //           bank_name: trans.metadata.bankName,
-  //           account_name: res.data.accountName,
-  //           account_number: trans.metadata.accountNumber,
-  //         },
-  //       };
-  //     } catch (e) {
-  //       console.log("Error from Nomba Transfer:", e.response);
-  //       // // this.monitorService.recordError(e);
-
-  //       // throw new BadRequestException(e.response.data.description);
-  //     }
-  //   }
-  // }
+        // throw new BadRequestException(e.response.data.description);
+      }
+      // // pay with flutterwave
+      // try {
+      //   const resp = await transferWithFlutterWave({
+      //     amount: trans.amount,
+      //     bankCode: trans.metadata.bankCode,
+      //     accountNumber: trans.metadata.accountNumber,
+      //     ref: trans.masamasa_ref,
+      //     narration: "Transfer from Masamasa",
+      //   });
+      //   console.log("resp from transfer", resp);
+      //   if (resp.status) {
+      // await this.transactionsRepository.update(
+      //   { id: trans.id },
+      //   {
+      //     status: TransactionStatusType.pending,
+      //     retry: trans.retry + 1,
+      //     session_id: resp.data.data.id,
+      //     metadata: {
+      //       ...trans.metadata,
+      //       error: null,
+      //       initiate_resp: resp.data,
+      //     },
+      //   }
+      // );
+      //   } else {
+      //     await this.transactionsRepository.update(
+      //       { id: trans.id },
+      //       {
+      //         status: TransactionStatusType.failed,
+      //         metadata: {
+      //           ...trans.metadata,
+      //           error: resp.message,
+      //         },
+      //       }
+      //     );
+      //     console.log("eerrr", resp.data);
+      //   }
+      // } catch (e) {
+      //   console.log("eerrr eee", e);
+      // }
+    }
+  }
 
   async verifyTransactionJob() {
     Logger.log("START VERIFYING MASAMASA TRANSACTION");

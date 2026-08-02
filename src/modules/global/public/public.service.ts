@@ -172,6 +172,7 @@ export class PublicService {
   }
 
   async nombaTransferWebhook(webhook) {
+    console.log("Nomba webhook", webhook);
     // console.log(
     //   "webhook.data.transaction.merchantTxRef",
     //   webhook.data.transaction.merchantTxRef
@@ -224,7 +225,7 @@ export class PublicService {
     // } catch {
     //   return { status: false };
     // }
-    if (symbol.toLowerCase() === "pol") {
+    if (symbol.toLowerCase() == "pol") {
       symbol = "POL (ex-MATIC)";
     }
     try {
@@ -470,10 +471,31 @@ export class PublicService {
   }
 
   async test() {
+    var accessToken = await this.accessTokenRepository.findOne({
+      where: { type: AccessTokenType.nomba },
+    });
+
+    if (!accessToken) {
+      accessToken = await this.cronJob.generateNombaAccessToken();
+    }
     try {
-      const priceResult = await this.getPrice("POL");
-      console.log("priceResult", priceResult);
-      return priceResult;
+      const res = await axiosClient(
+        `${appConfig.NOMBA_BASE_URL}/v1/transactions/accounts/single?orderReference=API-TRANSFER-C64C8-9a5bc684-2e9b-47fd-859c-9fa0a2485970`,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            accountId: appConfig.NOMBA_ACCOUNT_ID,
+            Authorization: `Bearer ${accessToken!.token}`,
+          },
+        },
+      );
+      console.log("Nomba bank verify transfer", res.data);
+      return res.data;
+
+      // const priceResult = await this.getPrice("POL");
+      // console.log("priceResult", priceResult);
+      // return priceResult;
       // const res = await axios.get(
       //   `https://openapi.quidax.io/exchange-open-api/api/v1/users/1cs4v97s/wallets/xrp`,
 
