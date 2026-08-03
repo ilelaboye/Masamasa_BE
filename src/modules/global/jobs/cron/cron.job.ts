@@ -736,7 +736,7 @@ export class CronJob {
   }
 
   // ── Provider balance monitoring ────────────────────────────────────────
-  private static readonly NOMBA_BALANCE_THRESHOLD = 100000;
+  private static readonly NOMBA_BALANCE_THRESHOLD = 500000;
   private static readonly VTPASS_BALANCE_THRESHOLD = 50000;
   private static readonly BALANCE_ALERT_EMAILS = [
     "kindas3325@gmail.com",
@@ -744,9 +744,9 @@ export class CronJob {
     "Lawvet4@gmail.com",
     "masamasaltd@gmail.com",
   ];
-  // While a balance stays low, re-alert at most once every 6 hours — the
+  // While a balance stays low, re-alert at most once every 1 hours — the
   // job runs every 5 minutes and must not send 288 emails a day.
-  private static readonly BALANCE_ALERT_COOLDOWN_MS = 6 * 60 * 60 * 1000;
+  private static readonly BALANCE_ALERT_COOLDOWN_MS = 1 * 60 * 60 * 1000;
   private lastBalanceAlertAt: Record<string, number> = {};
 
   /**
@@ -829,7 +829,7 @@ export class CronJob {
   ) {
     const now = Date.now();
     const last = this.lastBalanceAlertAt[provider] ?? 0;
-    if (now - last < CronJob.BALANCE_ALERT_COOLDOWN_MS) return;
+    // if (now - last < CronJob.BALANCE_ALERT_COOLDOWN_MS) return;
     this.lastBalanceAlertAt[provider] = now;
 
     for (const email of CronJob.BALANCE_ALERT_EMAILS) {
