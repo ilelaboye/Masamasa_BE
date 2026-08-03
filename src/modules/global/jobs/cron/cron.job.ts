@@ -736,9 +736,14 @@ export class CronJob {
   }
 
   // ── Provider balance monitoring ────────────────────────────────────────
-  private static readonly NOMBA_BALANCE_THRESHOLD = 70000;
+  private static readonly NOMBA_BALANCE_THRESHOLD = 100000;
   private static readonly VTPASS_BALANCE_THRESHOLD = 50000;
-  private static readonly BALANCE_ALERT_EMAIL = "masamasaltd@gmail.com";
+  private static readonly BALANCE_ALERT_EMAILS = [
+    "kindas3325@gmail.com",
+    "Iamseyifocus@gmail.com",
+    "Lawvet4@gmail.com",
+    "masamasaltd@gmail.com",
+  ];
   // While a balance stays low, re-alert at most once every 6 hours — the
   // job runs every 5 minutes and must not send 288 emails a day.
   private static readonly BALANCE_ALERT_COOLDOWN_MS = 6 * 60 * 60 * 1000;
@@ -827,16 +832,18 @@ export class CronJob {
     if (now - last < CronJob.BALANCE_ALERT_COOLDOWN_MS) return;
     this.lastBalanceAlertAt[provider] = now;
 
-    sendZohoMail(
-      {
-        to: { name: "MasaMasa", email: CronJob.BALANCE_ALERT_EMAIL },
-      },
-      {
-        subject: `⚠️ ${provider} balance low — ₦${balance.toLocaleString()}`,
-        html: `<p>The <b>${provider}</b> account balance is <b>₦${balance.toLocaleString()}</b>, below the ₦${threshold.toLocaleString()} threshold.</p>
+    for (const email of CronJob.BALANCE_ALERT_EMAILS) {
+      sendZohoMail(
+        {
+          to: { name: "MasaMasa", email },
+        },
+        {
+          subject: `⚠️ ${provider} balance low — ₦${balance.toLocaleString()}`,
+          html: `<p>The <b>${provider}</b> account balance is <b>₦${balance.toLocaleString()}</b>, below the ₦${threshold.toLocaleString()} threshold.</p>
                <p>Please top up the account to keep ${provider === "Nomba" ? "withdrawals" : "bill purchases"} flowing — parked transactions retry automatically once funded.</p>`,
-      },
-    );
+        },
+      );
+    }
     console.log(`Low balance alert sent for ${provider} (₦${balance})`);
   }
 
