@@ -12,12 +12,13 @@ export class CronService {
   //   this.cronJob.processPaymentJob();
   // }
 
-  // @Interval(30000)
-  // async verifyTransactions() {
-  //   this.cronJob.verifyTransactionJob();
-  // }
+  // Every 5 minutes
+  @Interval(300000)
+  async verifyTransactions() {
+    this.cronJob.verifyTransactionJob();
+  }
 
-  @Interval(6000)
+  @Interval(120000)
   async verifyProcessingVtpassTransactions() {
     this.cronJob.verifyProcessingVtpassTransactions();
   }
@@ -25,5 +26,12 @@ export class CronService {
   @Cron("*/20 * * * *")
   async generateNombaAccessToken() {
     await this.cronJob.generateNombaAccessToken();
+  }
+
+  // Every 5 minutes — checks Nomba & VTPass balances and emails an alert
+  // when either drops below its threshold.
+  @Interval(300000)
+  async monitorProviderBalances() {
+    await this.cronJob.monitorProviderBalances();
   }
 }

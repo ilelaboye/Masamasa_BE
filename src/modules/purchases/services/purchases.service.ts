@@ -85,6 +85,25 @@ export class PurchaseService {
         requestId,
       );
       if (!resp.status) {
+        // Low balance on OUR VTPass account must never surface to the user —
+        // park the purchase for automatic re-initiation by the cron instead.
+        if (ProviderService.isVtpassBalanceError(resp.message)) {
+          await queryRunner.manager.update(
+            PurchaseRequest,
+            { id: createdPurchaseRequests.id },
+            {
+              status: PurchaseStatus.processing,
+              metadata: {
+                ...createdPurchaseRequests.metadata,
+                needs_initiation: true,
+                initiation_retries: 0,
+                note: "Provider balance low — queued for automatic retry",
+              },
+            },
+          );
+          await queryRunner.commitTransaction();
+          return createdPurchaseRequests;
+        }
         throw new BadRequestException(resp.message);
       }
       console.log("createdPurchaseRequests", createdPurchaseRequests);
@@ -208,6 +227,25 @@ export class PurchaseService {
       );
       console.log("resp", resp);
       if (!resp.status) {
+        // Low balance on OUR VTPass account must never surface to the user —
+        // park the purchase for automatic re-initiation by the cron instead.
+        if (ProviderService.isVtpassBalanceError(resp.message)) {
+          await queryRunner.manager.update(
+            PurchaseRequest,
+            { id: createdPurchaseRequests.id },
+            {
+              status: PurchaseStatus.processing,
+              metadata: {
+                ...createdPurchaseRequests.metadata,
+                needs_initiation: true,
+                initiation_retries: 0,
+                note: "Provider balance low — queued for automatic retry",
+              },
+            },
+          );
+          await queryRunner.commitTransaction();
+          return createdPurchaseRequests;
+        }
         throw new BadRequestException(resp.message);
       }
 
@@ -320,6 +358,25 @@ export class PurchaseService {
         req.user,
       );
       if (!resp.status) {
+        // Low balance on OUR VTPass account must never surface to the user —
+        // park the purchase for automatic re-initiation by the cron instead.
+        if (ProviderService.isVtpassBalanceError(resp.message)) {
+          await queryRunner.manager.update(
+            PurchaseRequest,
+            { id: createdPurchaseRequests.id },
+            {
+              status: PurchaseStatus.processing,
+              metadata: {
+                ...createdPurchaseRequests.metadata,
+                needs_initiation: true,
+                initiation_retries: 0,
+                note: "Provider balance low — queued for automatic retry",
+              },
+            },
+          );
+          await queryRunner.commitTransaction();
+          return createdPurchaseRequests;
+        }
         throw new BadRequestException(resp.message);
       }
 

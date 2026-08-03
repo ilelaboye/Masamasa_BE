@@ -1,5 +1,6 @@
 import {
   axiosClient,
+  sendZohoMail,
   transferWithFlutterWave,
   verifyTransfer,
 } from "@/core/utils";
@@ -7,6 +8,7 @@ import { AdministratorService } from "@/modules/administrator/services/administr
 import {
   PurchaseRequest,
   PurchaseStatus,
+  PurchaseType,
 } from "@/modules/purchases/entities/purchases.entity";
 import { ProviderService } from "@/modules/purchases/services/providers.service";
 import {
@@ -268,7 +270,10 @@ export class CronJob {
         }
       } catch (e) {
         const errData = e?.response?.data;
-        console.log("Error from Nomba verify Transfer:", errData ?? e?.message);
+        console.log(
+          "Error from Nomba verify Transfer:",
+          errData ?? e?.description,
+        );
 
         if (errData?.code == "404") {
           // Transaction unknown to Nomba — re-initiate it. Safe because
@@ -302,38 +307,6 @@ export class CronJob {
           );
         }
       }
-      // try {
-      //   const resp = await verifyTransfer({ id: trans.session_id });
-      //   console.log("resp", resp);
-      //   if (resp.status) {
-      //     await this.transactionsRepository.update(
-      //       { id: trans.id },
-      //       {
-      //         status: TransactionStatusType.success,
-      //         session_id: resp.data.id,
-      //         metadata: {
-      //           ...trans.metadata,
-      //           flutterwave_resp: resp.data,
-      //           error: null,
-      //         },
-      //       }
-      //     );
-      //   } else {
-      // await this.transactionsRepository.update(
-      //   { id: trans.id },
-      //   {
-      //     metadata: {
-      //       ...trans.metadata,
-      //       error: resp.message,
-      //       failed_resp: resp.data,
-      //     },
-      //   },
-      // );
-      //     console.log("eerrr", resp.data);
-      //   }
-      // } catch (e) {
-      //   console.log("eerrr eee", e);
-      // }
     }
   }
 
@@ -499,7 +472,7 @@ export class CronJob {
   }
 
   async verifyProcessingVtpassTransactions() {
-    console.log("START VERIFYING VTPASS TRANSACTION");
+    // console.log("START VERIFYING VTPASS TRANSACTION");
     const purchases = await this.purchaseRequestRepository
       .createQueryBuilder("purchase")
       .where("purchase.status = :status", {
@@ -508,6 +481,20 @@ export class CronJob {
       .getMany();
 
     for (const purchase of purchases) {
+      // Purchases parked because OUR VTPass balance was low were never
+      // created at VTPass — re-initiate them instead of verifying.
+      if (purchase.metadata?.needs_initiation) {
+        try {
+          await this.retryPurchaseInitiation(purchase);
+        } catch (e) {
+          console.log(
+            `Purchase retry failed for ${purchase.masamasa_ref}:`,
+            e?.response?.data ?? e?.message,
+          );
+        }
+        continue;
+      }
+
       // Logic to verify VTPass transaction
       const verify = await this.providerService.verifyVtpassTransaction(
         purchase.masamasa_ref,
@@ -519,7 +506,7 @@ export class CronJob {
           verify.body.content.transactions &&
           verify.body.content.transactions.status == "delivered"
         ) {
-          this.purchaseRequestRepository.update(
+          await this.purchaseRequestRepository.update(
             { id: purchase.id },
             {
               status: PurchaseStatus.processed,
@@ -531,6 +518,10 @@ export class CronJob {
               },
             },
           );
+          // The create flow only debits the wallet when VTPass delivers
+          // immediately — purchases that delivered later via this
+          // verification must be debited here.
+          await this.ensurePurchaseDebit(purchase, verify.body);
         } else if (
           verify.body.content &&
           verify.body.content.transactions &&
@@ -549,6 +540,304 @@ export class CronJob {
         }
       }
     }
+  }
+
+  // A parked purchase is re-initiated at most this many times before being
+  // marked failed (the user was never charged, so failing is safe).
+  private static readonly MAX_PURCHASE_RETRIES = 3;
+
+  private purchaseEntityType(type: PurchaseType): TransactionEntityType {
+    switch (type) {
+      case PurchaseType.airtime:
+        return TransactionEntityType.airtime;
+      case PurchaseType.data:
+        return TransactionEntityType.data;
+      case PurchaseType.electricity_bill:
+        return TransactionEntityType.electricity_bill;
+      case PurchaseType.tv_subscription:
+        return TransactionEntityType.tv_subscription;
+    }
+  }
+
+  /**
+   * Writes the wallet debit for a delivered purchase — idempotent: skips
+   * when a debit for this purchase already exists, so the create flow, the
+   * verification path, and the retry path can never double-debit.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private async ensurePurchaseDebit(
+    purchase: PurchaseRequest,
+    providerResponse: any,
+  ) {
+    const entityType = this.purchaseEntityType(purchase.type);
+
+    const existing = await this.transactionsRepository.findOne({
+      where: {
+        entity_id: purchase.id,
+        entity_type: entityType,
+        mode: TransactionModeType.debit,
+      },
+    });
+    if (existing) return;
+
+    await this.transactionsRepository.save({
+      user_id: purchase.user_id,
+      coin_amount: 0,
+      mode: TransactionModeType.debit,
+      entity_type: entityType,
+      metadata: {
+        vtpass_response: providerResponse,
+        provider: purchase.provider,
+        phone: purchase.metadata?.phone,
+      },
+      exchange_rate_id: null,
+      currency: "NGN",
+      entity_id: purchase.id,
+      amount: purchase.amount,
+      masamasa_ref: generateMasamasaRef(),
+      status: TransactionStatusType.success,
+    } as unknown as Transactions);
+  }
+
+  /**
+   * Re-initiates a purchase that was parked because OUR VTPass account had
+   * insufficient balance (the request never reached VTPass). Re-using the
+   * same request_id is safe — VTPass rejects a duplicate request_id (code
+   * 014), so a purchase that actually went through cannot run twice.
+   */
+  private async retryPurchaseInitiation(purchase: PurchaseRequest) {
+    const retries = purchase.metadata?.initiation_retries ?? 0;
+
+    if (retries >= CronJob.MAX_PURCHASE_RETRIES) {
+      await this.purchaseRequestRepository.update(
+        { id: purchase.id },
+        {
+          status: PurchaseStatus.failed,
+          metadata: {
+            ...purchase.metadata,
+            needs_initiation: false,
+            note: "Retry cap reached — purchase could not be completed",
+          },
+        },
+      );
+      console.log(
+        `Purchase ${purchase.masamasa_ref} hit the retry cap — marked failed (user was never charged)`,
+      );
+      return;
+    }
+
+    // The user's wallet was only checked at creation time — never deliver
+    // (and debit) later against a balance that is no longer there.
+    const balance = await this.transactionsService.getAccountBalance(
+      purchase.user_id,
+    );
+    if (balance < purchase.amount) {
+      await this.purchaseRequestRepository.update(
+        { id: purchase.id },
+        {
+          status: PurchaseStatus.failed,
+          metadata: {
+            ...purchase.metadata,
+            needs_initiation: false,
+            error: "Insufficient wallet balance",
+          },
+        },
+      );
+      return;
+    }
+
+    let resp: { status: boolean; message?: string; data?: any };
+    switch (purchase.type) {
+      case PurchaseType.airtime:
+        resp = await this.providerService.processAirtimePurchase(
+          purchase,
+          purchase.masamasa_ref,
+        );
+        break;
+      case PurchaseType.data:
+        resp = await this.providerService.processDataPurchase(
+          purchase,
+          purchase.masamasa_ref,
+        );
+        break;
+      case PurchaseType.electricity_bill: {
+        const user = await this.dataSource
+          .getRepository(User)
+          .findOne({ where: { id: purchase.user_id } });
+        if (!user) return;
+        resp = await this.providerService.processElectricityPurchase(
+          purchase,
+          purchase.masamasa_ref,
+          user,
+        );
+        break;
+      }
+      default:
+        console.log(
+          `No re-initiation handler for purchase type ${purchase.type} (${purchase.masamasa_ref})`,
+        );
+        return;
+    }
+
+    if (!resp.status) {
+      // Still failing (most likely the provider balance is still low) —
+      // count the attempt and let the next run try again.
+      await this.purchaseRequestRepository.update(
+        { id: purchase.id },
+        {
+          metadata: {
+            ...purchase.metadata,
+            initiation_retries: retries + 1,
+            last_error: resp.message,
+          },
+        },
+      );
+      return;
+    }
+
+    const tx = resp.data?.content?.transactions;
+    if (tx?.status === "delivered") {
+      await this.purchaseRequestRepository.update(
+        { id: purchase.id },
+        {
+          status: PurchaseStatus.processed,
+          commission: tx.commission,
+          other_ref: tx.transactionId,
+          metadata: {
+            ...purchase.metadata,
+            needs_initiation: false,
+            provider_response: resp.data,
+          },
+        },
+      );
+
+      // The wallet debit is normally written by the create flow's delivered
+      // branch — this delivery happened via retry, so write it here.
+      await this.ensurePurchaseDebit(purchase, resp.data);
+
+      console.log(
+        `Purchase ${purchase.masamasa_ref} delivered on retry ${retries + 1}`,
+      );
+    } else {
+      // Accepted but not yet delivered — hand over to the normal
+      // verification path (needs_initiation cleared).
+      await this.purchaseRequestRepository.update(
+        { id: purchase.id },
+        {
+          metadata: {
+            ...purchase.metadata,
+            needs_initiation: false,
+            initiation_retries: retries + 1,
+            provider_response: resp.data,
+          },
+        },
+      );
+    }
+  }
+
+  // ── Provider balance monitoring ────────────────────────────────────────
+  private static readonly NOMBA_BALANCE_THRESHOLD = 70000;
+  private static readonly VTPASS_BALANCE_THRESHOLD = 50000;
+  private static readonly BALANCE_ALERT_EMAIL = "masamasaltd@gmail.com";
+  // While a balance stays low, re-alert at most once every 6 hours — the
+  // job runs every 5 minutes and must not send 288 emails a day.
+  private static readonly BALANCE_ALERT_COOLDOWN_MS = 6 * 60 * 60 * 1000;
+  private lastBalanceAlertAt: Record<string, number> = {};
+
+  /**
+   * Checks the Nomba and VTPass account balances and emails an alert when
+   * either drops below its threshold. Each provider is checked
+   * independently so one failing API never hides the other's balance.
+   */
+  async monitorProviderBalances() {
+    // Nomba
+    try {
+      let accessToken = await this.accessTokenRepository.findOne({
+        where: { type: AccessTokenType.nomba },
+      });
+      if (!accessToken) {
+        accessToken = await this.generateNombaAccessToken();
+      }
+      if (accessToken?.token) {
+        const res = await axiosClient(
+          `${appConfig.NOMBA_BASE_URL}/v1/accounts/balance`,
+          {
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+              accountId: appConfig.NOMBA_ACCOUNT_ID,
+              Authorization: `Bearer ${accessToken.token}`,
+            },
+            timeout: 15000,
+          },
+        );
+        const balance = parseFloat(res?.data?.amount);
+        console.log("Nomba account balance:", balance);
+        if (!isNaN(balance) && balance < CronJob.NOMBA_BALANCE_THRESHOLD) {
+          this.sendLowBalanceAlert(
+            "Nomba",
+            balance,
+            CronJob.NOMBA_BALANCE_THRESHOLD,
+          );
+        }
+      }
+    } catch (e) {
+      console.log(
+        "Nomba balance check failed:",
+        e?.response?.data ?? e?.message,
+      );
+    }
+
+    // VTPass
+    try {
+      const res = await axiosClient(`${appConfig.VTPASS_URL}/balance`, {
+        headers: {
+          "api-key": appConfig.VTPASS_API_KEY,
+          "public-key": appConfig.VTPASS_PUBLIC_KEY,
+        },
+        timeout: 15000,
+      });
+      console.log("VTPass balance response:", res);
+      const balance = parseFloat(
+        res?.contents?.balance ?? res?.content?.balance,
+      );
+      console.log("VTPass account balance:", balance);
+      if (!isNaN(balance) && balance < CronJob.VTPASS_BALANCE_THRESHOLD) {
+        this.sendLowBalanceAlert(
+          "VTPass",
+          balance,
+          CronJob.VTPASS_BALANCE_THRESHOLD,
+        );
+      }
+    } catch (e) {
+      console.log(
+        "VTPass balance check failed:",
+        e?.response?.data ?? e?.message,
+      );
+    }
+  }
+
+  private sendLowBalanceAlert(
+    provider: string,
+    balance: number,
+    threshold: number,
+  ) {
+    const now = Date.now();
+    const last = this.lastBalanceAlertAt[provider] ?? 0;
+    if (now - last < CronJob.BALANCE_ALERT_COOLDOWN_MS) return;
+    this.lastBalanceAlertAt[provider] = now;
+
+    sendZohoMail(
+      {
+        to: { name: "MasaMasa", email: CronJob.BALANCE_ALERT_EMAIL },
+      },
+      {
+        subject: `⚠️ ${provider} balance low — ₦${balance.toLocaleString()}`,
+        html: `<p>The <b>${provider}</b> account balance is <b>₦${balance.toLocaleString()}</b>, below the ₦${threshold.toLocaleString()} threshold.</p>
+               <p>Please top up the account to keep ${provider === "Nomba" ? "withdrawals" : "bill purchases"} flowing — parked transactions retry automatically once funded.</p>`,
+      },
+    );
+    console.log(`Low balance alert sent for ${provider} (₦${balance})`);
   }
 
   async generateNombaAccessToken() {

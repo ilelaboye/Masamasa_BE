@@ -640,10 +640,32 @@ export class UsersService extends BaseService {
         );
       }
     } catch (e) {
-      console.log("Error from Nomba Transfer:", e.response);
+      const errData = e?.response?.data;
+      console.log("Error from Nomba Transfer:", errData ?? e?.message);
       // // this.monitorService.recordError(e);
 
-      throw new BadRequestException(e.response.data.description);
+      // "Insufficient funds" here means OUR Nomba payout account is low —
+      // never surface that to the user. The withdrawal stays processing and
+      // the verification cron re-initiates it once the account is funded
+      // (capped retries, then flagged for manual review).
+      const description: string = errData?.description ?? "";
+      if (description.toLowerCase().includes("insufficient")) {
+        await this.transactionsRepository.update(
+          { id: trans.id },
+          {
+            metadata: {
+              ...trans.metadata,
+              initiate_error: errData,
+              note: "Payout account low — queued for automatic retry",
+            },
+          },
+        );
+        return trans;
+      }
+
+      throw new BadRequestException(
+        description || "Withdrawal could not be initiated, please try again",
+      );
     }
 
     return trans;

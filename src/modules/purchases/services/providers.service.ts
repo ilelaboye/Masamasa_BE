@@ -145,6 +145,15 @@ export class ProviderService {
     }
   }
 
+  /**
+   * True when a VTPass error means OUR provider account is low on funds
+   * (code 018 — "Insuffient balance on your service provider account").
+   * The /insuff/ match covers both VTPass's typo and correct spellings.
+   */
+  static isVtpassBalanceError(message?: string): boolean {
+    return /insuff/i.test(message ?? "");
+  }
+
   async processAirtimePurchase(purchase: PurchaseRequest, requestId: string) {
     try {
       const res = await axiosClient<VTPassResponse>(
