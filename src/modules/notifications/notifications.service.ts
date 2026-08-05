@@ -8,6 +8,7 @@ import { Notification } from "./entities/notification.entity";
 import { User } from "@/modules/users/entities/user.entity";
 import { getRequestQuery } from "@/core/utils";
 import { generateMasamasaRef, paginate } from "@/core/helpers";
+import { PushService } from "./push.service";
 
 @Injectable()
 export class NotificationsService {
@@ -17,6 +18,7 @@ export class NotificationsService {
     private readonly notificationRepository: Repository<Notification>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    private readonly pushService: PushService,
   ) {}
 
   async create(
@@ -82,7 +84,9 @@ export class NotificationsService {
    * message. Inserted in chunks to keep a single statement from ballooning.
    */
   async broadcastToAll(message: string, adminId: number) {
-    const users = await this.userRepository.find({ select: ["id"] });
+    const users = await this.userRepository.find({
+      select: ["id", "notification_token"],
+    });
 
     // One shared ref per broadcast so the per-user rows can be grouped back
     // into a single entry in the admin history.
@@ -101,7 +105,19 @@ export class NotificationsService {
       await this.notificationRepository.insert(chunk);
     }
 
-    return { message: `Notification sent to ${users.length} user(s).` };
+    // Best-effort device push — DB rows above are the source of truth, so a
+    // push failure must not fail the broadcast.
+    const tokens = users.map((u) => u.notification_token).filter(Boolean);
+    const delivered = await this.pushService.sendToTokens(
+      tokens,
+      "MasaMasa",
+      message,
+      { tag: "announcement", broadcast_ref: broadcastRef },
+    );
+
+    return {
+      message: `Notification sent to ${users.length} user(s), push delivered to ${delivered} device(s).`,
+    };
   }
 
   /**

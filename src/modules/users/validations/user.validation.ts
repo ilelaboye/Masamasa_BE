@@ -7,6 +7,8 @@ export const CreateAccountValidation = Joi.object().keys({
   google_id: Joi.string().optional().allow(null, ""),
   phone: Joi.string().max(15).optional().label("Phone").allow(null, ""),
   country: Joi.string().required().label("Country"),
+  device_id: Joi.string().optional().allow(null, ""),
+  notification_token: Joi.string().optional().allow(null, ""),
   password: Joi.string().min(6).max(50).required().messages({
     "string.pattern.base":
       "password must contain at least one uppercase letter, one lowercase letter, one digit, and one special character.",

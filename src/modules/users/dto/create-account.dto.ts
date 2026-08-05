@@ -25,6 +25,12 @@ export class CreateAccountDto {
 
   @ApiProperty({ example: "eiieieieieiieieie" })
   google_id?: string;
+
+  @ApiProperty({ example: "device-uuid", required: false })
+  device_id?: string;
+
+  @ApiProperty({ example: "fcm-token", required: false })
+  notification_token?: string;
 }
 
 export class UpdateAccountDto {

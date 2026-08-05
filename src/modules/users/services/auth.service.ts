@@ -128,9 +128,20 @@ export class AuthService extends BaseService {
       // MFA only applies to email+password logins, not Google sign-in
       if (fetch.mfa) {
         const otp = generateRandomNumberString(6);
+        // Password is verified at this point — safe to record device info,
+        // and required since this branch returns before the update below.
         await this.userRepository.update(
           { id: fetch.id },
-          { remember_token: otp, token_created_at: new Date() },
+          {
+            remember_token: otp,
+            token_created_at: new Date(),
+            ...(loginStaffDto.device_id
+              ? { device_id: loginStaffDto.device_id }
+              : {}),
+            ...(loginStaffDto.notification_token
+              ? { notification_token: loginStaffDto.notification_token }
+              : {}),
+          },
         );
         sendZohoMailWithTemplate(
           {
@@ -292,6 +303,8 @@ export class AuthService extends BaseService {
         status: Status.active,
         google_id: google_id,
         email_verified_at: google_id ? new Date() : null,
+        device_id: createAccountDto.device_id || undefined,
+        notification_token: createAccountDto.notification_token || undefined,
       });
 
       await queryRunner.commitTransaction();

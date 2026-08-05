@@ -36,7 +36,10 @@ import {
   AccessTokenType,
 } from "../bank-verification/entities/access-token.entity";
 import { CronJob } from "../jobs/cron/cron.job";
-import { toAppNetwork } from "@/modules/quidax/quidax.constants";
+import {
+  toAppNetwork,
+  toQuidaxNetwork,
+} from "@/modules/quidax/quidax.constants";
 import { QuidaxService } from "@/modules/quidax/quidax.service";
 import { CacheService } from "../cache-container/cache-container.service";
 import { capitalizeString, generateMasamasaRef } from "@/core/helpers";
@@ -710,6 +713,10 @@ export class PublicService {
     const wallet = await this.findDepositWallet(address, destinationTag);
     if (!wallet) return;
 
+    // Quidax often omits payment_address.network (always for native coins) —
+    // the wallet row looked up by address is the authoritative network.
+    const depositNetwork = wallet.network ?? toAppNetwork(network, currency);
+
     const wb = await this.webhookRepository.save({
       address,
       entity_type: WebhookEntityType.deposit,
@@ -719,7 +726,7 @@ export class PublicService {
 
     await this.transactionsRepository.save({
       user_id: wallet.user_id,
-      network,
+      network: depositNetwork,
       coin_amount: parseFloat(amount) || 0,
       wallet_address: address,
       mode: TransactionModeType.credit,
@@ -754,6 +761,10 @@ export class PublicService {
     const wallet = await this.findDepositWallet(address, destinationTag, true);
     if (!wallet) return;
 
+    // Quidax often omits payment_address.network (always for native coins) —
+    // the wallet row looked up by address is the authoritative network.
+    const depositNetwork = wallet.network ?? toAppNetwork(network, currency);
+
     const rate = await this.exchangeRateService.getCurrencyActiveRate(
       currency.toLowerCase(),
     );
@@ -777,6 +788,7 @@ export class PublicService {
         .update(Transactions)
         .set({
           status: TransactionStatusType.success,
+          network: depositNetwork,
           dollar_amount: dollarAmount,
           amount: dollarAmount * exchange,
           coin_exchange_rate: coinPrice,
@@ -803,7 +815,7 @@ export class PublicService {
 
       await this.transactionsRepository.save({
         user_id: wallet.user_id,
-        network,
+        network: depositNetwork,
         coin_amount: coinAmount,
         wallet_address: address,
         mode: TransactionModeType.credit,
@@ -830,7 +842,7 @@ export class PublicService {
     if (feeUsd > 0) {
       await this.transactionsRepository.save({
         user_id: wallet.user_id,
-        network,
+        network: depositNetwork,
         coin_amount: coinPrice > 0 ? feeUsd / coinPrice : 0,
         wallet_address: address,
         mode: TransactionModeType.debit,
@@ -864,7 +876,7 @@ export class PublicService {
         variables: {
           firstName: capitalizeString(wallet.user.first_name),
           coin: `${amount} ${currency}`,
-          network: network,
+          network: depositNetwork,
           amount: `NGN ${dollarAmount * exchange}`,
           address: address,
           subject: `${wallet.currency} Deposit Confirmed`,
@@ -884,7 +896,12 @@ export class PublicService {
     // webhook (Quidax would retry it and double-process the deposit).
     if (wallet.user.quidax_id) {
       this.quidaxService
-        .sweepToMasterAccount(wallet.user.quidax_id, currency, amount, network)
+        .sweepToMasterAccount(
+          wallet.user.quidax_id,
+          currency,
+          amount,
+          network ?? toQuidaxNetwork(depositNetwork),
+        )
         .catch((err) => {
           this.logger.error(
             `Sweep to master failed for deposit ${depositId} (user ${wallet.user_id}, ${amount} ${currency}): ${err?.response?.data?.message ?? err?.message}`,
@@ -930,7 +947,7 @@ export class PublicService {
       if (wallet) {
         await this.transactionsRepository.save({
           user_id: wallet.user_id,
-          network,
+          network: wallet.network ?? toAppNetwork(network, currency),
           coin_amount: parseFloat(amount) || 0,
           wallet_address: address,
           mode: TransactionModeType.credit,

@@ -120,6 +120,10 @@ export const appConfig = {
 
   MORALIS_API_KEY: process.env.MORALIS_API_KEY || "",
 
+  // Base64-encoded Firebase service account JSON — push disabled when empty
+  FIREBASE_SERVICE_ACCOUNT_BASE64:
+    process.env.FIREBASE_SERVICE_ACCOUNT_BASE64 || "",
+
   // Smart Contract Addresses (optional)
   WALLET_MANAGER_CONTRACT_ADDRESS: process.env.WALLET_MANAGER_CONTRACT_ADDRESS,
 
