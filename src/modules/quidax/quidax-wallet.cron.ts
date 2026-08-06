@@ -6,6 +6,7 @@ import { User } from "../users/entities/user.entity";
 import { Status, Wallet, WalletType } from "../wallet/wallet.entity";
 import { QuidaxService } from "./quidax.service";
 import { QUIDAX_CURRENCIES, toAppNetwork } from "./quidax.constants";
+import { _IS_PROD_ } from "@/constants";
 
 // Fiat wallets are never swept — only coins move to the master account.
 const FIAT_CURRENCIES = new Set(["ngn", "usd", "ghs", "kes", "zar"]);
@@ -30,6 +31,7 @@ export class QuidaxWalletCron {
    */
   @Cron("*/30 * * * *")
   async sweepSubAccountsToMaster() {
+    if (!_IS_PROD_) return;
     // A large user base can take longer than the interval — never overlap.
     if (this.sweepRunning) {
       this.logger.warn("Sub-account sweep still running — skipping this tick");
@@ -127,9 +129,9 @@ export class QuidaxWalletCron {
    * wallet address for every accepted currency/network pair (registration
    * provisions them non-blocking, so a Quidax hiccup can leave gaps).
    */
-  // @Cron(CronExpression.EVERY_HOUR)
-  @Interval(30000)
+  @Cron(CronExpression.EVERY_HOUR)
   async backfillNewUserWallets() {
+    if (!_IS_PROD_) return;
     console.log("START BACKFILLING");
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 3 * 1000);
 
