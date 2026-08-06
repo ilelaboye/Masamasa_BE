@@ -42,13 +42,27 @@ export class AuthGuard implements CanActivate {
     // plus the 401 forces the app to log them out.
     const dbUser = await this.dataSource.getRepository(User).findOne({
       where: { id: req.user.id },
-      select: ["id", "status"],
+      select: ["id", "status", "last_seen_at"],
     });
     if (!dbUser || dbUser.status === Status.deactivated) {
       res.clearCookie(_AUTH_COOKIE_NAME_);
       throw new UnauthorizedException(
         "Your account has been deactivated. Please reach out to the admin to be activated.",
       );
+    }
+
+    // Activity tracking for daily-active-user analytics. Throttled to one
+    // write per 15 minutes per user; fire-and-forget so it never slows or
+    // fails the request.
+    const staleAfterMs = 15 * 60 * 1000;
+    if (
+      !dbUser.last_seen_at ||
+      Date.now() - new Date(dbUser.last_seen_at).getTime() > staleAfterMs
+    ) {
+      this.dataSource
+        .getRepository(User)
+        .update({ id: dbUser.id }, { last_seen_at: new Date() })
+        .catch(() => {});
     }
 
     return true;

@@ -28,10 +28,9 @@ export class CronService {
     await this.cronJob.generateNombaAccessToken();
   }
 
-  // Every 30 minutes — checks Nomba & VTPass balances and emails an alert
+  // Hourly — checks Nomba & VTPass balances and emails an alert
   // when either drops below its threshold.
-  // @Interval(300000)
-  @Interval(1800000)
+  @Interval(3600000)
   async monitorProviderBalances() {
     await this.cronJob.monitorProviderBalances();
   }

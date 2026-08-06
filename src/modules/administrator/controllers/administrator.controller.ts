@@ -20,6 +20,7 @@ import {
   ApiTags,
 } from "@nestjs/swagger";
 import { AdministratorService } from "../services/administrator.service";
+import { AnalyticsService } from "../services/analytics.service";
 import { _ADMIN_AUTH_COOKIE_NAME_, _AUTH_COOKIE_NAME_ } from "@/constants";
 import { AdminAuthGuard } from "@/guards/admin-auth.guard";
 import { AdminRequest, SystemCache } from "@/definitions";
@@ -56,6 +57,7 @@ export class AdministratorController {
     private readonly web3Service: Web3Service,
     private readonly quidaxService: QuidaxService,
     private readonly notificationsService: NotificationsService,
+    private readonly analyticsService: AnalyticsService,
   ) {}
 
   @Get("users")
@@ -87,6 +89,72 @@ export class AdministratorController {
   @Get("user/:id/transactions")
   async getUserTransaction(@Param("id") id: string, @Req() req: AdminRequest) {
     return await this.administratorService.getUserTransactions(+id, req);
+  }
+
+  @ApiOperation({ summary: "Analytics: overview headline numbers" })
+  @Get("analytics/overview")
+  async analyticsOverview() {
+    return await this.analyticsService.overview();
+  }
+
+  @ApiOperation({ summary: "Analytics: transactions per user for a period" })
+  @ApiQuery({
+    name: "period",
+    required: false,
+    enum: ["today", "week", "month", "year"],
+  })
+  @ApiQuery({ name: "page", required: false, type: Number })
+  @ApiQuery({ name: "limit", required: false, type: Number })
+  @Get("analytics/transactions-per-user")
+  async analyticsTransactionsPerUser(
+    @Query("period") period?: string,
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
+  ) {
+    const validPeriods = ["today", "week", "month", "year"] as const;
+    const p = validPeriods.includes(period as any)
+      ? (period as (typeof validPeriods)[number])
+      : "today";
+    return await this.analyticsService.transactionsPerUser(
+      p,
+      Math.max(1, parseInt(page ?? "1", 10) || 1),
+      Math.min(100, parseInt(limit ?? "20", 10) || 20),
+    );
+  }
+
+  @ApiOperation({ summary: "Analytics: transaction volume time series" })
+  @ApiQuery({
+    name: "granularity",
+    required: false,
+    enum: ["daily", "weekly", "monthly", "yearly"],
+  })
+  @Get("analytics/volume")
+  async analyticsVolume(@Query("granularity") granularity?: string) {
+    const valid = ["daily", "weekly", "monthly", "yearly"] as const;
+    const g = valid.includes(granularity as any)
+      ? (granularity as (typeof valid)[number])
+      : "weekly";
+    return await this.analyticsService.volumeSeries(g);
+  }
+
+  @ApiOperation({ summary: "Analytics: daily active users and signups" })
+  @ApiQuery({ name: "days", required: false, type: Number })
+  @Get("analytics/daily-users")
+  async analyticsDailyUsers(@Query("days") days?: string) {
+    const d = Math.min(365, Math.max(7, parseInt(days ?? "30", 10) || 30));
+    return await this.analyticsService.dailyUsers(d);
+  }
+
+  @ApiOperation({ summary: "Analytics: registration → KYC funnel" })
+  @Get("analytics/kyc-funnel")
+  async analyticsKycFunnel() {
+    return await this.analyticsService.kycFunnel();
+  }
+
+  @ApiOperation({ summary: "Analytics: user & volume locations" })
+  @Get("analytics/locations")
+  async analyticsLocations() {
+    return await this.analyticsService.userLocations();
   }
 
   @ApiOperation({ summary: "Get dashboard KPI" })

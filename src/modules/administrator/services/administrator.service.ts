@@ -297,7 +297,8 @@ export class AdministratorService {
   }
 
   async transactions(req: AdminRequest) {
-    const { limit, page, skip, date_from, date_to } = getRequestQuery(req);
+    const { limit, page, skip, date_from, date_to, search } =
+      getRequestQuery(req);
 
     let queryRunner = this.transactionsRepository
       .createQueryBuilder("trans")
@@ -305,6 +306,24 @@ export class AdministratorService {
       .where("trans.status = :status", {
         status: TransactionStatusType.success,
       });
+
+    // Search by the transacting user's email, phone or id — or the tx ref.
+    if (search) {
+      queryRunner = queryRunner.andWhere(
+        new Brackets((qb) => {
+          qb.where("user.email ILIKE :search", { search: `%${search}%` })
+            .orWhere("user.phone ILIKE :search", { search: `%${search}%` })
+            .orWhere("trans.masamasa_ref ILIKE :search", {
+              search: `%${search}%`,
+            });
+          if (/^\d+$/.test(search)) {
+            qb.orWhere("user.id = :searchId", {
+              searchId: parseInt(search, 10),
+            });
+          }
+        }),
+      );
+    }
 
     if (date_from) {
       queryRunner = queryRunner.andWhere(
@@ -352,13 +371,18 @@ export class AdministratorService {
     if (search) {
       queryRunner.where(
         new Brackets((qb) => {
-          qb.where("users.first_name LIKE :first_name", {
-            first_name: `%${search}%`,
+          qb.where("users.first_name ILIKE :search", {
+            search: `%${search}%`,
           })
-            .orWhere("users.last_name LIKE :last_name", {
-              last_name: `%${search}%`,
-            })
-            .orWhere("users.email LIKE :email", { email: `%${search}%` });
+            .orWhere("users.last_name ILIKE :search", { search: `%${search}%` })
+            .orWhere("users.email ILIKE :search", { search: `%${search}%` })
+            .orWhere("users.phone ILIKE :search", { search: `%${search}%` });
+          // Numeric search also matches the user id exactly
+          if (/^\d+$/.test(search)) {
+            qb.orWhere("users.id = :searchId", {
+              searchId: parseInt(search, 10),
+            });
+          }
         }),
       );
     }

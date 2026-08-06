@@ -114,6 +114,10 @@ export class User {
   @Column({ type: "timestamp", nullable: true })
   token_created_at?: Date | null;
 
+  // Updated (throttled) by the AuthGuard — powers daily-active-user stats
+  @Column({ type: "timestamp", nullable: true })
+  last_seen_at?: Date | null;
+
   @DeleteDateColumn({ type: "timestamp", nullable: true, select: false })
   deleted_at?: Date | null;
 

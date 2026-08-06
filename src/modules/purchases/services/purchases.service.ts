@@ -2,6 +2,7 @@ import { generateMasamasaRef, paginate } from "@/core/helpers";
 import {
   endOfDay,
   generateVtpassRequestId,
+  getClientInfo,
   getRequestQuery,
 } from "@/core/utils";
 import { UserRequest } from "@/definitions";
@@ -70,6 +71,7 @@ export class PurchaseService {
       masamasa_ref: requestId,
       metadata: {
         phone: phone_number,
+        client: getClientInfo(req),
       },
     } as PurchaseRequest;
     const createdPurchaseRequests: PurchaseRequest =
@@ -142,6 +144,7 @@ export class PurchaseService {
             vtpass_response: resp.data,
             provider: network,
             phone: phone_number,
+            client: getClientInfo(req),
           },
           exchange_rate_id: null,
           currency: "NGN",
@@ -276,6 +279,7 @@ export class PurchaseService {
             vtpass_response: resp.data,
             provider: network,
             phone: phone_number,
+            client: getClientInfo(req),
           },
           exchange_rate_id: null,
           currency: "NGN",
@@ -341,6 +345,7 @@ export class PurchaseService {
         phone: phone_number,
         meter_no,
         meter_type,
+        client: getClientInfo(req),
       },
     } as unknown as PurchaseRequest;
 
@@ -414,6 +419,7 @@ export class PurchaseService {
           metadata: {
             vtpass_response: resp.data,
             phone: phone_number,
+            client: getClientInfo(req),
           },
           exchange_rate_id: null,
           currency: "NGN",

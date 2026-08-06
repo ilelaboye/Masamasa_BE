@@ -21,6 +21,7 @@ import {
 } from "../dto";
 import {
   axiosClient,
+  getClientInfo,
   getRequestQuery,
   hashResourceSync,
   verifyHash,
@@ -385,6 +386,7 @@ export class UsersService extends BaseService {
               last_name: find.last_name,
               email: find.email,
             },
+            client: getClientInfo(req),
           },
           exchange_rate_id: null,
           currency: "NGN",
@@ -564,6 +566,7 @@ export class UsersService extends BaseService {
             accountName: withdrawalDto.accountName,
             bankName: withdrawalDto.bankName,
             narration: withdrawalDto.narration,
+            client: getClientInfo(req),
           },
           exchange_rate_id: null,
           currency: "NGN",

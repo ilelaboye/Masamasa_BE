@@ -55,6 +55,26 @@ export const verifyQuidaxWebhook = (
   }
 };
 
+/**
+ * Client context captured on user-initiated transactions so the admin can
+ * see where and on what device a transaction was carried out.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const getClientInfo = (req: any) => {
+  const forwarded = req?.headers?.["x-forwarded-for"];
+  const ip =
+    (typeof forwarded === "string" ? forwarded.split(",")[0].trim() : null) ??
+    req?.ip ??
+    req?.socket?.remoteAddress ??
+    null;
+
+  return {
+    ip,
+    user_agent: req?.headers?.["user-agent"] ?? null,
+    device_id: req?.user?.device_id ?? null,
+  };
+};
+
 export const generateVtpassRequestId = (user_id) => {
   const now = new Date();
   const year = now.getFullYear();
