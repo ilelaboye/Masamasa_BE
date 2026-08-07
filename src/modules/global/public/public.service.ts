@@ -42,6 +42,7 @@ import {
 } from "@/modules/quidax/quidax.constants";
 import { QuidaxService } from "@/modules/quidax/quidax.service";
 import { CacheService } from "../cache-container/cache-container.service";
+import { MixpanelService } from "../mixpanel/mixpanel.service";
 import { capitalizeString, generateMasamasaRef } from "@/core/helpers";
 
 // Nomba's bank list rarely changes — cached under this key for all users.
@@ -67,6 +68,7 @@ export class PublicService {
     private readonly cronJob: CronJob,
     private readonly quidaxService: QuidaxService,
     private readonly cacheService: CacheService,
+    private readonly mixpanel: MixpanelService,
   ) {}
 
   async transactionWebhook(transactionWebhook: TransactionWebhookDto) {
@@ -202,6 +204,17 @@ export class PublicService {
               metadata: { ...transaction.metadata, nomba_resp: webhook.data },
             },
           );
+
+          // Analytics: measured to the bank confirmation callback, per the
+          // tracking plan. Bank code only — never the account number.
+          this.mixpanel.track("payout completed", transaction.user_id, {
+            "payout id": transaction.masamasa_ref,
+            "amount ngn": Number(transaction.amount) || 0,
+            "bank code": transaction.metadata?.bankCode,
+            "time to payout seconds": Math.round(
+              (Date.now() - new Date(transaction.created_at).getTime()) / 1000,
+            ),
+          });
         } else if (
           webhook.event_type == "payout_failed" ||
           webhook.event_type == "payout_refund"
@@ -213,6 +226,16 @@ export class PublicService {
               metadata: { ...transaction.metadata, nomba_resp: webhook.data },
             },
           );
+
+          this.mixpanel.track("payout failed", transaction.user_id, {
+            "payout id": transaction.masamasa_ref,
+            "amount ngn": Number(transaction.amount) || 0,
+            "bank code": transaction.metadata?.bankCode,
+            "failure reason code":
+              webhook.event_type == "payout_refund"
+                ? "BANK_REVERSED"
+                : "BANK_REJECTED",
+          });
         }
       }
     }
@@ -716,6 +739,13 @@ export class PublicService {
     // Quidax often omits payment_address.network (always for native coins) —
     // the wallet row looked up by address is the authoritative network.
     const depositNetwork = wallet.network ?? toAppNetwork(network, currency);
+
+    // Analytics: asset + network as labels only — never the wallet address
+    // or transaction hash (Do Not Send).
+    this.mixpanel.track("crypto deposit detected", wallet.user_id, {
+      asset: (currency ?? "").toUpperCase(),
+      network: depositNetwork,
+    });
 
     const wb = await this.webhookRepository.save({
       address,

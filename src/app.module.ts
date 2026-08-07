@@ -26,6 +26,7 @@ import {
   Web3Module,
   NotificationsModule,
   QuidaxModule,
+  MixpanelModule,
 } from "./modules";
 import { ConfigModuleSchema } from "./validations";
 
@@ -75,6 +76,7 @@ import { ConfigModuleSchema } from "./validations";
     Web3Module,
     NotificationsModule,
     QuidaxModule,
+    MixpanelModule,
   ],
   providers: [JwtService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

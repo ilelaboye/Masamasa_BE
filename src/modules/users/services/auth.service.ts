@@ -45,6 +45,7 @@ import {
 } from "../dto";
 import { CacheService } from "@/modules/global/cache-container/cache-container.service";
 import { QuidaxService } from "@/modules/quidax/quidax.service";
+import { MixpanelService } from "@/modules/global/mixpanel/mixpanel.service";
 import { User, Status, TokenType } from "../entities/user.entity";
 
 @Injectable()
@@ -59,6 +60,7 @@ export class AuthService extends BaseService {
     private readonly jwtService: JwtService,
     private readonly cacheService: CacheService,
     private readonly quidaxService: QuidaxService,
+    private readonly mixpanel: MixpanelService,
   ) {
     super();
   }
@@ -181,6 +183,7 @@ export class AuthService extends BaseService {
       device_id,
       notification_token,
       hasPin: fetch.pin ? true : false,
+      analytics_id: this.mixpanel.hashUserId(fetch.id),
     };
     delete user.pin;
 
@@ -341,6 +344,16 @@ export class AuthService extends BaseService {
       // never blocks registration. The hourly QuidaxWalletCron backfills
       // any pair that fails here.
       this.setupQuidaxAccount(user).catch(() => {});
+
+      // Analytics: server-side signup is the authoritative event. Only the
+      // hashed user id and non-identifying properties are sent (Do Not Send).
+      this.mixpanel.track("sign up", user.id, {
+        "signup method": google_id ? "google" : "email",
+      });
+      this.mixpanel.setProfile(user.id, {
+        $created: new Date().toISOString(),
+        "kyc status": "not started",
+      });
 
       const data = {
         user: userData,
@@ -505,7 +518,11 @@ export class AuthService extends BaseService {
       { remember_token: null, token_created_at: null },
     );
 
-    const user = { ...fetch, hasPin: fetch.pin ? true : false };
+    const user = {
+      ...fetch,
+      hasPin: fetch.pin ? true : false,
+      analytics_id: this.mixpanel.hashUserId(fetch.id),
+    };
     delete user.pin;
 
     const jwtToken = this.jwtService.sign({ ...user });

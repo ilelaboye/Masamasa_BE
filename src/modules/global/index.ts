@@ -5,3 +5,4 @@ export * from "./jobs/cron/cron.module";
 export * from "./jobs/scheduled-task/scheduled-task.module";
 export * from "./logger/winston-logger";
 export * from "./public/public.module";
+export * from "./mixpanel/mixpanel.module";
