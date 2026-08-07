@@ -100,9 +100,12 @@ export class AnalyticsService {
       .getRawOne();
 
     const totalUsers = await this.userRepository.count();
-    const pendingKyc = await this.userRepository.count({
-      where: { kyc_status: KycStatus.pending },
+    // "Pending KYC" = everyone who has not completed KYC yet
+    // (total users minus KYC-verified), not just status = pending.
+    const kycVerified = await this.userRepository.count({
+      where: { kyc_status: KycStatus.success },
     });
+    const pendingKyc = totalUsers - kycVerified;
 
     return {
       today_transaction_count: Number(todayTx.count) || 0,
@@ -291,7 +294,8 @@ export class AnalyticsService {
       registered: total,
       email_verified: emailVerified,
       kyc_verified: kyc[KycStatus.success] ?? 0,
-      kyc_pending: kyc[KycStatus.pending] ?? 0,
+      // Everyone who has not completed KYC (total − verified)
+      kyc_pending: total - (kyc[KycStatus.success] ?? 0),
       kyc_breakdown: kyc,
     };
   }
