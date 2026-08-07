@@ -1,4 +1,5 @@
 import { CacheService } from "@/modules/global/cache-container/cache-container.service";
+import { MixpanelService } from "@/modules/global/mixpanel/mixpanel.service";
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { Administrator, AdminStatus } from "../entities/administrator.entity";
 import { Brackets, Repository, SelectQueryBuilder } from "typeorm";
@@ -32,6 +33,7 @@ export class AdministratorService {
     private readonly withdrawalWalletRepository: Repository<WithdrawalWallet>,
     private readonly cacheService: CacheService,
     private readonly exchangeRateService: ExchangeRateService,
+    private readonly mixpanel: MixpanelService,
   ) {}
 
   async getWithId(id: string) {
@@ -191,6 +193,13 @@ export class AdministratorService {
     const msg = `${req.admin.first_name} ${req.admin.last_name} verified ${user.first_name} ${user.last_name} kyc`;
     this.createAdminLog(null, req.admin, AdminLogEntities.KYC_STATUS, msg);
 
+    this.mixpanel.track("kyc result", user_id, { "kyc status": "verified" });
+    this.mixpanel.setProfile(user_id, {
+      "kyc status": "verified",
+      "kyc completed date": new Date().toISOString(),
+      state: user.state?.toLowerCase(),
+    });
+
     return update;
   }
 
@@ -211,6 +220,13 @@ export class AdministratorService {
 
     const msg = `${req.admin.first_name} ${req.admin.last_name} declined ${user.first_name} ${user.last_name} kyc because: ${declineKycDto.reason}`;
     this.createAdminLog(null, req.admin, AdminLogEntities.KYC_STATUS, msg);
+
+    // Fixed code only — the admin's free-text reason must not be sent.
+    this.mixpanel.track("kyc result", user.id, {
+      "kyc status": "rejected",
+      "rejection reason code": "ADMIN_DECLINED",
+    });
+    this.mixpanel.setProfile(user.id, { "kyc status": "rejected" });
 
     return update;
   }

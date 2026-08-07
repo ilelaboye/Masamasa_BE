@@ -29,6 +29,7 @@ import { UsersService } from "@/modules/users/services/users.service";
 import { generateMasamasaRef } from "@/core/helpers";
 import { TransactionService } from "@/modules/transactions/transactions.service";
 import { User } from "@/modules/users/entities/user.entity";
+import { MixpanelService } from "@/modules/global/mixpanel/mixpanel.service";
 
 @Injectable()
 export class CronJob {
@@ -44,6 +45,7 @@ export class CronJob {
     private readonly transactionsService: TransactionService,
     // private readonly usersService: UsersService
     private readonly dataSource: DataSource,
+    private readonly mixpanel: MixpanelService,
   ) {}
 
   // Handles all notification jobs
@@ -255,6 +257,14 @@ export class CronJob {
               metadata: { ...trans.metadata, nomba_resp: res.data },
             },
           );
+          this.mixpanel.track("payout completed", trans.user_id, {
+            "payout id": trans.masamasa_ref,
+            "amount ngn": Number(trans.amount) || 0,
+            "bank code": trans.metadata?.bankCode,
+            "time to payout seconds": Math.round(
+              (Date.now() - new Date(trans.created_at).getTime()) / 1000,
+            ),
+          });
         } else if (res.data.status == "PAYMENT_FAILED") {
           await this.transactionsRepository.update(
             { id: trans.id },
@@ -267,6 +277,12 @@ export class CronJob {
               },
             },
           );
+          this.mixpanel.track("payout failed", trans.user_id, {
+            "payout id": trans.masamasa_ref,
+            "amount ngn": Number(trans.amount) || 0,
+            "bank code": trans.metadata?.bankCode,
+            "failure reason code": "PAYMENT_FAILED",
+          });
         }
       } catch (e) {
         const errData = e?.response?.data;

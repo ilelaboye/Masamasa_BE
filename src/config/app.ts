@@ -120,6 +120,11 @@ export const appConfig = {
 
   MORALIS_API_KEY: process.env.MORALIS_API_KEY || "",
 
+  // Mixpanel — analytics disabled entirely when the token is absent.
+  // The salt must NEVER be rotated (it would orphan every historic profile).
+  MIXPANEL_TOKEN: process.env.MIXPANEL_TOKEN || "",
+  MIXPANEL_ID_SALT: process.env.MIXPANEL_ID_SALT || "",
+
   // Base64-encoded Firebase service account JSON — push disabled when empty
   FIREBASE_SERVICE_ACCOUNT_BASE64:
     process.env.FIREBASE_SERVICE_ACCOUNT_BASE64 || "",

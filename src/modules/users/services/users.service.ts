@@ -53,6 +53,7 @@ import {
 import { CronJob } from "@/modules/global/jobs/cron/cron.job";
 import { appConfig } from "@/config";
 import { CacheService } from "@/modules/global/cache-container/cache-container.service";
+import { MixpanelService } from "@/modules/global/mixpanel/mixpanel.service";
 
 @Injectable()
 export class UsersService extends BaseService {
@@ -71,6 +72,7 @@ export class UsersService extends BaseService {
     private readonly cronJob: CronJob,
     private readonly dataSource: DataSource,
     private readonly cacheService: CacheService,
+    private readonly mixpanel: MixpanelService,
   ) {
     super();
   }
@@ -81,7 +83,13 @@ export class UsersService extends BaseService {
       .where("user.id = :id", { id: req.user.id })
       .getOne();
     if (!fetch) throw new UnauthorizedException("User not found, please login");
-    const user = { ...fetch, hasPin: fetch.pin ? true : false };
+    const user = {
+      ...fetch,
+      hasPin: fetch.pin ? true : false,
+      // Salted hash — the only user identifier the mobile app may hand to
+      // Mixpanel's identify(). The raw id and the salt never leave the server.
+      analytics_id: this.mixpanel.hashUserId(fetch.id),
+    };
     delete user.pin;
     return user;
   }
@@ -628,6 +636,13 @@ export class UsersService extends BaseService {
             session_id: res.data.id,
           },
         );
+
+        // Analytics: bank code only — never the account number (Do Not Send).
+        this.mixpanel.track("payout initiated", user.id, {
+          "payout id": trans.masamasa_ref,
+          "amount ngn": Number(trans.amount) || 0,
+          "bank code": withdrawalDto.bankCode,
+        });
       } else {
         await this.transactionsRepository.update(
           { id: trans.id },
@@ -688,6 +703,12 @@ export class UsersService extends BaseService {
     if (user && user.kyc_status == KycStatus.success)
       return { message: "You are already verified." };
 
+    // Analytics: document TYPE only — never the BVN/NIN value (Do Not Send).
+    this.mixpanel.track("kyc submitted", req.user.id, {
+      "kyc document type": "bvn",
+    });
+    this.mixpanel.setProfile(req.user.id, { "kyc status": "pending" });
+
     try {
       const { data, success } =
         await this.bankVerificationService.bvnVerification(bvn, {
@@ -698,6 +719,14 @@ export class UsersService extends BaseService {
         });
 
       if (!success) {
+        // Fixed reason codes only — free text is prohibited in payloads.
+        this.mixpanel.track("kyc result", req.user.id, {
+          "kyc status": "rejected",
+          "rejection reason code": !data
+            ? "PROVIDER_UNAVAILABLE"
+            : "BVN_MISMATCH",
+        });
+        this.mixpanel.setProfile(req.user.id, { "kyc status": "rejected" });
         if (!data)
           throw new BadRequestException(
             "BVN verification can not be processed at the moment, please try again later",
@@ -711,6 +740,15 @@ export class UsersService extends BaseService {
         { id: req.user.id },
         { kyc_status: KycStatus.success },
       );
+
+      this.mixpanel.track("kyc result", req.user.id, {
+        "kyc status": "verified",
+      });
+      this.mixpanel.setProfile(req.user.id, {
+        "kyc status": "verified",
+        "kyc completed date": new Date().toISOString(),
+        state: user.state?.toLowerCase(),
+      });
       console.log("save", save);
       return {
         message: "KYC verification successful",
