@@ -1,6 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { createHash } from "crypto";
-import Mixpanel from "mixpanel";
+// Namespace import — a default import compiles to `mixpanel_1.default`,
+// which is undefined at runtime for CommonJS modules without esModuleInterop.
+import * as Mixpanel from "mixpanel";
 import { appConfig } from "@/config";
 
 /**
