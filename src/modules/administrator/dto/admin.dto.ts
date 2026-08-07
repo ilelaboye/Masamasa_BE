@@ -22,3 +22,25 @@ export class BroadcastNotificationDto {
   @ApiProperty({ example: "We have a new feature!" })
   message: string;
 }
+
+export class UpdateAdminProfileDto {
+  @ApiProperty({ example: "alice" })
+  first_name: string;
+
+  @ApiProperty({ example: "joe" })
+  last_name: string;
+
+  @ApiProperty({ example: "08012345678" })
+  phone: string;
+
+  @ApiProperty({ example: "12 Marina Road, Lagos", required: false })
+  address?: string;
+}
+
+export class ChangeAdminPasswordDto {
+  @ApiProperty({ example: "Password@123" })
+  old_password: string;
+
+  @ApiProperty({ example: "NewPassword@456" })
+  new_password: string;
+}
