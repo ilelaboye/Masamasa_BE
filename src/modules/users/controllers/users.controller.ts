@@ -32,6 +32,7 @@ import {
 import { UsersService } from "../services/users.service";
 import {
   ChangeUserPasswordValidation,
+  VerifyPasswordChangeValidation,
   EditUserValidation,
   TransferValidation,
   UpdateAccountValidation,
@@ -108,7 +109,7 @@ export class UsersController {
     );
   }
 
-  @UsePipes(new JoiValidationPipe(ChangeUserPasswordValidation))
+  @UsePipes(new JoiValidationPipe(VerifyPasswordChangeValidation))
   @Post("change-password")
   async changePassword(
     @Body() changeUserPasswordDto: ChangeUserPasswordDto,

@@ -50,6 +50,16 @@ export const ChangeUserPasswordValidation = Joi.object().keys({
     .label("Confirm password"),
 });
 
+// Step 2 of the change-password flow resends the same details plus the code
+// that was emailed in step 1. Extended from the base schema so the password
+// rules stay in one place — and declared at all because Joi rejects keys it
+// does not know about, so an undeclared `otp` never reaches the service.
+export const VerifyPasswordChangeValidation = ChangeUserPasswordValidation.keys(
+  {
+    otp: Joi.string().required().label("Verification code"),
+  },
+);
+
 export const EditUserValidation = Joi.object().keys({
   first_name: Joi.string().optional().allow(null),
   last_name: Joi.string().optional().allow(null),

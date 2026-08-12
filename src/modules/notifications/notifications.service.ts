@@ -1,5 +1,5 @@
 import { UserRequest } from "@/definitions";
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { InjectRepository } from "@nestjs/typeorm";
 import { IsNull, QueryRunner, Repository } from "typeorm";
@@ -12,6 +12,8 @@ import { PushService } from "./push.service";
 
 @Injectable()
 export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
+
   constructor(
     private readonly eventEmitter: EventEmitter2,
     @InjectRepository(Notification)
@@ -25,22 +27,58 @@ export class NotificationsService {
     createNotificationDto: CreateNotificationDto,
     queryRunner?: QueryRunner,
   ) {
-    const { metadata } = createNotificationDto;
+    // pushTitle is a delivery instruction, not a stored field — kept out of
+    // the entity payload.
+    const { metadata, pushTitle, ...fields } = createNotificationDto;
 
     if (queryRunner) {
       queryRunner.manager.save(Notification, {
-        ...createNotificationDto,
+        ...fields,
         user: { id: createNotificationDto.userId },
         metadata: metadata ? metadata : {},
       });
     } else {
       const notification = this.notificationRepository.create({
-        ...createNotificationDto,
+        ...fields,
         user: { id: createNotificationDto.userId },
         metadata: metadata ? metadata : {},
       });
 
       await this.notificationRepository.save(notification);
+    }
+
+    if (pushTitle) {
+      await this.sendPush(createNotificationDto, pushTitle);
+    }
+  }
+
+  /**
+   * Device pop-up for a notification that was just recorded. Best-effort by
+   * design: the stored row is the source of truth, so a user without a
+   * registered device, an expired token, or an FCM outage must never surface
+   * as a failed deposit or withdrawal. Callers commonly do not await create().
+   */
+  private async sendPush(
+    createNotificationDto: CreateNotificationDto,
+    pushTitle: string,
+  ) {
+    try {
+      const user = await this.userRepository.findOne({
+        where: { id: createNotificationDto.userId },
+        select: ["id", "notification_token"],
+      });
+      if (!user?.notification_token) return;
+
+      await this.pushService.sendToTokens(
+        [user.notification_token],
+        pushTitle,
+        createNotificationDto.message,
+        { tag: createNotificationDto.tag },
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Push notification failed for user ${createNotificationDto.userId}: ${(err as Error).message}`,
+      );
     }
   }
 

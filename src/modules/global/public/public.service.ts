@@ -162,6 +162,7 @@ export class PublicService {
       userId: wallet.user_id,
       message: `Your deposit of ${amount} ${token_symbol} is confirmed`,
       tag: NotificationTag.deposit,
+      pushTitle: "Deposit Successful",
       metadata: transactionWebhook,
     });
 
@@ -790,6 +791,7 @@ export class PublicService {
         userId: transaction.user_id,
         message: `Your withdrawal of NGN ${Number(transaction.amount ?? 0).toLocaleString("en-NG")} was successful`,
         tag: NotificationTag.withdrawal,
+        pushTitle: "Withdrawal Successful",
         metadata: { reference: transaction.masamasa_ref },
       });
     } catch (err) {
@@ -896,6 +898,7 @@ export class PublicService {
       userId: wallet.user_id,
       message: `Incoming ${currency.toUpperCase()} deposit of ${amount} detected — awaiting blockchain confirmation`,
       tag: NotificationTag.deposit,
+      pushTitle: "Deposit Detected",
       metadata: data,
     });
   }
@@ -1045,6 +1048,7 @@ export class PublicService {
       userId: wallet.user_id,
       message: `Your deposit of ${amount} ${currency.toUpperCase()} has been confirmed`,
       tag: NotificationTag.deposit,
+      pushTitle: "Deposit Successful",
       metadata: data,
     });
 
@@ -1129,6 +1133,7 @@ export class PublicService {
         userId: wallet.user_id,
         message: `Your ${currency.toUpperCase()} deposit of ${amount} is on hold — amount is below the minimum deposit threshold`,
         tag: NotificationTag.deposit,
+        pushTitle: "Deposit On Hold",
         metadata: data,
       });
     }

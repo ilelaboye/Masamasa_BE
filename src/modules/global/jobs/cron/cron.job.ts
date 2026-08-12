@@ -366,6 +366,7 @@ export class CronJob {
         userId: trans.user_id,
         message: `Your withdrawal of NGN ${Number(trans.amount ?? 0).toLocaleString("en-NG")} was successful`,
         tag: NotificationTag.withdrawal,
+        pushTitle: "Withdrawal Successful",
         metadata: { reference: trans.masamasa_ref },
       });
     } catch (err) {
