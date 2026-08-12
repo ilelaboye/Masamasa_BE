@@ -1035,7 +1035,7 @@ export class PublicService {
         templateId: ZohoMailTemplates.coins_deposit_confirmed,
         variables: {
           firstName: capitalizeString(wallet.user.first_name),
-          coin: `${currencyFormatter(amount, "NGN", 2, false)} ${currency}`,
+          coin: `${currencyFormatter(coinAmount, "NGN", 2, false)} ${currency}`,
           network: depositNetwork,
           amount: `NGN ${currencyFormatter(dollarAmount * exchange, "NGN", 2, false)}`,
           address: address,
