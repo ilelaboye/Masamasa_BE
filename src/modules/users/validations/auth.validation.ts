@@ -1,3 +1,4 @@
+import { WITHDRAWAL_MAX_PER_TRANSACTION } from "@/constants";
 import * as Joi from "joi";
 
 export const LoginValidation = Joi.object().keys({
@@ -42,6 +43,14 @@ export const WithdrawalValidation = Joi.object().keys({
   bankCode: Joi.string().max(50).required().label("Bank code"),
   accountName: Joi.string().required().label("Account name"),
   bankName: Joi.string().max(50).required().label("Bank name"),
-  amount: Joi.number().min(100).max(100000).required().label("Amount"),
+  // Derived from the constant rather than repeated, so this schema cannot
+  // drift below the limit users.service actually enforces. Joi runs in the
+  // pipe ahead of the service, so a lower number here silently becomes the
+  // real limit and the service's own check never gets a chance to run.
+  amount: Joi.number()
+    .min(1000)
+    .max(WITHDRAWAL_MAX_PER_TRANSACTION)
+    .required()
+    .label("Amount"),
   pin: Joi.number().required().label("Pin"),
 });

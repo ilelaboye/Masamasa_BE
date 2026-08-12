@@ -19,8 +19,14 @@ export const DEPOSIT_FEE_EXEMPT_CURRENCIES = new Set(["usdt"]);
 
 // Withdrawal limits for verified (KYC-approved) accounts, in NGN.
 // Daily is a rolling calendar day in the app timezone (Africa/Lagos).
-export const WITHDRAWAL_MAX_PER_TRANSACTION = 1_000_000;
-export const WITHDRAWAL_MAX_PER_DAY = 5_000_000;
+export const WITHDRAWAL_MAX_PER_TRANSACTION = 1000000;
+export const WITHDRAWAL_MAX_PER_DAY = 5000000;
+
+// Accounts that have not completed KYC can still withdraw, but only up to
+// this ceiling. It caps both a single transaction and the running day total —
+// capping only the transaction would be no cap at all, since the same amount
+// could simply be withdrawn again.
+export const WITHDRAWAL_MAX_UNVERIFIED = 50000;
 
 export const MAILJETTemplates = {
   verify_email: 7451545,

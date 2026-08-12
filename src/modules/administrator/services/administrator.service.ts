@@ -172,16 +172,44 @@ export class AdministratorService {
       })
       .getCount();
 
+    // Both transaction figures come from one pass over the table. The credit
+    // volume moved into a CASE rather than a WHERE so the balance can be
+    // aggregated alongside it instead of paying for a second full scan.
+    //
+    // `balance` is what the platform currently owes its users, summed across
+    // every wallet. It deliberately mirrors the per-user formula the app
+    // itself uses (TransactionService.getAccountBalance) — counting debits
+    // that are still processing, since a withdrawal in flight has already
+    // left the user's spendable balance — so the total reconciles with the
+    // balances users see.
     const trans = await this.transactionsRepository
       .createQueryBuilder("trans")
-      .select("SUM(trans.amount)", "totalAmount")
-      .where("trans.mode = :mode", { mode: TransactionModeType.credit })
+      .select(
+        "SUM(CASE WHEN trans.mode = :credit THEN trans.amount ELSE 0 END)",
+        "totalAmount",
+      )
+      .addSelect(
+        `
+      SUM(
+        CASE WHEN trans.mode = :credit AND trans.status = :success THEN trans.amount ELSE 0 END
+      ) -
+      SUM(
+        CASE WHEN trans.mode = :debit AND trans.status IN (:success, :processing) THEN trans.amount ELSE 0 END
+      )
+    `,
+        "balance",
+      )
+      .setParameters({
+        credit: TransactionModeType.credit,
+        debit: TransactionModeType.debit,
+        success: TransactionStatusType.success,
+        processing: TransactionStatusType.processing,
+      })
       .getRawOne();
 
-    const totalAmount = Number(trans.totalAmount) || 0;
-
     return {
-      transactions: totalAmount,
+      transactions: Number(trans.totalAmount) || 0,
+      users_balance: Number(trans.balance) || 0,
       ...result,
       pending_kyc: kyc,
     };

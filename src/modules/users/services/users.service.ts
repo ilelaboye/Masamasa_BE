@@ -34,6 +34,7 @@ import {
 import {
   WITHDRAWAL_MAX_PER_DAY,
   WITHDRAWAL_MAX_PER_TRANSACTION,
+  WITHDRAWAL_MAX_UNVERIFIED,
   ZohoMailTemplates,
 } from "@/constants";
 import { TransactionService } from "@/modules/transactions/transactions.service";
@@ -620,15 +621,21 @@ export class UsersService extends BaseService {
 
     delete user.pin;
 
-    if (user.kyc_status != KycStatus.success) {
-      throw new BadRequestException(
-        "Account verification (KYC) is required before you can withdraw. Please verify your account to proceed.",
-      );
-    }
+    // Unverified accounts are no longer blocked outright — they withdraw
+    // against a lower ceiling until KYC is approved.
+    const kycVerified = user.kyc_status == KycStatus.success;
+    const maxPerTransaction = kycVerified
+      ? WITHDRAWAL_MAX_PER_TRANSACTION
+      : WITHDRAWAL_MAX_UNVERIFIED;
+    const maxPerDay = kycVerified
+      ? WITHDRAWAL_MAX_PER_DAY
+      : WITHDRAWAL_MAX_UNVERIFIED;
 
-    if (withdrawalDto.amount > WITHDRAWAL_MAX_PER_TRANSACTION) {
+    if (withdrawalDto.amount > maxPerTransaction) {
       throw new BadRequestException(
-        `The maximum you can withdraw in a single transaction is NGN ${WITHDRAWAL_MAX_PER_TRANSACTION.toLocaleString("en-NG")}`,
+        kycVerified
+          ? `The maximum you can withdraw in a single transaction is NGN ${maxPerTransaction.toLocaleString("en-NG")}`
+          : `Unverified accounts can withdraw up to NGN ${maxPerTransaction.toLocaleString("en-NG")}. Complete your account verification (KYC) to raise this limit.`,
       );
     }
 
@@ -694,13 +701,16 @@ export class UsersService extends BaseService {
         .getRawOne();
 
       const withdrawnToday = parseFloat(dailyResult.total) || 0;
-      const remainingToday = WITHDRAWAL_MAX_PER_DAY - withdrawnToday;
+      const remainingToday = maxPerDay - withdrawnToday;
 
       if (withdrawalDto.amount > remainingToday) {
+        const upgradeHint = kycVerified
+          ? ""
+          : " Complete your account verification (KYC) to raise this limit.";
         throw new BadRequestException(
           remainingToday <= 0
-            ? `You have reached your daily withdrawal limit of NGN ${WITHDRAWAL_MAX_PER_DAY.toLocaleString("en-NG")}. Please try again tomorrow.`
-            : `This would exceed your daily withdrawal limit of NGN ${WITHDRAWAL_MAX_PER_DAY.toLocaleString("en-NG")}. You can still withdraw NGN ${remainingToday.toLocaleString("en-NG")} today.`,
+            ? `You have reached your daily withdrawal limit of NGN ${maxPerDay.toLocaleString("en-NG")}. Please try again tomorrow.${upgradeHint}`
+            : `This would exceed your daily withdrawal limit of NGN ${maxPerDay.toLocaleString("en-NG")}. You can still withdraw NGN ${remainingToday.toLocaleString("en-NG")} today.${upgradeHint}`,
         );
       }
 
