@@ -3,7 +3,22 @@ import { Logger } from "@nestjs/common";
 
 const Flutterwave = require("flutterwave-node-v3");
 
-const flw = new Flutterwave(appConfig.FLW_PUBLIC_KEY, appConfig.FLW_SECRET_KEY);
+// Built at import time, this throws "Public Key required" when FLW_PUBLIC_KEY
+// is unset — taking down every module that reaches this file through the
+// core/utils barrel. Kept for reference; construction now happens on first use.
+// const flw = new Flutterwave(appConfig.FLW_PUBLIC_KEY, appConfig.FLW_SECRET_KEY);
+
+let client: any;
+
+function flw() {
+  if (!client) {
+    client = new Flutterwave(
+      appConfig.FLW_PUBLIC_KEY,
+      appConfig.FLW_SECRET_KEY,
+    );
+  }
+  return client;
+}
 
 export async function transferWithFlutterWave({
   amount,
@@ -26,7 +41,7 @@ export async function transferWithFlutterWave({
       debit_currency: "NGN",
     };
 
-    const response = await flw.Transfer.initiate(payload);
+    const response = await flw().Transfer.initiate(payload);
     console.log("response", response);
     return {
       status: response.status == "error" ? false : true,
@@ -45,7 +60,7 @@ export async function verifyTransfer({ id }) {
       id: id,
     };
 
-    const response = await flw.Transfer.get_a_transfer(payload);
+    const response = await flw().Transfer.get_a_transfer(payload);
     console.log("response", response);
     return {
       status: response.status == "error" ? false : true,
@@ -63,7 +78,7 @@ export async function getBanks() {
     const payload = {
       country: "NG",
     };
-    const response = await flw.Bank.country(payload);
+    const response = await flw().Bank.country(payload);
     return response.data;
   } catch (error) {
     console.log(error);

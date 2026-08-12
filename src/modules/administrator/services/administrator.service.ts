@@ -6,10 +6,21 @@ import { Brackets, Repository, SelectQueryBuilder } from "typeorm";
 import { InjectRepository } from "@nestjs/typeorm";
 import { AdminLogEntities, AdminLogs } from "../entities/admin-logs.entity";
 import { AdminRequest } from "@/definitions";
-import { CreateExchangeRateDto, DeclineKycDto } from "../dto/admin.dto";
+import {
+  ChangeAdminPasswordDto,
+  CreateExchangeRateDto,
+  DeclineKycDto,
+  UpdateAdminProfileDto,
+} from "../dto/admin.dto";
 import { ExchangeRateService } from "@/modules/exchange-rates/exchange-rates.service";
 import { KycStatus, Status, User } from "@/modules/users/entities/user.entity";
-import { endOfDay, getRequestQuery, sendZohoMail } from "@/core/utils";
+import {
+  endOfDay,
+  getRequestQuery,
+  hashResource,
+  sendZohoMail,
+  verifyHash,
+} from "@/core/utils";
 import { capitalizeString, paginate } from "@/core/helpers";
 import {
   TransactionModeType,
@@ -49,6 +60,62 @@ export class AdministratorService {
     if (admin) await this.cacheService.set(`admin:${id}`, admin);
 
     return admin;
+  }
+
+  async getProfile(req: AdminRequest) {
+    const admin = { ...req.admin };
+    return admin;
+  }
+
+  async updateProfile(
+    updateAdminProfileDto: UpdateAdminProfileDto,
+    req: AdminRequest,
+  ) {
+    const { id } = req.admin;
+
+    await this.adminRepository.update(
+      { id },
+      {
+        first_name: updateAdminProfileDto.first_name,
+        last_name: updateAdminProfileDto.last_name,
+        phone: updateAdminProfileDto.phone,
+        address: updateAdminProfileDto.address,
+      },
+    );
+
+    this.cacheService.del(`admin:${id}`);
+    return await this.adminRepository.findOne({ where: { id } });
+  }
+
+  async changePassword(
+    changeAdminPasswordDto: ChangeAdminPasswordDto,
+    req: AdminRequest,
+  ) {
+    const { id } = req.admin;
+
+    const admin = await this.adminRepository
+      .createQueryBuilder("admin")
+      .addSelect("admin.password")
+      .where("admin.id = :id", { id })
+      .getOne();
+
+    if (!admin) {
+      throw new BadRequestException("Admin not found, please login again");
+    }
+
+    const verified = await verifyHash(
+      changeAdminPasswordDto.old_password,
+      admin.password,
+    );
+    if (!verified)
+      throw new BadRequestException("Your current password is incorrect");
+
+    await this.adminRepository.update(
+      { id },
+      { password: await hashResource(changeAdminPasswordDto.new_password) },
+    );
+
+    return { message: "Password changed successfully" };
   }
 
   async createAdminLog(user_id, admin, entity, note, visible = false) {

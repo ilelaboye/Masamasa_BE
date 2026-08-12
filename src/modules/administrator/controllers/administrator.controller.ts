@@ -28,15 +28,19 @@ import { CacheService } from "@/modules/global/cache-container/cache-container.s
 import { ExchangeRateService } from "@/modules/exchange-rates/exchange-rates.service";
 import {
   BroadcastNotificationDto,
+  ChangeAdminPasswordDto,
   CreateExchangeRateDto,
   DeclineKycDto,
+  UpdateAdminProfileDto,
 } from "../dto/admin.dto";
 import { NotificationsService } from "@/modules/notifications/notifications.service";
 import { BroadcastNotificationValidation } from "../validations/admin.validation";
 import { PublicService } from "@/modules/global/public/public.service";
 import { JoiValidationPipe } from "@/pipes/joi.validation.pipe";
 import {
+  ChangeAdminPasswordValidation,
   CreateUpdateExchangeRateValidation,
+  UpdateAdminProfileValidation,
   UpdateUserStatusValidation,
 } from "../validations/admin.validation";
 import { Status } from "@/modules/users/entities/user.entity";
@@ -59,6 +63,35 @@ export class AdministratorController {
     private readonly notificationsService: NotificationsService,
     private readonly analyticsService: AnalyticsService,
   ) {}
+
+  @ApiOperation({ summary: "Get the currently logged-in admin's profile" })
+  @Get("profile")
+  async profile(@Req() req: AdminRequest) {
+    return this.administratorService.getProfile(req);
+  }
+
+  @ApiOperation({ summary: "Update the currently logged-in admin's profile" })
+  @UsePipes(new JoiValidationPipe(UpdateAdminProfileValidation))
+  @Patch("profile")
+  async updateProfile(
+    @Body() updateAdminProfileDto: UpdateAdminProfileDto,
+    @Req() req: AdminRequest,
+  ) {
+    return this.administratorService.updateProfile(updateAdminProfileDto, req);
+  }
+
+  @ApiOperation({ summary: "Change the currently logged-in admin's password" })
+  @UsePipes(new JoiValidationPipe(ChangeAdminPasswordValidation))
+  @Post("change-password")
+  async changePassword(
+    @Body() changeAdminPasswordDto: ChangeAdminPasswordDto,
+    @Req() req: AdminRequest,
+  ) {
+    return this.administratorService.changePassword(
+      changeAdminPasswordDto,
+      req,
+    );
+  }
 
   @Get("users")
   async users(@Req() req: AdminRequest) {
