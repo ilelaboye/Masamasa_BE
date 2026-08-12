@@ -27,6 +27,8 @@ import {
   verifyHash,
   sendMailJetWithTemplate,
   sendZohoMailWithTemplate,
+  sendPasswordChangedEmail,
+  sendWithdrawalSuccessEmail,
   timeIsAfter,
 } from "@/core/utils";
 import { ZohoMailTemplates } from "@/constants";
@@ -45,7 +47,10 @@ import {
 } from "@/core/helpers";
 import { BVNVerificationDto } from "@/modules/global/bank-verification/dto/bvn-verification.dto";
 import { BankVerificationService } from "@/modules/global/bank-verification/bank-verification.service";
-import { Notification } from "@/modules/notifications/entities/notification.entity";
+import {
+  Notification,
+  NotificationTag,
+} from "@/modules/notifications/entities/notification.entity";
 import {
   AccessToken,
   AccessTokenType,
@@ -237,13 +242,21 @@ export class UsersService extends BaseService {
     return { message: "PIN verified successfully" };
   }
 
-  async changePassword(
+  /**
+   * Loads the user with their password hash and validates the supplied
+   * old/new password pair. Shared by the OTP request and the final change
+   * so both steps enforce identical rules.
+   */
+  private async validatePasswordChange(
     changeUserPasswordDto: ChangeUserPasswordDto,
     req: UserRequest,
   ) {
-    const user = await this.userRepository.findOne({
-      where: { email: req.user.email },
-    });
+    const user = await this.userRepository
+      .createQueryBuilder("user")
+      .addSelect("user.password")
+      .addSelect("user.remember_token")
+      .where("user.id = :id", { id: req.user.id })
+      .getOne();
 
     if (!user) {
       throw new BadRequestException("User not found, please login again");
@@ -264,11 +277,97 @@ export class UsersService extends BaseService {
       );
     }
 
-    const saved = this.userRepository.update(
-      { email: user.email },
-      { password: changeUserPasswordDto.new_password },
+    if (changeUserPasswordDto.new_password === changeUserPasswordDto.old_password) {
+      throw new BadRequestException(
+        "New password must be different from your current password",
+      );
+    }
+
+    return user;
+  }
+
+  /**
+   * Step 1 of a password change: validate the details, then email a
+   * one-time code. Nothing is changed until the code is verified.
+   */
+  async requestPasswordChangeOtp(
+    changeUserPasswordDto: ChangeUserPasswordDto,
+    req: UserRequest,
+  ) {
+    const user = await this.validatePasswordChange(changeUserPasswordDto, req);
+
+    const otp = generateRandomNumberString(6);
+    await this.userRepository.update(
+      { id: user.id },
+      { remember_token: otp, token_created_at: new Date() },
     );
-    return saved;
+
+    sendZohoMailWithTemplate(
+      {
+        to: {
+          name: `${capitalizeString(user.first_name)} ${capitalizeString(user.last_name)}`,
+          email: user.email,
+        },
+      },
+      {
+        subject: "Password Change Verification Code",
+        templateId: ZohoMailTemplates.verify_email,
+        variables: {
+          firstName: capitalizeString(user.first_name),
+          token: otp,
+        },
+      },
+    );
+
+    return { message: "Verification code sent to your email." };
+  }
+
+  /**
+   * Step 2: re-validate, verify the emailed OTP, then store the new
+   * password as a bcrypt hash and confirm by email.
+   */
+  async changePassword(
+    changeUserPasswordDto: ChangeUserPasswordDto,
+    req: UserRequest,
+  ) {
+    if (!changeUserPasswordDto.otp) {
+      throw new BadRequestException("Verification code is required");
+    }
+
+    const user = await this.validatePasswordChange(changeUserPasswordDto, req);
+
+    if (
+      user.remember_token !== changeUserPasswordDto.otp ||
+      !user.token_created_at ||
+      timeIsAfter(user.token_created_at, 15)
+    ) {
+      throw new BadRequestException("Invalid or expired verification code.");
+    }
+
+    await this.userRepository.update(
+      { id: user.id },
+      {
+        // Must be hashed — storing the raw value would lock the user out,
+        // since login compares against a bcrypt hash.
+        password: hashResourceSync(changeUserPasswordDto.new_password),
+        remember_token: null,
+        token_created_at: null,
+      },
+    );
+
+    sendPasswordChangedEmail(user);
+
+    this.notificationRepository
+      .save({
+        user_id: user.id,
+        message:
+          "Your password was changed. If this wasn't you, contact support immediately.",
+        tag: NotificationTag.security,
+        metadata: {},
+      } as unknown as Notification)
+      .catch(() => {});
+
+    return { message: "Password changed successfully" };
   }
 
   async uploadImage(uploadImageDto: UploadImageDto, req: UserRequest) {

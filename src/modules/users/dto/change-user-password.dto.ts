@@ -9,6 +9,10 @@ export class ChangeUserPasswordDto {
 
   @ApiProperty({ example: "_Pa$$w0rd!XYZ01" })
   new_password_confirmation?: string;
+
+  // Required only on the final change call, not when requesting the code.
+  @ApiProperty({ example: "123456", required: false })
+  otp?: string;
 }
 
 export class CreatePinDto {

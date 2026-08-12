@@ -95,6 +95,18 @@ export class UsersController {
   }
 
   @UsePipes(new JoiValidationPipe(ChangeUserPasswordValidation))
+  @Post("change-password/request-otp")
+  async requestPasswordChangeOtp(
+    @Body() changeUserPasswordDto: ChangeUserPasswordDto,
+    @Req() req: UserRequest,
+  ) {
+    return await this.usersService.requestPasswordChangeOtp(
+      changeUserPasswordDto,
+      req,
+    );
+  }
+
+  @UsePipes(new JoiValidationPipe(ChangeUserPasswordValidation))
   @Post("change-password")
   async changePassword(
     @Body() changeUserPasswordDto: ChangeUserPasswordDto,

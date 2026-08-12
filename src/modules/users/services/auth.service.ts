@@ -10,6 +10,8 @@ import {
   generateRandomNumberString,
 } from "@/core/helpers";
 import {
+  getClientInfo,
+  sendLoginAlertEmail,
   getUserCookieData,
   hashResource,
   hashResourceSync,
@@ -46,6 +48,8 @@ import {
 import { CacheService } from "@/modules/global/cache-container/cache-container.service";
 import { QuidaxService } from "@/modules/quidax/quidax.service";
 import { MixpanelService } from "@/modules/global/mixpanel/mixpanel.service";
+import { NotificationsService } from "@/modules/notifications/notifications.service";
+import { NotificationTag } from "@/modules/notifications/entities/notification.entity";
 import { User, Status, TokenType } from "../entities/user.entity";
 
 @Injectable()
@@ -61,8 +65,31 @@ export class AuthService extends BaseService {
     private readonly cacheService: CacheService,
     private readonly quidaxService: QuidaxService,
     private readonly mixpanel: MixpanelService,
+    private readonly notificationsService: NotificationsService,
   ) {
     super();
+  }
+
+  /**
+   * Security alert on every successful sign-in — email plus an in-app
+   * notification. Fire-and-forget: never block or fail a login.
+   */
+  private notifyLogin(user: { id: number; first_name: string; last_name: string; email: string }, req?: UserRequest) {
+    const client = req ? getClientInfo(req) : undefined;
+
+    sendLoginAlertEmail(user, {
+      device: client?.user_agent,
+      ip: client?.ip,
+    });
+
+    this.notificationsService
+      .create({
+        userId: user.id,
+        message: "New login to your account. If this wasn't you, secure your account immediately.",
+        tag: NotificationTag.login,
+        metadata: client ? { client } : {},
+      })
+      .catch(() => {});
   }
 
   async login(loginStaffDto: LoginStaffDto, req: UserRequest) {
@@ -196,6 +223,8 @@ export class AuthService extends BaseService {
     console.log("User login", user);
 
     const token = this.jwtService.sign({ ...user });
+
+    this.notifyLogin(fetch, req);
 
     return { user, token };
   }
@@ -526,6 +555,9 @@ export class AuthService extends BaseService {
     delete user.pin;
 
     const jwtToken = this.jwtService.sign({ ...user });
+
+    this.notifyLogin(fetch);
+
     return { user, token: jwtToken };
   }
 

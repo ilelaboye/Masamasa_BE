@@ -20,6 +20,8 @@ export const CreateAccountValidation = Joi.object().keys({
       "any.only": "password does not match",
     })
     .label("Confirm password"),
+  // Present only on the final change call; the OTP-request step omits it.
+  otp: Joi.string().optional().allow(null, "").label("Verification code"),
 });
 
 export const UpdateAccountValidation = Joi.object().keys({

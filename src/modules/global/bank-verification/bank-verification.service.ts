@@ -18,17 +18,70 @@ export class BankVerificationService {
     private readonly bankVerificationRepository: Repository<BankVerification>,
   ) {}
 
+  /**
+   * Splits a name into comparable lowercase tokens. Punctuation and hyphens
+   * become separators so "Ilelaboye-Tayo" and "Ilelaboye Tayo" match.
+   */
+  private nameTokens(...parts: (string | null | undefined)[]): string[] {
+    return parts
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .replace(/[^a-z\s]/g, " ")
+      .split(/\s+/)
+      .filter((token) => token.length > 0);
+  }
+
+  /**
+   * Matches the name the user typed against the name on their BVN.
+   *
+   * Users split their names across the two fields inconsistently — a person
+   * registered on BVN as first "lekan", middle "tayo", last "ilelaboye" may
+   * enter it as first_name "lekan tayo" / last_name "ilelaboye", or
+   * first_name "lekan" / last_name "tayo ilelaboye". Comparing whole fields
+   * rejects both, so instead every word the user supplied must match a
+   * distinct word on the BVN record (order-independent).
+   *
+   * At least two distinct BVN words must be matched, so a single repeated
+   * name cannot pass verification on its own.
+   */
+  private verifyNameAgainstBvn(
+    bvnDetails,
+    first_name: string,
+    last_name: string,
+  ): boolean {
+    const bvnTokens = this.nameTokens(
+      bvnDetails?.firstName,
+      bvnDetails?.lastName,
+      bvnDetails?.middleName,
+    );
+    // Deduped: repeating a name must not count as two separate matches.
+    const userTokens = [...new Set(this.nameTokens(first_name, last_name))];
+
+    if (bvnTokens.length === 0 || userTokens.length === 0) return false;
+
+    const unmatchedBvnTokens = [...bvnTokens];
+    for (const token of userTokens) {
+      const index = unmatchedBvnTokens.indexOf(token);
+      if (index === -1) return false; // a supplied name is not on the BVN
+      unmatchedBvnTokens.splice(index, 1);
+    }
+
+    const matchedCount = bvnTokens.length - unmatchedBvnTokens.length;
+    return matchedCount >= 2;
+  }
+
   verifyUserDetailsWithBvn(bvnDetails, userDetails: BVNUserDto) {
     console.log("bvnDetails", bvnDetails);
     console.log("userDetails", userDetails);
     if (!userDetails) return false;
     const { first_name, last_name, gender, dob } = userDetails;
 
-    const bnvName = `${bvnDetails.firstName.toLowerCase()} ${bvnDetails.lastName.toLowerCase()} ${bvnDetails.middleName.toLowerCase()}`;
-
-    const isNameVerified =
-      bnvName.includes(first_name.toLowerCase()) &&
-      bnvName.includes(last_name.toLowerCase());
+    const isNameVerified = this.verifyNameAgainstBvn(
+      bvnDetails,
+      first_name,
+      last_name,
+    );
     const isDobVerified =
       new Date(bvnDetails.dateOfBirth).toLocaleDateString() ==
       new Date(dob).toLocaleDateString();

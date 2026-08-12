@@ -11,6 +11,9 @@ import {
 export enum NotificationTag {
   deposit = "deposit",
   wallet_credit = "wallet_credit",
+  login = "login",
+  security = "security",
+  withdrawal = "withdrawal",
 }
 @Entity({ name: "notifications" })
 export class Notification {

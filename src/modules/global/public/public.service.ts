@@ -11,13 +11,14 @@ import {
   getRequestQuery,
   sendMailJetWithTemplate,
   sendZohoMailWithTemplate,
+  sendWithdrawalSuccessEmail,
 } from "@/core/utils";
 import { User } from "@/modules/users/entities/user.entity";
 import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { BankAccountVerificationDto, TransactionWebhookDto } from "./dto";
-import { Status, Wallet } from "@/modules/wallet/wallet.entity";
+import { Status, Wallet, WalletType } from "@/modules/wallet/wallet.entity";
 import {
   TransactionEntityType,
   TransactionModeType,
@@ -43,10 +44,18 @@ import {
 import { QuidaxService } from "@/modules/quidax/quidax.service";
 import { CacheService } from "../cache-container/cache-container.service";
 import { MixpanelService } from "../mixpanel/mixpanel.service";
-import { capitalizeString, generateMasamasaRef } from "@/core/helpers";
+import {
+  capitalizeString,
+  compareVersions,
+  currencyFormatter,
+  generateMasamasaRef,
+} from "@/core/helpers";
 
 // Nomba's bank list rarely changes — cached under this key for all users.
 const NOMBA_BANKS_CACHE_KEY = "NOMBA_BANKS_LIST";
+
+// Coins pegged 1:1 to the US dollar — priced locally instead of via CoinGecko.
+const STABLECOINS_USD = new Set(["usdt", "usdc"]);
 
 @Injectable()
 export class PublicService {
@@ -197,13 +206,22 @@ export class PublicService {
       console.log("Nomba webhook transaction", transaction);
       if (transaction) {
         if (webhook.event_type == "payout_success") {
-          this.transactionsRepository.update(
+          // Only act on a real transition — Nomba can redeliver this
+          // webhook, and the user must not be emailed twice.
+          const alreadySettled =
+            transaction.status === TransactionStatusType.success;
+
+          await this.transactionsRepository.update(
             { id: transaction.id },
             {
               status: TransactionStatusType.success,
               metadata: { ...transaction.metadata, nomba_resp: webhook.data },
             },
           );
+
+          if (!alreadySettled) {
+            await this.notifyWithdrawalSuccess(transaction);
+          }
 
           // Analytics: measured to the bank confirmation callback, per the
           // tracking plan. Bank code only — never the account number.
@@ -252,6 +270,13 @@ export class PublicService {
     // } catch {
     //   return { status: false };
     // }
+    // Dollar-pegged stablecoins are always $1 — skip the lookup entirely.
+    // Besides saving two CoinGecko calls, this avoids the search endpoint
+    // resolving "USDT"/"USDC" to a wrong (unpegged) look-alike token.
+    if (STABLECOINS_USD.has(String(symbol ?? "").toLowerCase())) {
+      return { status: true, price: 1 };
+    }
+
     if (symbol.toLowerCase() == "pol") {
       symbol = "POL (ex-MATIC)";
     }
@@ -376,6 +401,48 @@ export class PublicService {
       console.log("banks", error);
       throw new BadRequestException(error.response.data.description);
     }
+  }
+
+  /**
+   * Minimum supported app version per platform. The app calls this on
+   * launch and blocks the user behind an update prompt when its own
+   * version is below `min_version`.
+   */
+  getAppVersion(platform?: string, currentVersion?: string) {
+    const isIos = (platform ?? "").toLowerCase() === "ios";
+
+    const minVersion = isIos
+      ? appConfig.IOS_MIN_VERSION
+      : appConfig.ANDROID_MIN_VERSION;
+    const latestVersion = isIos
+      ? appConfig.IOS_LATEST_VERSION
+      : appConfig.ANDROID_LATEST_VERSION;
+    const storeUrl = isIos
+      ? appConfig.IOS_STORE_URL
+      : appConfig.ANDROID_STORE_URL;
+
+    // Compare only when the client sends a well-formed version. An absent
+    // or unparseable value must never lock a user out of the app.
+    const clientVersion = (currentVersion ?? "").trim();
+    const isValidVersion = /^\d+(\.\d+)*$/.test(clientVersion);
+
+    let forceUpdate = false;
+    let updateAvailable = false;
+    if (isValidVersion) {
+      forceUpdate = compareVersions(clientVersion, minVersion) < 0;
+      updateAvailable = compareVersions(clientVersion, latestVersion) < 0;
+    }
+
+    return {
+      platform: isIos ? "ios" : "android",
+      min_version: minVersion,
+      latest_version: latestVersion,
+      store_url: storeUrl,
+      force_update: forceUpdate,
+      update_available: updateAvailable,
+      message:
+        "A new version of MasaMasa is available. Please update to continue.",
+    };
   }
 
   async getBanks() {
@@ -666,6 +733,7 @@ export class PublicService {
         wallet_address: address,
         destination_tag: destination_tag ?? null,
         status: Status.active,
+        type: WalletType.quidax,
       });
     }
   }
@@ -701,22 +769,72 @@ export class PublicService {
   }
 
   /**
-   * Finds the wallet row a deposit belongs to. For tag-based chains the
-   * shared master address alone is ambiguous, so the destination tag must
-   * match too.
+   * Emails + in-app notifies the user that a bank withdrawal was paid out.
+   * Fire-and-forget; a notification failure must not fail the webhook.
+   */
+  private async notifyWithdrawalSuccess(transaction: Transactions) {
+    try {
+      const user = await this.userRepository.findOne({
+        where: { id: transaction.user_id },
+      });
+      if (!user) return;
+
+      sendWithdrawalSuccessEmail(user, {
+        amount: Number(transaction.amount) || 0,
+        bankName: transaction.metadata?.bankName,
+        accountNumber: transaction.metadata?.accountNumber,
+        reference: transaction.masamasa_ref,
+      });
+
+      await this.notificationsService.create({
+        userId: transaction.user_id,
+        message: `Your withdrawal of NGN ${Number(transaction.amount ?? 0).toLocaleString("en-NG")} was successful`,
+        tag: NotificationTag.withdrawal,
+        metadata: { reference: transaction.masamasa_ref },
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Withdrawal notification failed for ${transaction.masamasa_ref}: ${err?.message}`,
+      );
+    }
+  }
+
+  /**
+   * Finds the wallet row a deposit belongs to.
+   *
+   * An address alone is ambiguous: every token on a chain shares one
+   * address (USDT, USDC and ETH all sit on the same EVM address), so the
+   * currency must match too or the deposit is credited against the wrong
+   * wallet row. For tag-based chains (XRP) the shared master address needs
+   * the destination tag as well.
+   *
+   * Currency is compared case-insensitively — rows written during Quidax
+   * provisioning are uppercase while webhook-created rows are lowercase.
    */
   private findDepositWallet(
     address: string,
+    currency: string,
     destinationTag: string | null,
     withUser = false,
   ) {
-    return this.walletRepository.findOne({
-      where: {
-        wallet_address: address,
-        ...(destinationTag ? { destination_tag: destinationTag } : {}),
-      },
-      ...(withUser ? { relations: ["user"] } : {}),
-    });
+    const query = this.walletRepository
+      .createQueryBuilder("wallet")
+      .where("wallet.wallet_address = :address", { address })
+      .andWhere("UPPER(wallet.currency) = :currency", {
+        currency: String(currency ?? "").toUpperCase(),
+      });
+
+    if (destinationTag) {
+      query.andWhere("wallet.destination_tag = :destinationTag", {
+        destinationTag,
+      });
+    }
+
+    if (withUser) {
+      query.leftJoinAndSelect("wallet.user", "user");
+    }
+
+    return query.getOne();
   }
 
   // Incoming TX detected on-chain — not yet confirmed.
@@ -733,7 +851,11 @@ export class PublicService {
     });
     if (existingWebhook) return;
 
-    const wallet = await this.findDepositWallet(address, destinationTag);
+    const wallet = await this.findDepositWallet(
+      address,
+      currency,
+      destinationTag,
+    );
     if (!wallet) return;
 
     // Quidax often omits payment_address.network (always for native coins) —
@@ -788,7 +910,12 @@ export class PublicService {
       this.extractDepositFields(data);
     if (!depositId || !address) return;
 
-    const wallet = await this.findDepositWallet(address, destinationTag, true);
+    const wallet = await this.findDepositWallet(
+      address,
+      currency,
+      destinationTag,
+      true,
+    );
     if (!wallet) return;
 
     // Quidax often omits payment_address.network (always for native coins) —
@@ -905,9 +1032,9 @@ export class PublicService {
         templateId: ZohoMailTemplates.coins_deposit_confirmed,
         variables: {
           firstName: capitalizeString(wallet.user.first_name),
-          coin: `${amount} ${currency}`,
+          coin: `${currencyFormatter(amount, "NGN", 2, false)} ${currency}`,
           network: depositNetwork,
-          amount: `NGN ${dollarAmount * exchange}`,
+          amount: `NGN ${currencyFormatter(dollarAmount * exchange, "NGN", 2, false)}`,
           address: address,
           subject: `${wallet.currency} Deposit Confirmed`,
         },
@@ -946,7 +1073,11 @@ export class PublicService {
       this.extractDepositFields(data);
     if (!depositId || !address) return;
 
-    const wallet = await this.findDepositWallet(address, destinationTag);
+    const wallet = await this.findDepositWallet(
+      address,
+      currency,
+      destinationTag,
+    );
 
     const existingWebhook = await this.webhookRepository.findOne({
       where: { hash: depositId },

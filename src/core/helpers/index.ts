@@ -1,4 +1,5 @@
 export * from "./capitalizeString";
+export * from "./compareVersions";
 export * from "./currencyFormatter";
 export * from "./generateAlphaNumericString";
 export * from "./generateRandomNumber";

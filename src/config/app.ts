@@ -120,6 +120,20 @@ export const appConfig = {
 
   MORALIS_API_KEY: process.env.MORALIS_API_KEY || "",
 
+  // Force-update gate. Bump the MIN version on a release that every user
+  // must run (breaking API change, critical fix); users below it are blocked
+  // in-app until they update. LATEST is informational only.
+  ANDROID_MIN_VERSION: process.env.ANDROID_MIN_VERSION || "1.0.0",
+  ANDROID_LATEST_VERSION: process.env.ANDROID_LATEST_VERSION || "1.0.0",
+  ANDROID_STORE_URL:
+    process.env.ANDROID_STORE_URL ||
+    "https://play.google.com/store/apps/details?id=com.masamasang",
+  IOS_MIN_VERSION: process.env.IOS_MIN_VERSION || "1.0.0",
+  IOS_LATEST_VERSION: process.env.IOS_LATEST_VERSION || "1.0.0",
+  IOS_STORE_URL:
+    process.env.IOS_STORE_URL ||
+    "https://apps.apple.com/ng/app/masamasa/id6760827663",
+
   // Mixpanel — analytics disabled entirely when the token is absent.
   // The salt must NEVER be rotated (it would orphan every historic profile).
   MIXPANEL_TOKEN: process.env.MIXPANEL_TOKEN || "",

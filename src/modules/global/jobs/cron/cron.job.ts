@@ -1,5 +1,6 @@
 import {
   axiosClient,
+  sendWithdrawalSuccessEmail,
   sendZohoMail,
   transferWithFlutterWave,
   verifyTransfer,
@@ -30,6 +31,8 @@ import { generateMasamasaRef } from "@/core/helpers";
 import { TransactionService } from "@/modules/transactions/transactions.service";
 import { User } from "@/modules/users/entities/user.entity";
 import { MixpanelService } from "@/modules/global/mixpanel/mixpanel.service";
+import { NotificationsService } from "@/modules/notifications/notifications.service";
+import { NotificationTag } from "@/modules/notifications/entities/notification.entity";
 
 @Injectable()
 export class CronJob {
@@ -46,6 +49,7 @@ export class CronJob {
     // private readonly usersService: UsersService
     private readonly dataSource: DataSource,
     private readonly mixpanel: MixpanelService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   // Handles all notification jobs
@@ -250,6 +254,10 @@ export class CronJob {
         );
         console.log("Nomba bank verify transfer", res.data);
         if (res.data.status == "SUCCESS") {
+          // The webhook usually settles these first; only notify when this
+          // run is the one that flips the status, never twice.
+          const settledHere = trans.status !== TransactionStatusType.success;
+
           await this.transactionsRepository.update(
             { id: trans.id },
             {
@@ -257,6 +265,10 @@ export class CronJob {
               metadata: { ...trans.metadata, nomba_resp: res.data },
             },
           );
+
+          if (settledHere) {
+            await this.notifyWithdrawalSuccess(trans);
+          }
           this.mixpanel.track("payout completed", trans.user_id, {
             "payout id": trans.masamasa_ref,
             "amount ngn": Number(trans.amount) || 0,
@@ -332,6 +344,38 @@ export class CronJob {
    * BEFORE the Nomba call — an external HTTP request must never run inside
    * an open transaction holding the user's row lock.
    */
+  /**
+   * Emails + in-app notifies the user that their withdrawal was paid out.
+   * Never allowed to break the cron run.
+   */
+  private async notifyWithdrawalSuccess(trans: Transactions) {
+    try {
+      const user = await this.dataSource
+        .getRepository(User)
+        .findOne({ where: { id: trans.user_id } });
+      if (!user) return;
+
+      sendWithdrawalSuccessEmail(user, {
+        amount: Number(trans.amount) || 0,
+        bankName: trans.metadata?.bankName,
+        accountNumber: trans.metadata?.accountNumber,
+        reference: trans.masamasa_ref,
+      });
+
+      await this.notificationsService.create({
+        userId: trans.user_id,
+        message: `Your withdrawal of NGN ${Number(trans.amount ?? 0).toLocaleString("en-NG")} was successful`,
+        tag: NotificationTag.withdrawal,
+        metadata: { reference: trans.masamasa_ref },
+      });
+    } catch (err) {
+      console.log(
+        `Withdrawal notification failed for ${trans.masamasa_ref}:`,
+        err?.message,
+      );
+    }
+  }
+
   private async retryWithdrawal(trans: Transactions, token: string) {
     // Retry cap: after MAX_WITHDRAWAL_RETRIES attempts, park the withdrawal
     // for manual review instead of re-initiating forever.

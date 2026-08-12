@@ -13,6 +13,7 @@ import {
   Get,
   Param,
   Post,
+  Query,
   Req,
   Res,
   UseInterceptors,
@@ -110,6 +111,16 @@ export class PublicController {
   // async transaction(@Body() transactionWebhookDto: TransactionWebhookDto) {
   //   return await this.publicService.transactionWebhook(transactionWebhookDto);
   // }
+
+  @ApiQuery({ name: "platform", required: false, enum: ["android", "ios"] })
+  @ApiQuery({ name: "version", required: false, type: String })
+  @Get("app-version")
+  appVersion(
+    @Query("platform") platform?: string,
+    @Query("version") version?: string,
+  ) {
+    return this.publicService.getAppVersion(platform, version);
+  }
 
   @Get("banks")
   async banks() {
