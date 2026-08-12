@@ -31,7 +31,11 @@ import {
   sendWithdrawalSuccessEmail,
   timeIsAfter,
 } from "@/core/utils";
-import { ZohoMailTemplates } from "@/constants";
+import {
+  WITHDRAWAL_MAX_PER_DAY,
+  WITHDRAWAL_MAX_PER_TRANSACTION,
+  ZohoMailTemplates,
+} from "@/constants";
 import { TransactionService } from "@/modules/transactions/transactions.service";
 import {
   TransactionEntityType,
@@ -622,6 +626,12 @@ export class UsersService extends BaseService {
       );
     }
 
+    if (withdrawalDto.amount > WITHDRAWAL_MAX_PER_TRANSACTION) {
+      throw new BadRequestException(
+        `The maximum you can withdraw in a single transaction is NGN ${WITHDRAWAL_MAX_PER_TRANSACTION.toLocaleString("en-NG")}`,
+      );
+    }
+
     // Lock the user row for the duration of the balance check + transaction insert
     // to prevent concurrent withdrawals from racing past the balance check.
     const queryRunner = this.dataSource.createQueryRunner();
@@ -657,6 +667,41 @@ export class UsersService extends BaseService {
       const balance = parseFloat(balanceResult.balance) || 0;
       if (balance < withdrawalDto.amount) {
         throw new BadRequestException("Insufficient wallet balance");
+      }
+
+      // Daily cap. Checked inside the lock so two concurrent withdrawals
+      // cannot each see the same "already withdrawn today" figure and both
+      // pass. Pending (processing) withdrawals count — that money is
+      // already committed.
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+
+      const dailyResult = await queryRunner.manager
+        .createQueryBuilder(Transactions, "transaction")
+        .select("COALESCE(SUM(transaction.amount), 0)", "total")
+        .where("transaction.user_id = :user_id", { user_id: user.id })
+        .andWhere("transaction.entity_type = :entityType", {
+          entityType: TransactionEntityType.withdrawal,
+        })
+        .andWhere("transaction.status IN (:...statuses)", {
+          statuses: [
+            TransactionStatusType.success,
+            TransactionStatusType.processing,
+            TransactionStatusType.pending,
+          ],
+        })
+        .andWhere("transaction.created_at >= :startOfDay", { startOfDay })
+        .getRawOne();
+
+      const withdrawnToday = parseFloat(dailyResult.total) || 0;
+      const remainingToday = WITHDRAWAL_MAX_PER_DAY - withdrawnToday;
+
+      if (withdrawalDto.amount > remainingToday) {
+        throw new BadRequestException(
+          remainingToday <= 0
+            ? `You have reached your daily withdrawal limit of NGN ${WITHDRAWAL_MAX_PER_DAY.toLocaleString("en-NG")}. Please try again tomorrow.`
+            : `This would exceed your daily withdrawal limit of NGN ${WITHDRAWAL_MAX_PER_DAY.toLocaleString("en-NG")}. You can still withdraw NGN ${remainingToday.toLocaleString("en-NG")} today.`,
+        );
       }
 
       trans = await queryRunner.manager.save(

@@ -446,7 +446,8 @@ export class AdministratorService {
   }
 
   async getUsers(req: AdminRequest) {
-    const { limit, page, search, skip } = getRequestQuery(req);
+    const { limit, page, search, skip, date_from, date_to } =
+      getRequestQuery(req);
     let count = await this.userRepository.count();
     let users: User[] = [];
     const queryRunner = this.userRepository.createQueryBuilder("users");
@@ -459,7 +460,13 @@ export class AdministratorService {
           })
             .orWhere("users.last_name ILIKE :search", { search: `%${search}%` })
             .orWhere("users.email ILIKE :search", { search: `%${search}%` })
-            .orWhere("users.phone ILIKE :search", { search: `%${search}%` });
+            .orWhere("users.phone ILIKE :search", { search: `%${search}%` })
+            // Match the full name too, so "john doe" finds a user whose
+            // first and last names are stored separately.
+            .orWhere(
+              "CONCAT(users.first_name, ' ', users.last_name) ILIKE :search",
+              { search: `%${search}%` },
+            );
           // Numeric search also matches the user id exactly
           if (/^\d+$/.test(search)) {
             qb.orWhere("users.id = :searchId", {
@@ -469,10 +476,70 @@ export class AdministratorService {
         }),
       );
     }
+
+    // Join-date range. Each bound is optional so "from only" and "to only"
+    // both work; date_to covers the whole day, not midnight.
+    if (date_from) {
+      queryRunner.andWhere("users.created_at >= :dateFrom", {
+        dateFrom: new Date(date_from),
+      });
+    }
+    if (date_to) {
+      queryRunner.andWhere("users.created_at <= :dateTo", {
+        dateTo: endOfDay(new Date(date_to)),
+      });
+    }
+
+    // KYC status filter. "none" covers users who never started verification
+    // (the column is null for them).
+    const kycStatus = req.query.kyc_status as string;
+    if (kycStatus) {
+      if (kycStatus === "none") {
+        queryRunner.andWhere("users.kyc_status IS NULL");
+      } else {
+        queryRunner.andWhere("users.kyc_status = :kycStatus", { kycStatus });
+      }
+    }
+
+    queryRunner.orderBy("users.created_at", "DESC");
+
     count = await queryRunner.getCount();
     users = await queryRunner.skip(skip).take(limit).getMany();
 
+    // Wallet balances for this page only — one aggregate query rather than
+    // one per user. Same formula as the user detail page so they agree.
+    const balances = new Map<number, number>();
+    if (users.length > 0) {
+      const rows = await this.transactionsRepository
+        .createQueryBuilder("t")
+        .select("t.user_id", "user_id")
+        .addSelect(
+          `SUM(CASE WHEN t.mode = :credit AND t.status = :success THEN t.amount ELSE 0 END) -
+           SUM(CASE WHEN t.mode = :debit AND t.status = :success THEN t.amount ELSE 0 END)`,
+          "balance",
+        )
+        .where("t.user_id IN (:...userIds)", {
+          userIds: users.map((u) => u.id),
+        })
+        .setParameters({
+          credit: TransactionModeType.credit,
+          debit: TransactionModeType.debit,
+          success: TransactionStatusType.success,
+        })
+        .groupBy("t.user_id")
+        .getRawMany();
+
+      for (const row of rows) {
+        balances.set(Number(row.user_id), parseFloat(row.balance) || 0);
+      }
+    }
+
+    const usersWithBalance = users.map((user) => ({
+      ...user,
+      wallet_balance: balances.get(user.id) ?? 0,
+    }));
+
     const metadata = paginate(count, page, limit);
-    return { users, metadata };
+    return { users: usersWithBalance, metadata };
   }
 }

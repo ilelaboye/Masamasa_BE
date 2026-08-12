@@ -170,6 +170,28 @@ export class AdministratorController {
     return await this.analyticsService.volumeSeries(g);
   }
 
+  @ApiOperation({ summary: "Analytics: daily inflow vs outflow" })
+  @ApiQuery({ name: "date_from", required: false, type: String })
+  @ApiQuery({ name: "date_to", required: false, type: String })
+  @Get("analytics/cash-flow")
+  async analyticsCashFlow(
+    @Query("date_from") dateFrom?: string,
+    @Query("date_to") dateTo?: string,
+  ) {
+    return await this.analyticsService.cashFlow(dateFrom, dateTo);
+  }
+
+  @ApiOperation({ summary: "Analytics: crypto deposits by coin and depositor" })
+  @ApiQuery({ name: "date_from", required: false, type: String })
+  @ApiQuery({ name: "date_to", required: false, type: String })
+  @Get("analytics/crypto-deposits")
+  async analyticsCryptoDeposits(
+    @Query("date_from") dateFrom?: string,
+    @Query("date_to") dateTo?: string,
+  ) {
+    return await this.analyticsService.cryptoDeposits(dateFrom, dateTo);
+  }
+
   @ApiOperation({ summary: "Analytics: daily active users and signups" })
   @ApiQuery({ name: "days", required: false, type: Number })
   @Get("analytics/daily-users")

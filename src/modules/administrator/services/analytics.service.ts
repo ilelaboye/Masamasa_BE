@@ -172,6 +172,182 @@ export class AnalyticsService {
     };
   }
 
+  /**
+   * Daily inflow vs outflow over a date range.
+   *
+   * Inflow  = successful credits (deposits, transfers received)
+   * Outflow = successful debits (withdrawals, bill purchases, fees)
+   *
+   * Defaults to the last 30 days when no range is supplied.
+   */
+  async cashFlow(dateFrom?: string, dateTo?: string) {
+    const start = dateFrom ? new Date(dateFrom) : new Date();
+    if (!dateFrom) start.setDate(start.getDate() - 30);
+    start.setHours(0, 0, 0, 0);
+
+    // The end bound covers the whole day, not midnight.
+    const end = dateTo ? new Date(dateTo) : new Date();
+    end.setHours(23, 59, 59, 999);
+
+    const rows = await this.transactionsRepository
+      .createQueryBuilder("t")
+      .select(`DATE_TRUNC('day', t.created_at)`, "day")
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN t.mode = '${TransactionModeType.credit}' THEN t.amount ELSE 0 END), 0)`,
+        "inflow",
+      )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN t.mode = '${TransactionModeType.debit}' THEN t.amount ELSE 0 END), 0)`,
+        "outflow",
+      )
+      .addSelect(
+        `SUM(CASE WHEN t.mode = '${TransactionModeType.credit}' THEN 1 ELSE 0 END)`,
+        "inflow_count",
+      )
+      .addSelect(
+        `SUM(CASE WHEN t.mode = '${TransactionModeType.debit}' THEN 1 ELSE 0 END)`,
+        "outflow_count",
+      )
+      .where("t.status = :status", { status: TransactionStatusType.success })
+      .andWhere("t.created_at BETWEEN :start AND :end", { start, end })
+      .groupBy("day")
+      .orderBy("day", "DESC")
+      .getRawMany();
+
+    const series = rows.map((r) => {
+      const inflow = Number(r.inflow) || 0;
+      const outflow = Number(r.outflow) || 0;
+      return {
+        day: r.day,
+        inflow,
+        outflow,
+        net: inflow - outflow,
+        inflow_count: Number(r.inflow_count) || 0,
+        outflow_count: Number(r.outflow_count) || 0,
+      };
+    });
+
+    const totalInflow = series.reduce((s, r) => s + r.inflow, 0);
+    const totalOutflow = series.reduce((s, r) => s + r.outflow, 0);
+
+    return {
+      date_from: start.toISOString(),
+      date_to: end.toISOString(),
+      series,
+      total_inflow: totalInflow,
+      total_outflow: totalOutflow,
+      net: totalInflow - totalOutflow,
+    };
+  }
+
+  /**
+   * Crypto deposit analytics for a date range (defaults to the last month):
+   * which coins came in and how much, plus the biggest depositors.
+   *
+   * Counts only successful credit transactions of type `deposit` — the
+   * deposit-fee debits and fiat movements are deliberately excluded.
+   */
+  async cryptoDeposits(dateFrom?: string, dateTo?: string) {
+    const start = dateFrom ? new Date(dateFrom) : new Date();
+    if (!dateFrom) start.setMonth(start.getMonth() - 1);
+    start.setHours(0, 0, 0, 0);
+
+    const end = dateTo ? new Date(dateTo) : new Date();
+    end.setHours(23, 59, 59, 999);
+
+    const base = () =>
+      this.transactionsRepository
+        .createQueryBuilder("t")
+        .where("t.entity_type = :type", {
+          type: TransactionEntityType.deposit,
+        })
+        .andWhere("t.mode = :mode", { mode: TransactionModeType.credit })
+        .andWhere("t.status = :status", {
+          status: TransactionStatusType.success,
+        })
+        .andWhere("t.created_at BETWEEN :start AND :end", { start, end });
+
+    // Ranking by coin. Coin amounts only sum meaningfully per-currency, so
+    // ordering is by dollar value, which is comparable across coins.
+    const byCurrencyRows = await base()
+      .select("UPPER(t.currency)", "currency")
+      .addSelect("COUNT(*)", "deposit_count")
+      .addSelect("COUNT(DISTINCT t.user_id)", "depositor_count")
+      .addSelect("COALESCE(SUM(t.coin_amount), 0)", "coin_amount")
+      .addSelect("COALESCE(SUM(t.dollar_amount), 0)", "dollar_amount")
+      .addSelect("COALESCE(SUM(t.amount), 0)", "naira_amount")
+      .groupBy("UPPER(t.currency)")
+      .orderBy("dollar_amount", "DESC")
+      .getRawMany();
+
+    const byCurrency = byCurrencyRows.map((r) => ({
+      currency: r.currency,
+      deposit_count: Number(r.deposit_count) || 0,
+      depositor_count: Number(r.depositor_count) || 0,
+      coin_amount: Number(r.coin_amount) || 0,
+      dollar_amount: Number(r.dollar_amount) || 0,
+      naira_amount: Number(r.naira_amount) || 0,
+    }));
+
+    // Same slice broken down by coin AND network, for chain-level detail.
+    const byNetworkRows = await base()
+      .select("UPPER(t.currency)", "currency")
+      .addSelect("COALESCE(UPPER(t.network), 'UNKNOWN')", "network")
+      .addSelect("COUNT(*)", "deposit_count")
+      .addSelect("COALESCE(SUM(t.coin_amount), 0)", "coin_amount")
+      .addSelect("COALESCE(SUM(t.dollar_amount), 0)", "dollar_amount")
+      .groupBy("UPPER(t.currency)")
+      .addGroupBy("COALESCE(UPPER(t.network), 'UNKNOWN')")
+      .orderBy("dollar_amount", "DESC")
+      .getRawMany();
+
+    // Biggest depositors — the first row is the top depositor for the range.
+    const topDepositorRows = await base()
+      .innerJoin("t.user", "u")
+      .select("u.id", "user_id")
+      .addSelect("u.first_name", "first_name")
+      .addSelect("u.last_name", "last_name")
+      .addSelect("u.email", "email")
+      .addSelect("COUNT(*)", "deposit_count")
+      .addSelect("COALESCE(SUM(t.dollar_amount), 0)", "dollar_amount")
+      .addSelect("COALESCE(SUM(t.amount), 0)", "naira_amount")
+      .groupBy("u.id")
+      .addGroupBy("u.first_name")
+      .addGroupBy("u.last_name")
+      .addGroupBy("u.email")
+      .orderBy("dollar_amount", "DESC")
+      .limit(20)
+      .getRawMany();
+
+    const topDepositors = topDepositorRows.map((r) => ({
+      user_id: r.user_id,
+      first_name: r.first_name,
+      last_name: r.last_name,
+      email: r.email,
+      deposit_count: Number(r.deposit_count) || 0,
+      dollar_amount: Number(r.dollar_amount) || 0,
+      naira_amount: Number(r.naira_amount) || 0,
+    }));
+
+    return {
+      date_from: start.toISOString(),
+      date_to: end.toISOString(),
+      by_currency: byCurrency,
+      by_network: byNetworkRows.map((r) => ({
+        currency: r.currency,
+        network: r.network,
+        deposit_count: Number(r.deposit_count) || 0,
+        coin_amount: Number(r.coin_amount) || 0,
+        dollar_amount: Number(r.dollar_amount) || 0,
+      })),
+      top_depositors: topDepositors,
+      top_depositor: topDepositors[0] ?? null,
+      total_deposits: byCurrency.reduce((s, r) => s + r.deposit_count, 0),
+      total_dollar_amount: byCurrency.reduce((s, r) => s + r.dollar_amount, 0),
+      total_naira_amount: byCurrency.reduce((s, r) => s + r.naira_amount, 0),
+    };
+  }
+
   /** Total volume time series (successful transactions). */
   async volumeSeries(granularity: VolumeGranularity) {
     const trunc =

@@ -17,6 +17,11 @@ export const CookieOptions = {
 export const DEPOSIT_FEE_USD = 1;
 export const DEPOSIT_FEE_EXEMPT_CURRENCIES = new Set(["usdt"]);
 
+// Withdrawal limits for verified (KYC-approved) accounts, in NGN.
+// Daily is a rolling calendar day in the app timezone (Africa/Lagos).
+export const WITHDRAWAL_MAX_PER_TRANSACTION = 1_000_000;
+export const WITHDRAWAL_MAX_PER_DAY = 5_000_000;
+
 export const MAILJETTemplates = {
   verify_email: 7451545,
 };
