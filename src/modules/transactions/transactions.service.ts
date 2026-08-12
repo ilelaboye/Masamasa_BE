@@ -3,7 +3,6 @@ import { Injectable } from "@nestjs/common";
 import { Repository, SelectQueryBuilder } from "typeorm";
 import { InjectRepository } from "@nestjs/typeorm";
 import {
-  TransactionEntityType,
   TransactionModeType,
   Transactions,
   TransactionStatusType,
@@ -20,45 +19,53 @@ export class TransactionService {
 
   async findAll(req: UserRequest) {
     const { limit, page, skip, date_from, date_to } = getRequestQuery(req);
-    let count = 0;
-    let transactions;
-    let queryRunner: SelectQueryBuilder<Transactions> =
-      this.transactionRepository
+
+    // One open-ended range rather than the three overlapping BETWEEN clauses
+    // this used to build. An absent bound is expressed by omitting it, not by
+    // pinning it to 1970/now, so Postgres can walk the index range directly.
+    const startDate = date_from ? new Date(date_from).toISOString() : null;
+    const endDate = date_to ? endOfDay(new Date(date_to)) : null;
+
+    const filtered = () => {
+      const qb: SelectQueryBuilder<Transactions> = this.transactionRepository
         .createQueryBuilder("transactions")
-        .where("user_id = :user_id", { user_id: req.user.id })
-        // .andWhere("status = :status", { status: TransactionStatusType.success })
-        .orderBy("transactions.created_at", "DESC");
+        .where("transactions.user_id = :user_id", { user_id: req.user.id });
 
-    if (date_from) {
-      queryRunner = queryRunner.andWhere(
-        "transactions.created_at BETWEEN :startDate AND :endDate",
-        {
-          startDate: new Date(date_from).toISOString(),
-          endDate: new Date().toISOString(),
-        },
-      );
-    }
-    if (date_to) {
-      queryRunner = queryRunner.andWhere(
-        "transactions.created_at BETWEEN :startDate AND :endDate",
-        {
-          startDate: new Date(1970).toISOString(),
-          endDate: endOfDay(new Date(date_to)),
-        },
-      );
-    }
-    if (date_from && date_to) {
-      queryRunner = queryRunner.andWhere(
-        "transactions.created_at BETWEEN :startDate AND :endDate",
-        {
-          startDate: new Date(date_from).toISOString(),
-          endDate: endOfDay(new Date(date_to)),
-        },
-      );
+      if (startDate) {
+        qb.andWhere("transactions.created_at >= :startDate", { startDate });
+      }
+      if (endDate) {
+        qb.andWhere("transactions.created_at <= :endDate", { endDate });
+      }
+      return qb;
+    };
+
+    // Counted without the join or the json metadata column, so it is served
+    // from the (user_id, created_at) index alone.
+    const count = await filtered().getCount();
+
+    if (count === 0) {
+      return { transactions: [], metadata: paginate(0, page, limit) };
     }
 
-    count = await queryRunner.getCount();
-    transactions = await queryRunner.skip(skip).take(limit).getMany();
+    const transactions = await filtered()
+      // exchange_rate is ManyToOne, so the join cannot multiply rows. That
+      // lets the page be cut with raw LIMIT/OFFSET instead of TypeORM's
+      // skip/take, which would add a DISTINCT-id subquery and a second round
+      // trip once a join is present.
+      .leftJoin("transactions.exchange_rate", "exchange_rate")
+      .addSelect([
+        "exchange_rate.id",
+        "exchange_rate.rate",
+        "exchange_rate.currency",
+      ])
+      .orderBy("transactions.created_at", "DESC")
+      // Tie-breaker: rows sharing a created_at would otherwise be ordered
+      // arbitrarily, letting a row repeat on one page and vanish from the next.
+      .addOrderBy("transactions.id", "DESC")
+      .limit(limit)
+      .offset(skip)
+      .getMany();
 
     const metadata = paginate(count, page, limit);
     return { transactions, metadata };

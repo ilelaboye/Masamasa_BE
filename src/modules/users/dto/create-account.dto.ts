@@ -84,6 +84,14 @@ export class LoginStaffDto {
   notification_token?: string;
 }
 
+export class VerifyMfaDto {
+  @ApiProperty({ example: "ilelaboyealekan@gmail.com" })
+  email: string;
+
+  @ApiProperty({ example: "123456" })
+  token: string;
+}
+
 export class ForgotPasswordDto {
   @ApiProperty({ example: "ilelaboyealekan@gmail.com" })
   email: string;

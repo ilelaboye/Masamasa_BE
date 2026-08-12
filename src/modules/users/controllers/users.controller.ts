@@ -19,7 +19,9 @@ import type { Response } from "express";
 import {
   ChangePinDto,
   ChangeUserPasswordDto,
+  ConfirmDeleteAccountDto,
   CreatePinDto,
+  DeleteAccountDto,
   EditUserDto,
   TransferDto,
   UpdateAccountDto,
@@ -173,7 +175,7 @@ export class UsersController {
   @Post("request-account-deletion")
   @UsePipes(new JoiValidationPipe(require("../validations").DeleteAccountValidation))
   async requestAccountDeletion(
-    @Body() body: { password: string; reason?: string },
+    @Body() body: DeleteAccountDto,
     @Req() req: UserRequest,
   ) {
     return await this.usersService.requestAccountDeletion(
@@ -186,7 +188,7 @@ export class UsersController {
   @Post("confirm-account-deletion")
   @UsePipes(new JoiValidationPipe(require("../validations").ConfirmDeleteAccountValidation))
   async confirmAccountDeletion(
-    @Body() body: { confirmation: number | string },
+    @Body() body: ConfirmDeleteAccountDto,
     @Req() req: UserRequest,
   ) {
     return await this.usersService.confirmAccountDeletion(

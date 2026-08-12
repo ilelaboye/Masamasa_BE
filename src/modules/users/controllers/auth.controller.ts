@@ -20,6 +20,7 @@ import {
   ForgotPasswordDto,
   LoginStaffDto,
   ResetPasswordDto,
+  VerifyMfaDto,
   VerifyTokenDto,
 } from "../dto";
 import { AuthService } from "../services/auth.service";
@@ -74,7 +75,7 @@ export class AuthController {
   @UsePipes(new JoiValidationPipe(VerifyMfaValidation))
   @Post("verify-mfa")
   async verifyMfa(
-    @Body() body: { email: string; token: string },
+    @Body() body: VerifyMfaDto,
     @Res({ passthrough: true }) res: Response,
   ) {
     const { token, user } = await this.authService.verifyMfaLogin(body.email, body.token);
