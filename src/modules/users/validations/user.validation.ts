@@ -5,7 +5,9 @@ export const CreateAccountValidation = Joi.object().keys({
   last_name: Joi.string().required().label("Last name"),
   email: Joi.string().email().required().label("Email"),
   google_id: Joi.string().optional().allow(null, ""),
-  phone: Joi.string().max(15).optional().label("Phone").allow(null, ""),
+  // Compulsory at registration. `.allow(null, "")` is deliberately absent —
+  // with it, required() would still let an empty string through.
+  phone: Joi.string().max(15).required().label("Phone"),
   country: Joi.string().required().label("Country"),
   device_id: Joi.string().optional().allow(null, ""),
   notification_token: Joi.string().optional().allow(null, ""),

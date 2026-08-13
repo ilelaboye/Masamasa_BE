@@ -106,15 +106,6 @@ export class BankVerificationService {
         throw new BadRequestException(
           "BVN has already been verified for another user",
         );
-        // const detailsVerification = this.verifyUserDetailsWithBvn(
-        //   existingVerification.metadata,
-        //   bvnUserDto,
-        // );
-        // delete existingVerification.hashed_value;
-
-        // if (!detailsVerification)
-        //   return { success: false, data: existingVerification };
-        // return { success: true, data: existingVerification };
       }
     }
 
