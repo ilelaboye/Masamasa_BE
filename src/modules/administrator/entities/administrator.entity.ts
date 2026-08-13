@@ -10,9 +10,8 @@ import {
 import { AdminLogs } from "./admin-logs.entity";
 
 export enum AdministratorRoles {
-  admin = "admin",
-  system_admin = "system_admin",
   super_admin = "super_admin",
+  marketer = "marketer",
 }
 
 export enum AdminStatus {
@@ -43,6 +42,13 @@ export class Administrator {
     default: AdminStatus.active,
   })
   status: AdminStatus;
+
+  @Column({
+    type: "enum",
+    enum: AdministratorRoles,
+    default: AdministratorRoles.super_admin,
+  })
+  role: AdministratorRoles;
 
   @Column({ nullable: true })
   address: string;
