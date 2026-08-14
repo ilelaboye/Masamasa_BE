@@ -11,6 +11,6 @@ export const ALLOW_ROLES = "allow_roles";
 export const AllowRoles = (...roles: AdministratorRoles[]) =>
   SetMetadata(ALLOW_ROLES, roles);
 
-//For self-service routes only (e.g. profile, change-password, logout) where any admin should be able to access their own data @AllowAllAdmins()
+//For self-service routes only (e.g. profile, change-password, logout)
 export const ALLOW_ALL_ADMINS = "allow_all_admins";
 export const AllowAllAdmins = () => SetMetadata(ALLOW_ALL_ADMINS, true);

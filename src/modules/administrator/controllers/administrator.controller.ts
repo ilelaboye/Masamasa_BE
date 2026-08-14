@@ -124,7 +124,11 @@ export class AdministratorController {
     required: false,
     enum: ["active", "suspend", "pending"],
   })
-  @ApiQuery({ name: "role", required: false, enum: ["super_admin", "marketer"] })
+  @ApiQuery({
+    name: "role",
+    required: false,
+    enum: ["super_admin", "marketer"],
+  })
   @ApiQuery({ name: "page", required: false, type: Number })
   @ApiQuery({ name: "limit", required: false, type: Number })
   @Get("staff")
@@ -151,10 +155,7 @@ export class AdministratorController {
 
   @ApiOperation({ summary: "Resend a staff invite link (super_admin only)" })
   @Post("staff/:id/resend-invite")
-  async resendStaffInvite(
-    @Param("id") id: string,
-    @Req() req: AdminRequest,
-  ) {
+  async resendStaffInvite(@Param("id") id: string, @Req() req: AdminRequest) {
     return this.administratorService.resendStaffInvite(id, req);
   }
 
