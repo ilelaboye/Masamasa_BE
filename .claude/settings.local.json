@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:docs.quidax.io)",
+      "WebFetch(domain:openapi.quidax.io)",
+      "WebFetch(domain:docs.quidax.com)",
+      "WebFetch(domain:raw.githubusercontent.com)"
+    ]
+  }
+}

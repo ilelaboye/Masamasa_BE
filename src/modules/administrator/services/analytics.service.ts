@@ -99,6 +99,29 @@ export class AnalyticsService {
       .where("t.created_at >= :start", { start: startOfToday })
       .getRawOne();
 
+    // What the platform currently owes its users, summed across every wallet.
+    // Deliberately mirrors the per-user formula the app itself uses
+    // (TransactionService.getAccountBalance) — counting debits that are still
+    // processing, since a withdrawal in flight has already left the user's
+    // spendable balance — so this total reconciles with the balances users
+    // see in the app.
+    const wallets = await this.transactionsRepository
+      .createQueryBuilder("t")
+      .select(
+        `
+      SUM(CASE WHEN t.mode = :credit AND t.status = :success THEN t.amount ELSE 0 END) -
+      SUM(CASE WHEN t.mode = :debit AND t.status IN (:success, :processing) THEN t.amount ELSE 0 END)
+    `,
+        "balance",
+      )
+      .setParameters({
+        credit: TransactionModeType.credit,
+        debit: TransactionModeType.debit,
+        success: TransactionStatusType.success,
+        processing: TransactionStatusType.processing,
+      })
+      .getRawOne();
+
     const totalUsers = await this.userRepository.count();
     // "Pending KYC" = everyone who has not completed KYC yet
     // (total users minus KYC-verified), not just status = pending.
@@ -116,6 +139,7 @@ export class AnalyticsService {
       active_users_today: activeToday,
       transacting_users_today: Number(transactingToday.count) || 0,
       total_users: totalUsers,
+      users_balance: Number(wallets.balance) || 0,
       pending_kyc: pendingKyc,
     };
   }

@@ -1,0 +1,16 @@
+# pnpm 10+ blocks dependency lifecycle scripts by default (supply-chain guard).
+# true  = native addon we actually want compiled / prebuild-downloaded
+# false = postinstall banner or optional speedup, deliberately skipped
+allowBuilds:
+  bcrypt: true
+  bigint-buffer: true
+  keccak: true
+  secp256k1: true
+  '@compodoc/compodoc': false
+  '@firebase/util': false
+  '@nestjs/core': false
+  bufferutil: false
+  core-js: false
+  msgpackr-extract: false
+  protobufjs: false
+  utf-8-validate: false
