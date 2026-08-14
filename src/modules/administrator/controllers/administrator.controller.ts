@@ -292,7 +292,16 @@ export class AdministratorController {
     return this.administratorService.getDashboardKPI(req);
   }
 
-  @ApiOperation({ summary: "Get users with pending kyc" })
+  @ApiOperation({
+    summary: "Get users by KYC stage (defaults to those who have not started)",
+  })
+  @ApiQuery({
+    name: "status",
+    required: false,
+    enum: ["none", "pending", "success", "failed"],
+  })
+  @ApiQuery({ name: "page", required: false, type: Number })
+  @ApiQuery({ name: "limit", required: false, type: Number })
   @Get("get-pending-kyc")
   async pendingKYC(@Req() req: AdminRequest) {
     return await this.administratorService.getPendingKYC(req);
