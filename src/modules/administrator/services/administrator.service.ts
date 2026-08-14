@@ -273,11 +273,31 @@ export class AdministratorService {
     return parseFloat(result.balance) || 0;
   }
 
+  /**
+   * Users at a given KYC stage. Defaults to `none` — people who have not
+   * started verification — since that is what the admin KYC page lists.
+   *
+   * Pass ?status=pending for the review queue (documents awaiting a decision),
+   * or any other KycStatus value. `none` is stored as NULL on older rows, so
+   * it is matched with IS NULL as well.
+   */
   async getPendingKYC(req: AdminRequest) {
-    const { limit, page, skip } = getRequestQuery(req);
-    const queryRunner = this.userRepository
-      .createQueryBuilder("users")
-      .where("users.kyc_status = :status", { status: KycStatus.pending });
+    const { limit, page, skip, status } = getRequestQuery(req);
+
+    const kycStatus = Object.values(KycStatus).includes(status as KycStatus)
+      ? (status as KycStatus)
+      : KycStatus.none;
+
+    const queryRunner = this.userRepository.createQueryBuilder("users");
+
+    if (kycStatus === KycStatus.none) {
+      queryRunner.where(
+        "(users.kyc_status = :status OR users.kyc_status IS NULL)",
+        { status: KycStatus.none },
+      );
+    } else {
+      queryRunner.where("users.kyc_status = :status", { status: kycStatus });
+    }
 
     const count = await queryRunner.getCount();
     const kyc = await queryRunner.skip(skip).take(limit).getMany();
