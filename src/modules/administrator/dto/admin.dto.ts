@@ -44,3 +44,33 @@ export class ChangeAdminPasswordDto {
   @ApiProperty({ example: "NewPassword@456" })
   new_password: string;
 }
+
+export class CreateStaffDto {
+  @ApiProperty({ example: "alice" })
+  first_name: string;
+
+  @ApiProperty({ example: "joe" })
+  last_name: string;
+
+  @ApiProperty({ example: "alice@masamasa.ng" })
+  email: string;
+
+  @ApiProperty({ example: "marketer", enum: ["marketer"] })
+  role: string;
+}
+
+export class UpdateStaffStatusDto {
+  @ApiProperty({ example: "suspend", enum: ["active", "suspend"] })
+  status: string;
+}
+
+export class AcceptStaffInviteDto {
+  @ApiProperty({ example: "a3f1...9c2e" })
+  token: string;
+
+  @ApiProperty({ example: "Password@123" })
+  password: string;
+
+  @ApiProperty({ example: "08012345678" })
+  phone: string;
+}

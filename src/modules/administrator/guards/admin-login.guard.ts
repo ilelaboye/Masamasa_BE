@@ -34,6 +34,8 @@ export class AdminLoginGuard implements CanActivate {
         "created_at",
         "updated_at",
         "password",
+        "status",
+        "role",
       ],
     });
 
@@ -43,6 +45,10 @@ export class AdminLoginGuard implements CanActivate {
       );
     if (admin.status == AdminStatus.suspend)
       throw new ForbiddenException("This account has been suspended.");
+    if (admin.status == AdminStatus.pending)
+      throw new ForbiddenException(
+        "This account has not been activated yet. Please use the invite link sent to your email.",
+      );
     if (admin.deleted_at)
       throw new ForbiddenException("This account is no longer active.");
 

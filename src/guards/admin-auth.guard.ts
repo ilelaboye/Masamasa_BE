@@ -1,5 +1,5 @@
 import { appConfig } from "@/config";
-import { _ADMIN_AUTH_COOKIE_NAME_ } from "@/constants";
+import { _ADMIN_AUTH_COOKIE_NAME_, ClearCookieOptions } from "@/constants";
 import { extractAdminDataFromCookie } from "@/core/utils";
 import { AdminStatus } from "@/modules/administrator/entities/administrator.entity";
 import { AdministratorService } from "@/modules/administrator/services/administrator.service";
@@ -31,12 +31,18 @@ export class AdminAuthGuard implements CanActivate {
 
       const details = await this.administratorService.getWithId(`${payload.id}`);
       if (!details) throw new UnauthorizedException("This account is not found!");
-      if (details.status === AdminStatus.suspend)
-        throw new ForbiddenException("This account has been suspended.");
+      // Anything other than active loses the session — covers suspended
+      // accounts and any status added later, rather than only `suspend`.
+      if (details.status !== AdminStatus.active)
+        throw new ForbiddenException(
+          details.status === AdminStatus.pending
+            ? "This account has not been activated yet."
+            : "This account has been suspended.",
+        );
 
       req["admin"] = details;
     } catch (e) {
-      res.clearCookie(_ADMIN_AUTH_COOKIE_NAME_);
+      res.clearCookie(_ADMIN_AUTH_COOKIE_NAME_, ClearCookieOptions);
       if (e instanceof ForbiddenException) throw e;
       throw new UnauthorizedException(
         "Your session has expired, please login to continue",

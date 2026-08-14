@@ -17,6 +17,7 @@ export enum AdministratorRoles {
 export enum AdminStatus {
   active = "active",
   suspend = "suspend",
+  pending = "pending",
 }
 
 @Entity({ name: "administrators" })
@@ -53,8 +54,17 @@ export class Administrator {
   @Column({ nullable: true })
   address: string;
 
-  @Column({ select: false })
-  password?: string;
+  // Null until an invited staff member completes registration. The explicit
+  // type is required — TypeORM cannot infer a column type from a union.
+  @Column({ type: "varchar", select: false, nullable: true })
+  password?: string | null;
+
+  @Column({ type: "varchar", select: false, nullable: true })
+  invite_token?: string | null;
+
+  // the 48-hour expiry is measured from here, and resending an invite resets it.
+  @Column({ type: "timestamp", nullable: true })
+  invite_sent_at?: Date | null;
 
   @OneToMany(() => AdminLogs, (logs) => logs.admin)
   logs: AdminLogs[];

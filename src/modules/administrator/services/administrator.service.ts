@@ -1,7 +1,12 @@
 import { CacheService } from "@/modules/global/cache-container/cache-container.service";
 import { MixpanelService } from "@/modules/global/mixpanel/mixpanel.service";
 import { BadRequestException, Injectable } from "@nestjs/common";
-import { Administrator, AdminStatus } from "../entities/administrator.entity";
+import { appConfig } from "@/config";
+import {
+  Administrator,
+  AdministratorRoles,
+  AdminStatus,
+} from "../entities/administrator.entity";
 import { Brackets, Repository, SelectQueryBuilder } from "typeorm";
 import { InjectRepository } from "@nestjs/typeorm";
 import { AdminLogEntities, AdminLogs } from "../entities/admin-logs.entity";
@@ -9,8 +14,10 @@ import { AdminRequest } from "@/definitions";
 import {
   ChangeAdminPasswordDto,
   CreateExchangeRateDto,
+  CreateStaffDto,
   DeclineKycDto,
   UpdateAdminProfileDto,
+  UpdateStaffStatusDto,
 } from "../dto/admin.dto";
 import { ExchangeRateService } from "@/modules/exchange-rates/exchange-rates.service";
 import { KycStatus, Status, User } from "@/modules/users/entities/user.entity";
@@ -18,10 +25,15 @@ import {
   endOfDay,
   getRequestQuery,
   hashResource,
+  sendStaffInviteEmail,
   sendZohoMail,
   verifyHash,
 } from "@/core/utils";
-import { capitalizeString, paginate } from "@/core/helpers";
+import {
+  capitalizeString,
+  generateInviteToken,
+  paginate,
+} from "@/core/helpers";
 import {
   TransactionModeType,
   Transactions,
@@ -101,6 +113,14 @@ export class AdministratorService {
 
     if (!admin) {
       throw new BadRequestException("Admin not found, please login again");
+    }
+
+    // Only reachable by an account that never accepted its invite, which the
+    // guards already block from logging in — defensive, not expected.
+    if (!admin.password) {
+      throw new BadRequestException(
+        "This account has no password set. Complete your invite first.",
+      );
     }
 
     const verified = await verifyHash(
@@ -569,5 +589,197 @@ export class AdministratorService {
 
     const metadata = paginate(count, page, limit);
     return { users: usersWithBalance, metadata };
+  }
+
+  /**
+   * Creates a staff account in `pending` and emails an invite link.
+   *
+   * The account has no password until the invite is accepted, so it cannot be
+   * logged into in the meantime — both admin guards reject a non-active status.
+   */
+  async createStaff(createStaffDto: CreateStaffDto, req: AdminRequest) {
+    const email = createStaffDto.email.trim().toLowerCase();
+
+    // withDeleted, otherwise a soft-deleted admin collides with the unique
+    // index on email and surfaces as a 500 instead of this message.
+    const existing = await this.adminRepository.findOne({
+      where: { email },
+      withDeleted: true,
+    });
+    if (existing)
+      throw new BadRequestException(
+        "An admin with this email address already exists",
+      );
+
+    const { raw, hash } = generateInviteToken();
+
+    const staff = await this.adminRepository.save(
+      this.adminRepository.create({
+        first_name: createStaffDto.first_name.trim(),
+        last_name: createStaffDto.last_name.trim(),
+        email,
+        role: createStaffDto.role as AdministratorRoles,
+        status: AdminStatus.pending,
+        password: null,
+        invite_token: hash,
+        invite_sent_at: new Date(),
+      }),
+    );
+
+    await this.sendInvite(staff, raw, false);
+
+    this.createAdminLog(
+      null,
+      req.admin,
+      AdminLogEntities.STAFF,
+      `${capitalizeString(req.admin.first_name)} invited ${email} as ${createStaffDto.role}`,
+    );
+
+    return {
+      staff: this.serializeStaff(staff),
+      message: "Invite sent successfully",
+    };
+  }
+
+  /** Paginated staff list. Supports ?search=, ?status= and ?role=. */
+  async getStaff(req: AdminRequest) {
+    const { limit, page, search, skip } = getRequestQuery(req);
+
+    const query = this.adminRepository.createQueryBuilder("admin");
+
+    if (search) {
+      query.andWhere(
+        new Brackets((qb) => {
+          qb.where("admin.first_name ILIKE :search", { search: `%${search}%` })
+            .orWhere("admin.last_name ILIKE :search", { search: `%${search}%` })
+            .orWhere("admin.email ILIKE :search", { search: `%${search}%` })
+            .orWhere(
+              "CONCAT(admin.first_name, ' ', admin.last_name) ILIKE :search",
+              { search: `%${search}%` },
+            );
+        }),
+      );
+    }
+
+    const status = req.query.status as string;
+    if (status) query.andWhere("admin.status = :status", { status });
+
+    const role = req.query.role as string;
+    if (role) query.andWhere("admin.role = :role", { role });
+
+    query.orderBy("admin.created_at", "DESC");
+
+    const count = await query.getCount();
+    const staff = await query.skip(skip).take(limit).getMany();
+
+    return {
+      staff: staff.map((member) => this.serializeStaff(member)),
+      metadata: paginate(count, page, limit),
+    };
+  }
+
+  /** Enables or disables a staff account. */
+  async updateStaffStatus(
+    id: string,
+    updateStaffStatusDto: UpdateStaffStatusDto,
+    req: AdminRequest,
+  ) {
+    const staff = await this.findStaff(id);
+    const status = updateStaffStatusDto.status as AdminStatus;
+
+    if (staff.id === req.admin.id)
+      throw new BadRequestException("You cannot change your own status");
+
+    // An invited account has no password yet, so enabling it would produce an
+    // account that can never be logged into. It has to accept the invite.
+    if (staff.status === AdminStatus.pending)
+      throw new BadRequestException(
+        "This staff member has not accepted their invite yet. Resend the invite instead.",
+      );
+
+    await this.adminRepository.update({ id: staff.id }, { status });
+
+    // AdminAuthGuard reads the admin through this cache key, so a stale entry
+    // would keep a disabled account working until the TTL expired.
+    this.cacheService.del(`admin:${staff.id}`);
+
+    this.createAdminLog(
+      null,
+      req.admin,
+      AdminLogEntities.STAFF,
+      `${capitalizeString(req.admin.first_name)} set ${staff.email} to ${status}`,
+    );
+
+    return {
+      staff: this.serializeStaff({ ...staff, status }),
+      message:
+        status === AdminStatus.active
+          ? "Staff account enabled"
+          : "Staff account disabled",
+    };
+  }
+
+  /** Issues a fresh invite token and re-sends the link, resetting the clock. */
+  async resendStaffInvite(id: string, req: AdminRequest) {
+    const staff = await this.findStaff(id);
+
+    if (staff.status !== AdminStatus.pending)
+      throw new BadRequestException(
+        "This staff member has already accepted their invite",
+      );
+
+    const { raw, hash } = generateInviteToken();
+    await this.adminRepository.update(
+      { id: staff.id },
+      { invite_token: hash, invite_sent_at: new Date() },
+    );
+
+    await this.sendInvite(staff, raw, true);
+
+    this.createAdminLog(
+      null,
+      req.admin,
+      AdminLogEntities.STAFF,
+      `${capitalizeString(req.admin.first_name)} resent the invite for ${staff.email}`,
+    );
+
+    return { message: "Invite resent successfully" };
+  }
+
+  private async findStaff(id: string) {
+    const staff = await this.adminRepository.findOne({
+      where: { id: parseInt(id, 10) },
+    });
+    if (!staff) throw new BadRequestException("This staff member was not found");
+    return staff;
+  }
+
+  /**
+   * Sends the invite link. Awaited and allowed to throw — unlike the
+   * fire-and-forget alerts, a staff member who never receives the link has no
+   * way to activate their account.
+   */
+  private async sendInvite(
+    staff: Administrator,
+    rawToken: string,
+    isResend: boolean,
+  ) {
+    // Must match the admin panel's public route: /staff/invite/:token
+    const link = `${appConfig.ADMIN_FRONTEND}/staff/invite/${rawToken}`;
+    try {
+      await sendStaffInviteEmail(staff, link, isResend);
+    } catch {
+      throw new BadRequestException(
+        "The staff account was saved but the invite email could not be sent. Use resend invite to try again.",
+      );
+    }
+  }
+
+  /** Never leaks password or invite_token, whatever the caller selected. */
+  private serializeStaff(staff: Administrator) {
+    /* eslint-disable @typescript-eslint/no-unused-vars */
+    const { password, invite_token, ...safe } = staff;
+    /* eslint-enable @typescript-eslint/no-unused-vars */
+    return safe;
   }
 }

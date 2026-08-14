@@ -13,6 +13,21 @@ export const CookieOptions = {
   maxAge: _TTL_,
 } satisfies CookieOptionsType;
 
+/**
+ * Options for clearing an auth cookie.
+ *
+ * A browser only removes a cookie when the deleting Set-Cookie carries the
+ * same attributes it was set with, excluding expires/maxAge. Calling
+ * res.clearCookie(name) bare omits SameSite=None and Secure, and since the
+ * admin panel and the API are different origins that write is cross-site —
+ * so the browser drops it and the session survives.
+ */
+export const ClearCookieOptions = {
+  httpOnly: true,
+  secure: true,
+  sameSite: "none",
+} satisfies CookieOptionsType;
+
 // Flat fee (in USD) charged on every crypto deposit except the exempt coins.
 export const DEPOSIT_FEE_USD = 1;
 export const DEPOSIT_FEE_EXEMPT_CURRENCIES = new Set(["usdt"]);

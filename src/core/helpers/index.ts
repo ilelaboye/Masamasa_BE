@@ -8,4 +8,5 @@ export * from "./moneyConverter";
 export * from "./paginate";
 export * from "./sanitizeString";
 export * from "./sleep";
+export * from "./staffInvite";
 export * from "./withRetry";

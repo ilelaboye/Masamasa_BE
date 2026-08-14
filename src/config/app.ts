@@ -13,6 +13,9 @@ export const appConfig = {
   APP_FRONTEND: process.env.APP_FRONTEND ? process.env.APP_FRONTEND : "",
   APP_URL: process.env.APP_URL ? process.env.APP_URL : "",
   WEB_FRONTEND: process.env.WEB_FRONTEND,
+  // Admin panel origin — where staff invite links point. Falls back to the
+  // main frontend when the admin panel is served from the same origin.
+  ADMIN_FRONTEND: process.env.ADMIN_FRONTEND || process.env.APP_FRONTEND || "",
   PORT: process.env.PORT || 4000,
   DEBUG: process.env.DEBUG,
   ENV: process.env.ENV || "dev",

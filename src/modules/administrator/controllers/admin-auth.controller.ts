@@ -59,4 +59,5 @@ export class AdminAuthController {
 
     return { data: { ...user } };
   }
+
 }

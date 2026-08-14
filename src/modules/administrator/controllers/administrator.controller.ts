@@ -21,7 +21,11 @@ import {
 } from "@nestjs/swagger";
 import { AdministratorService } from "../services/administrator.service";
 import { AnalyticsService } from "../services/analytics.service";
-import { _ADMIN_AUTH_COOKIE_NAME_, _AUTH_COOKIE_NAME_ } from "@/constants";
+import {
+  _ADMIN_AUTH_COOKIE_NAME_,
+  _AUTH_COOKIE_NAME_,
+  ClearCookieOptions,
+} from "@/constants";
 import { AdminAuthGuard } from "@/guards/admin-auth.guard";
 import { AdminRequest, SystemCache } from "@/definitions";
 import { CacheService } from "@/modules/global/cache-container/cache-container.service";
@@ -30,8 +34,10 @@ import {
   BroadcastNotificationDto,
   ChangeAdminPasswordDto,
   CreateExchangeRateDto,
+  CreateStaffDto,
   DeclineKycDto,
   UpdateAdminProfileDto,
+  UpdateStaffStatusDto,
 } from "../dto/admin.dto";
 import { NotificationsService } from "@/modules/notifications/notifications.service";
 import { BroadcastNotificationValidation } from "../validations/admin.validation";
@@ -39,8 +45,10 @@ import { PublicService } from "@/modules/global/public/public.service";
 import { JoiValidationPipe } from "@/pipes/joi.validation.pipe";
 import {
   ChangeAdminPasswordValidation,
+  CreateStaffValidation,
   CreateUpdateExchangeRateValidation,
   UpdateAdminProfileValidation,
+  UpdateStaffStatusValidation,
   UpdateUserStatusValidation,
 } from "../validations/admin.validation";
 import { Status } from "@/modules/users/entities/user.entity";
@@ -48,10 +56,13 @@ import { Web3Service } from "@/modules/web3/web3.service";
 import { WithdrawTokenDto } from "@/modules/web3/web3.dto";
 import { WithdrawTokenValidation } from "@/modules/web3/web3.validation";
 import { QuidaxService } from "@/modules/quidax/quidax.service";
+import { AdminRoleGuard } from "@/guards/admin-role.guard";
+import { AllowAllAdmins, AllowRoles } from "@/guards/decorator/roles.decorator";
+import { AdministratorRoles } from "../entities/administrator.entity";
 
 @ApiTags("Admin")
 @ApiCookieAuth(_ADMIN_AUTH_COOKIE_NAME_)
-@UseGuards(AdminAuthGuard)
+@UseGuards(AdminAuthGuard, AdminRoleGuard)
 @Controller("admin")
 export class AdministratorController {
   constructor(
@@ -65,6 +76,7 @@ export class AdministratorController {
   ) {}
 
   @ApiOperation({ summary: "Get the currently logged-in admin's profile" })
+  @AllowAllAdmins()
   @Get("profile")
   async profile(@Req() req: AdminRequest) {
     return this.administratorService.getProfile(req);
@@ -72,6 +84,7 @@ export class AdministratorController {
 
   @ApiOperation({ summary: "Update the currently logged-in admin's profile" })
   @UsePipes(new JoiValidationPipe(UpdateAdminProfileValidation))
+  @AllowAllAdmins()
   @Patch("profile")
   async updateProfile(
     @Body() updateAdminProfileDto: UpdateAdminProfileDto,
@@ -82,6 +95,7 @@ export class AdministratorController {
 
   @ApiOperation({ summary: "Change the currently logged-in admin's password" })
   @UsePipes(new JoiValidationPipe(ChangeAdminPasswordValidation))
+  @AllowAllAdmins()
   @Post("change-password")
   async changePassword(
     @Body() changeAdminPasswordDto: ChangeAdminPasswordDto,
@@ -91,6 +105,57 @@ export class AdministratorController {
       changeAdminPasswordDto,
       req,
     );
+  }
+
+  @ApiOperation({ summary: "Invite a new staff member (super_admin only)" })
+  @UsePipes(new JoiValidationPipe(CreateStaffValidation))
+  @Post("staff/invite")
+  async createStaff(
+    @Body() createStaffDto: CreateStaffDto,
+    @Req() req: AdminRequest,
+  ) {
+    return this.administratorService.createStaff(createStaffDto, req);
+  }
+
+  @ApiOperation({ summary: "List staff accounts (super_admin only)" })
+  @ApiQuery({ name: "search", required: false, type: String })
+  @ApiQuery({
+    name: "status",
+    required: false,
+    enum: ["active", "suspend", "pending"],
+  })
+  @ApiQuery({ name: "role", required: false, enum: ["super_admin", "marketer"] })
+  @ApiQuery({ name: "page", required: false, type: Number })
+  @ApiQuery({ name: "limit", required: false, type: Number })
+  @Get("staff")
+  async getStaff(@Req() req: AdminRequest) {
+    return this.administratorService.getStaff(req);
+  }
+
+  @ApiOperation({
+    summary: "Enable or disable a staff account (super_admin only)",
+  })
+  @UsePipes(new JoiValidationPipe(UpdateStaffStatusValidation))
+  @Patch("staff/:id/status")
+  async updateStaffStatus(
+    @Param("id") id: string,
+    @Body() updateStaffStatusDto: UpdateStaffStatusDto,
+    @Req() req: AdminRequest,
+  ) {
+    return this.administratorService.updateStaffStatus(
+      id,
+      updateStaffStatusDto,
+      req,
+    );
+  }
+
+  @ApiOperation({ summary: "Resend a staff invite link (super_admin only)" })
+  @Post("staff/:id/resend-invite")
+  async resendStaffInvite(
+    @Param("id") id: string,
+    @Req() req: AdminRequest,
+  ) {
+    return this.administratorService.resendStaffInvite(id, req);
   }
 
   @Get("users")
@@ -125,6 +190,7 @@ export class AdministratorController {
   }
 
   @ApiOperation({ summary: "Analytics: overview headline numbers" })
+  @AllowRoles(AdministratorRoles.marketer)
   @Get("analytics/overview")
   async analyticsOverview() {
     return await this.analyticsService.overview();
@@ -161,6 +227,7 @@ export class AdministratorController {
     required: false,
     enum: ["daily", "weekly", "monthly", "yearly"],
   })
+  @AllowRoles(AdministratorRoles.marketer)
   @Get("analytics/volume")
   async analyticsVolume(@Query("granularity") granularity?: string) {
     const valid = ["daily", "weekly", "monthly", "yearly"] as const;
@@ -173,6 +240,7 @@ export class AdministratorController {
   @ApiOperation({ summary: "Analytics: daily inflow vs outflow" })
   @ApiQuery({ name: "date_from", required: false, type: String })
   @ApiQuery({ name: "date_to", required: false, type: String })
+  @AllowRoles(AdministratorRoles.marketer)
   @Get("analytics/cash-flow")
   async analyticsCashFlow(
     @Query("date_from") dateFrom?: string,
@@ -184,6 +252,7 @@ export class AdministratorController {
   @ApiOperation({ summary: "Analytics: crypto deposits by coin and depositor" })
   @ApiQuery({ name: "date_from", required: false, type: String })
   @ApiQuery({ name: "date_to", required: false, type: String })
+  @AllowRoles(AdministratorRoles.marketer)
   @Get("analytics/crypto-deposits")
   async analyticsCryptoDeposits(
     @Query("date_from") dateFrom?: string,
@@ -194,6 +263,7 @@ export class AdministratorController {
 
   @ApiOperation({ summary: "Analytics: daily active users and signups" })
   @ApiQuery({ name: "days", required: false, type: Number })
+  @AllowRoles(AdministratorRoles.marketer)
   @Get("analytics/daily-users")
   async analyticsDailyUsers(@Query("days") days?: string) {
     const d = Math.min(365, Math.max(7, parseInt(days ?? "30", 10) || 30));
@@ -201,18 +271,21 @@ export class AdministratorController {
   }
 
   @ApiOperation({ summary: "Analytics: registration → KYC funnel" })
+  @AllowRoles(AdministratorRoles.marketer)
   @Get("analytics/kyc-funnel")
   async analyticsKycFunnel() {
     return await this.analyticsService.kycFunnel();
   }
 
   @ApiOperation({ summary: "Analytics: user & volume locations" })
+  @AllowRoles(AdministratorRoles.marketer)
   @Get("analytics/locations")
   async analyticsLocations() {
     return await this.analyticsService.userLocations();
   }
 
   @ApiOperation({ summary: "Get dashboard KPI" })
+  @AllowRoles(AdministratorRoles.marketer)
   @Get("dashboard-kpi")
   async getDashboardKPI(@Req() req: AdminRequest) {
     return this.administratorService.getDashboardKPI(req);
@@ -343,6 +416,7 @@ export class AdministratorController {
     return await this.web3Service.getWithdrawHistory();
   }
 
+  @AllowAllAdmins()
   @Delete("logout")
   async logout(@Req() req: AdminRequest, @Res() res: Response) {
     //Clear cache
@@ -350,7 +424,11 @@ export class AdministratorController {
       this.cacheService.del(`${SystemCache[key]}_${req.admin.id}`);
     });
 
-    res.clearCookie(_ADMIN_AUTH_COOKIE_NAME_);
+    // AdminAuthGuard reads the admin through this key on every request, so it
+    // has to go too — the SystemCache loop above uses a different key shape.
+    this.cacheService.del(`admin:${req.admin.id}`);
+
+    res.clearCookie(_ADMIN_AUTH_COOKIE_NAME_, ClearCookieOptions);
     res.json({
       success: true,
       message: "You have been logged out of this session",

@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { AdministratorController } from "./controllers/administrator.controller";
 import { AdminAuthController } from "./controllers/admin-auth.controller";
+import { StaffInviteController } from "./controllers/staff-invite.controller";
 import { AdministratorService } from "./services/administrator.service";
 import { Administrator } from "./entities/administrator.entity";
 import { TypeOrmModule } from "@nestjs/typeorm";
@@ -25,7 +26,11 @@ import { PurchaseRequest } from "../purchases/entities/purchases.entity";
     ]),
     Web3Module,
   ],
-  controllers: [AdministratorController, AdminAuthController],
+  controllers: [
+    AdministratorController,
+    AdminAuthController,
+    StaffInviteController,
+  ],
   providers: [AdministratorService, AdminAuthService, AnalyticsService],
 })
 export class AdministratorModule {}

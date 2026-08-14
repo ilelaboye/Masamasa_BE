@@ -1,4 +1,4 @@
-import { capitalizeString } from "../helpers";
+import { capitalizeString, INVITE_EXPIRY_HOURS } from "../helpers";
 import { sendZohoMail } from "./mailer";
 
 type EmailUser = {
@@ -119,4 +119,45 @@ export function sendWithdrawalSuccessEmail(
       ),
     },
   ).catch(() => {});
+}
+
+/**
+ * Staff invite link. Sent as raw HTML rather than a Zoho template because
+ * template keys are provisioned in the Zoho dashboard and there is no
+ * staff-invite template there.
+ *
+ * Awaited by the caller — unlike the alerts above, a silent failure here means
+ * the staff member never receives their link.
+ */
+export function sendStaffInviteEmail(
+  user: EmailUser,
+  link: string,
+  isResend = false,
+) {
+  return sendZohoMail(
+    {
+      to: {
+        name: `${capitalizeString(user.first_name ?? "")} ${capitalizeString(user.last_name ?? "")}`.trim(),
+        email: user.email,
+      },
+    },
+    {
+      subject: isResend
+        ? "Your new MasaMasa staff invite link"
+        : "You have been invited to the MasaMasa admin team",
+      html: shell(
+        user.first_name ?? "",
+        `<p>${
+          isResend
+            ? "Here is a new link to finish setting up your staff account. Any earlier link has stopped working."
+            : "You have been invited to join the MasaMasa admin team. Set a password and confirm your phone number to activate your account."
+        }</p>
+         <p style="margin:24px 0">
+           <a href="${link}" style="display:inline-block;background:#1a1a1a;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:6px">Complete your registration</a>
+         </p>
+         <p>This link expires in ${INVITE_EXPIRY_HOURS} hours. If it does, ask an administrator to send you a new invite.</p>
+         <p>If you were not expecting this email you can ignore it — the account stays inactive until the link is used.</p>`,
+      ),
+    },
+  );
 }
