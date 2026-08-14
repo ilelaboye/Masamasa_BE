@@ -74,6 +74,27 @@ export function sendPasswordChangedEmail(user: EmailUser) {
   ).catch(() => {});
 }
 
+/** Confirmation that the transaction PIN was changed. */
+export function sendPinChangedEmail(user: EmailUser) {
+  sendZohoMail(
+    {
+      to: {
+        name: `${capitalizeString(user.first_name ?? "")} ${capitalizeString(user.last_name ?? "")}`.trim(),
+        email: user.email,
+      },
+    },
+    {
+      subject: "Your MasaMasa transaction PIN was changed",
+      html: shell(
+        user.first_name ?? "",
+        `<p>Your transaction PIN was changed on <b>${nowInLagos()} (WAT)</b>.</p>
+         <p>This PIN authorises transfers and withdrawals from your wallet.</p>
+         <p><b>If you did not make this change, contact our support team immediately</b> — your account may be at risk.</p>`,
+      ),
+    },
+  ).catch(() => {});
+}
+
 /** Confirmation that a bank withdrawal was paid out successfully. */
 export function sendWithdrawalSuccessEmail(
   user: EmailUser,

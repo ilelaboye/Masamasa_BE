@@ -28,6 +28,7 @@ import {
   sendMailJetWithTemplate,
   sendZohoMailWithTemplate,
   sendPasswordChangedEmail,
+  sendPinChangedEmail,
   sendWithdrawalSuccessEmail,
   timeIsAfter,
 } from "@/core/utils";
@@ -214,6 +215,8 @@ export class UsersService extends BaseService {
         token_created_at: null,
       },
     );
+
+    sendPinChangedEmail(fetch);
 
     return { ...user, hasPin: fetch.pin ? true : false };
   }
