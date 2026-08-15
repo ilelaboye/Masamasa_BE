@@ -1,6 +1,6 @@
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { ObjectLiteral, Repository, SelectQueryBuilder } from "typeorm";
 import { KycStatus, Status, User } from "@/modules/users/entities/user.entity";
 import {
   TransactionEntityType,
@@ -14,7 +14,9 @@ import { paginate } from "@/core/helpers";
 export type AnalyticsPeriod = "today" | "week" | "month" | "year";
 export type VolumeGranularity = "daily" | "weekly" | "monthly" | "yearly";
 
-/** Start date for a rolling analytics period. */
+/**
+ * Start of the current calendar period — this week, this month, this year —
+ */
 function periodStart(period: AnalyticsPeriod): Date {
   const now = new Date();
   switch (period) {
@@ -24,20 +26,16 @@ function periodStart(period: AnalyticsPeriod): Date {
       return d;
     }
     case "week": {
+      // Weeks start on Sunday,.
       const d = new Date(now);
-      d.setDate(d.getDate() - 7);
+      d.setDate(d.getDate() - d.getDay());
+      d.setHours(0, 0, 0, 0);
       return d;
     }
-    case "month": {
-      const d = new Date(now);
-      d.setMonth(d.getMonth() - 1);
-      return d;
-    }
-    case "year": {
-      const d = new Date(now);
-      d.setFullYear(d.getFullYear() - 1);
-      return d;
-    }
+    case "month":
+      return new Date(now.getFullYear(), now.getMonth(), 1);
+    case "year":
+      return new Date(now.getFullYear(), 0, 1);
   }
 }
 
@@ -52,9 +50,37 @@ export class AnalyticsService {
     private readonly purchaseRepository: Repository<PurchaseRequest>,
   ) {}
 
-  /** Headline numbers for the analytics overview cards. */
-  async overview() {
+  /**
+   * Headline numbers for the analytics overview cards.
+   *
+   * `period` scopes only the three lifetime counts — signups, funded accounts
+   * and transacting users. Omit it for all-time, which is what the dashboard
+   * does; the "today" figures are unaffected either way.
+   */
+  async overview(period?: AnalyticsPeriod, dateFrom?: string, dateTo?: string) {
     const startOfToday = periodStart("today");
+
+    // An explicit range wins over the period toggle — the UI offers both, and
+    // picking dates is the more specific intent.
+    let totalsStart: Date | null = null;
+    let totalsEnd: Date | null = null;
+
+    if (dateFrom || dateTo) {
+      if (dateFrom) {
+        totalsStart = new Date(dateFrom);
+        totalsStart.setHours(0, 0, 0, 0);
+      }
+      totalsEnd = dateTo ? new Date(dateTo) : new Date();
+      totalsEnd.setHours(23, 59, 59, 999);
+
+      if (totalsStart && totalsStart > totalsEnd) {
+        throw new BadRequestException(
+          "Start date cannot be after the end date",
+        );
+      }
+    } else if (period) {
+      totalsStart = periodStart(period);
+    }
 
     const todayTx = await this.transactionsRepository
       .createQueryBuilder("t")
@@ -122,7 +148,160 @@ export class AnalyticsService {
       })
       .getRawOne();
 
-    const totalUsers = await this.userRepository.count();
+    // All-time distinct users, unlike the "today" figures above. Funded means
+    // money has ever landed in the account — a crypto deposit or a transfer
+    // received; transacting means money has ever moved either way.
+    const fundedQuery = this.transactionsRepository
+      .createQueryBuilder("t")
+      .select("COUNT(DISTINCT t.user_id)", "count")
+      .where("t.status = :status", { status: TransactionStatusType.success })
+      .andWhere("t.mode = :mode", { mode: TransactionModeType.credit });
+
+    const transactingQuery = this.transactionsRepository
+      .createQueryBuilder("t")
+      .select("COUNT(DISTINCT t.user_id)", "count")
+      .where("t.status = :status", { status: TransactionStatusType.success });
+
+    const totalUsersQuery = this.userRepository.createQueryBuilder("u");
+
+    if (totalsStart) {
+      fundedQuery.andWhere("t.created_at >= :totalsStart", { totalsStart });
+      transactingQuery.andWhere("t.created_at >= :totalsStart", {
+        totalsStart,
+      });
+      totalUsersQuery.andWhere("u.created_at >= :totalsStart", { totalsStart });
+    }
+
+    if (totalsEnd) {
+      fundedQuery.andWhere("t.created_at <= :totalsEnd", { totalsEnd });
+      transactingQuery.andWhere("t.created_at <= :totalsEnd", { totalsEnd });
+      totalUsersQuery.andWhere("u.created_at <= :totalsEnd", { totalsEnd });
+    }
+
+    const fundedAccounts = await fundedQuery.getRawOne();
+    const transactingUsers = await transactingQuery.getRawOne();
+    const totalUsers = await totalUsersQuery.getCount();
+
+    // How long it takes a new user to reach their first trade — signup to the
+    // earliest spend (cash-out or bill purchase).
+
+    const timeToTradeQuery = this.userRepository
+      .createQueryBuilder("u")
+      .innerJoin(
+        (qb) =>
+          qb
+            .select("t.user_id", "user_id")
+            .addSelect("MIN(t.created_at)", "first_trade_at")
+            .from(Transactions, "t")
+            .where("t.status = :tradeStatus")
+            .andWhere("t.entity_type IN (:...tradeTypes)")
+            .groupBy("t.user_id"),
+        "ft",
+        "ft.user_id = u.id",
+      )
+      .select(
+        "AVG(EXTRACT(EPOCH FROM (ft.first_trade_at - u.created_at)))",
+        "avg_seconds",
+      )
+      .addSelect(
+        `PERCENTILE_CONT(0.5) WITHIN GROUP (
+           ORDER BY EXTRACT(EPOCH FROM (ft.first_trade_at - u.created_at))
+         )`,
+        "median_seconds",
+      )
+      .addSelect("COUNT(*)", "users")
+      // Guards against clock skew or backfilled rows producing negative times.
+      .where("ft.first_trade_at >= u.created_at")
+      .setParameters({
+        tradeStatus: TransactionStatusType.success,
+        tradeTypes: [
+          TransactionEntityType.withdrawal,
+          TransactionEntityType.airtime,
+          TransactionEntityType.data,
+          TransactionEntityType.electricity_bill,
+          TransactionEntityType.tv_subscription,
+        ],
+      });
+
+    if (totalsEnd) {
+      timeToTradeQuery.andWhere("u.created_at <= :totalsEnd", { totalsEnd });
+    }
+
+    if (totalsStart) {
+      timeToTradeQuery.andWhere("u.created_at >= :totalsStart", {
+        totalsStart,
+      });
+    }
+
+    const timeToTrade = await timeToTradeQuery.getRawOne();
+
+    // Repeat rate: of the users who have been funded, how many transacted
+    // again within the selected period of that first funding.
+
+    const repeatWindowDays = period
+      ? { today: 1, week: 7, month: 30, year: 365 }[period]
+      : null;
+    const repeatQuery = this.userRepository
+      .createQueryBuilder("u")
+      .innerJoin(
+        (qb) =>
+          qb
+            .select("t.user_id", "user_id")
+            .addSelect("MIN(t.created_at)", "first_funded_at")
+            .from(Transactions, "t")
+            .where("t.status = :repeatStatus")
+            .andWhere("t.mode = :repeatMode")
+            .groupBy("t.user_id"),
+        "ff",
+        "ff.user_id = u.id",
+      )
+      .select("COUNT(*)", "funded_users")
+      .addSelect(
+        `COUNT(*) FILTER (WHERE EXISTS (
+           SELECT 1 FROM transactions r
+           WHERE r.user_id = u.id
+             AND r.status = :repeatStatus
+             AND r.created_at > ff.first_funded_at
+             ${
+               repeatWindowDays
+                 ? `AND r.created_at <= ff.first_funded_at
+                      + make_interval(days => :repeatWindowDays)`
+                 : ""
+             }
+         ))`,
+        "repeat_users",
+      )
+      .setParameters({
+        repeatStatus: TransactionStatusType.success,
+        repeatMode: TransactionModeType.credit,
+        ...(repeatWindowDays ? { repeatWindowDays } : {}),
+      });
+
+    if (totalsEnd) {
+      repeatQuery.andWhere("u.created_at <= :totalsEnd", { totalsEnd });
+    }
+
+    if (totalsStart) {
+      repeatQuery.andWhere("u.created_at >= :totalsStart", { totalsStart });
+    }
+
+    // Only count users whose window has actually closed. Someone funded an
+    // hour ago has not had a week to come back, and including them would
+    // push the rate down for reasons that have nothing to do with retention.
+    if (repeatWindowDays) {
+      repeatQuery.andWhere(
+        "ff.first_funded_at <= NOW() - make_interval(days => :repeatWindowDays)",
+      );
+    }
+
+    const repeat = await repeatQuery.getRawOne();
+    const fundedMeasured = Number(repeat?.funded_users) || 0;
+    const repeatUsers = Number(repeat?.repeat_users) || 0;
+
+    const toHours = (seconds: unknown) =>
+      seconds === null || seconds === undefined
+        ? null
+        : Math.round((Number(seconds) / 3600) * 10) / 10;
     // "Pending KYC" = everyone who has not completed KYC yet
     // (total users minus KYC-verified), not just status = pending.
     const kycVerified = await this.userRepository.count({
@@ -139,17 +318,28 @@ export class AnalyticsService {
       active_users_today: activeToday,
       transacting_users_today: Number(transactingToday.count) || 0,
       total_users: totalUsers,
+      funded_accounts: Number(fundedAccounts.count) || 0,
+      total_transacting_users: Number(transactingUsers.count) || 0,
+      avg_signup_to_first_trade_hours: toHours(timeToTrade?.avg_seconds),
+      median_signup_to_first_trade_hours: toHours(timeToTrade?.median_seconds),
+      users_with_first_trade: Number(timeToTrade?.users) || 0,
+      // Null when nobody has been funded — a 0% rate would imply everyone
+      // failed to come back
+      repeat_rate_percent:
+        fundedMeasured > 0
+          ? Math.round((repeatUsers / fundedMeasured) * 1000) / 10
+          : null,
+      repeat_users: repeatUsers,
+      funded_users_measured: fundedMeasured,
+      // Null means the window is open — any later transaction counted.
+      repeat_window_days: repeatWindowDays,
       users_balance: Number(wallets.balance) || 0,
       pending_kyc: pendingKyc,
     };
   }
 
   /** Transactions per user for a rolling period, heaviest users first. */
-  async transactionsPerUser(
-    period: AnalyticsPeriod,
-    page = 1,
-    limit = 20,
-  ) {
+  async transactionsPerUser(period: AnalyticsPeriod, page = 1, limit = 20) {
     const start = periodStart(period);
 
     const base = this.transactionsRepository
@@ -384,7 +574,8 @@ export class AnalyticsService {
             : "year";
 
     const windowStart = new Date();
-    if (granularity === "daily") windowStart.setDate(windowStart.getDate() - 30);
+    if (granularity === "daily")
+      windowStart.setDate(windowStart.getDate() - 30);
     else if (granularity === "weekly")
       windowStart.setDate(windowStart.getDate() - 7 * 12);
     else if (granularity === "monthly")
@@ -426,11 +617,39 @@ export class AnalyticsService {
     };
   }
 
-  /** Daily active (transacting) users + signups for the last N days. */
-  async dailyUsers(days = 30) {
-    const start = new Date();
-    start.setDate(start.getDate() - days);
+  async dailyUsers(days = 31, dateFrom?: string, dateTo?: string) {
+    // Same contract as the KYC funnel: the start can be any date, but the
+    // span is capped and a wider range is refused rather than silently
+    // narrowed — a clamped range returns data the user did not ask for.
+    const MAX_DAYS = 31;
+
+    const end = dateTo ? new Date(dateTo) : new Date();
+    end.setHours(23, 59, 59, 999);
+
+    // `days` counts the window inclusively, so today plus the previous 29 is
+    // 30 days. Subtracting the full count would produce 31 and fall foul of
+    // the check below.
+    const defaultDays = Math.min(days, MAX_DAYS);
+    const start = dateFrom ? new Date(dateFrom) : new Date(end);
+    if (!dateFrom) start.setDate(start.getDate() - (defaultDays - 1));
     start.setHours(0, 0, 0, 0);
+
+    if (start > end) {
+      throw new BadRequestException("Start date cannot be after the end date");
+    }
+
+    // Counted midnight to midnight, since `end` sits at 23:59:59.999 and
+    // measuring against it directly would add a spurious day.
+    const endOfRangeDay = new Date(end);
+    endOfRangeDay.setHours(0, 0, 0, 0);
+
+    const spanDays =
+      Math.round((endOfRangeDay.getTime() - start.getTime()) / 86_400_000) + 1;
+    if (spanDays > MAX_DAYS) {
+      throw new BadRequestException(
+        `Please select a range of ${MAX_DAYS} days or less`,
+      );
+    }
 
     const activity = await this.transactionsRepository
       .createQueryBuilder("t")
@@ -438,6 +657,7 @@ export class AnalyticsService {
       .addSelect("COUNT(DISTINCT t.user_id)", "active_users")
       .addSelect("COUNT(*)", "transactions")
       .where("t.created_at >= :start", { start })
+      .andWhere("t.created_at <= :end", { end })
       .groupBy("day")
       .orderBy("day", "ASC")
       .getRawMany();
@@ -447,56 +667,196 @@ export class AnalyticsService {
       .select(`DATE_TRUNC('day', u.created_at)`, "day")
       .addSelect("COUNT(*)", "signups")
       .where("u.created_at >= :start", { start })
+      .andWhere("u.created_at <= :end", { end })
       .groupBy("day")
       .orderBy("day", "ASC")
       .getRawMany();
 
+    // Users who received money that day — the daily counterpart of the
+    // "funded accounts" total.
+    const funded = await this.transactionsRepository
+      .createQueryBuilder("t")
+      .select(`DATE_TRUNC('day', t.created_at)`, "day")
+      .addSelect("COUNT(DISTINCT t.user_id)", "funded_users")
+      .where("t.created_at >= :start", { start })
+      .andWhere("t.created_at <= :end", { end })
+      .andWhere("t.status = :status", { status: TransactionStatusType.success })
+      .andWhere("t.mode = :mode", { mode: TransactionModeType.credit })
+      .groupBy("day")
+      .orderBy("day", "ASC")
+      .getRawMany();
+
+    const dayKey = (day: string | Date) => new Date(day).toISOString();
+
+    const activityByDay = new Map(activity.map((a) => [dayKey(a.day), a]));
     const signupsByDay = new Map(
-      signups.map((s) => [new Date(s.day).toISOString(), Number(s.signups)]),
+      signups.map((s) => [dayKey(s.day), Number(s.signups)]),
+    );
+    const fundedByDay = new Map(
+      funded.map((f) => [dayKey(f.day), Number(f.funded_users)]),
     );
 
-    return {
-      days,
-      series: activity.map((a) => ({
-        day: a.day,
-        active_users: Number(a.active_users) || 0,
-        transactions: Number(a.transactions) || 0,
-        signups: signupsByDay.get(new Date(a.day).toISOString()) ?? 0,
-      })),
-    };
+    const series: {
+      day: Date;
+      active_users: number;
+      transactions: number;
+      signups: number;
+      funded_users: number;
+    }[] = [];
+
+    const lastDay = new Date(end);
+    lastDay.setHours(0, 0, 0, 0);
+
+    for (
+      const day = new Date(start);
+      day <= lastDay;
+      day.setDate(day.getDate() + 1)
+    ) {
+      const found = activityByDay.get(dayKey(day));
+      series.push({
+        day: new Date(day),
+        active_users: Number(found?.active_users) || 0,
+        transactions: Number(found?.transactions) || 0,
+        signups: signupsByDay.get(dayKey(day)) ?? 0,
+        funded_users: fundedByDay.get(dayKey(day)) ?? 0,
+      });
+    }
+
+    return { days, series, date_from: start, date_to: end };
   }
 
   /**
-   * Registration → verification → KYC funnel. App-store download counts are
-   * only available in the Play/App Store consoles — the funnel starts at
-   * registration.
+   * Registration cohort funnel.
+   *
+   * The window comes from one of three places, in priority order: an explicit
+   * date range, a calendar period preset, or the default last 31 days.
    */
-  async kycFunnel() {
-    const total = await this.userRepository.count();
-    const emailVerified = await this.userRepository
-      .createQueryBuilder("u")
-      .where("u.email_verified_at IS NOT NULL")
-      .getCount();
+  async kycFunnel(
+    dateFrom?: string,
+    dateTo?: string,
+    period?: AnalyticsPeriod | "all",
+  ) {
+    const MAX_DAYS = 31;
 
-    const byKyc = await this.userRepository
-      .createQueryBuilder("u")
-      .select("u.kyc_status", "kyc_status")
-      .addSelect("COUNT(*)", "count")
-      .groupBy("u.kyc_status")
-      .getRawMany();
+    let start: Date | null;
+    let end: Date | null;
+
+    if (dateFrom || dateTo) {
+      end = dateTo ? new Date(dateTo) : new Date();
+      end.setHours(23, 59, 59, 999);
+
+      start = dateFrom ? new Date(dateFrom) : new Date(end);
+      if (!dateFrom) start.setDate(start.getDate() - (MAX_DAYS - 1));
+      start.setHours(0, 0, 0, 0);
+
+      if (start > end) {
+        throw new BadRequestException(
+          "Start date cannot be after the end date",
+        );
+      }
+
+      // Counted midnight to midnight — `end` sits at 23:59:59.999, so
+      // measuring against it directly would add a spurious day.
+      const endOfRangeDay = new Date(end);
+      endOfRangeDay.setHours(0, 0, 0, 0);
+
+      // Inclusive of both bounds, so the 1st to the 31st is exactly 31 days.
+      const spanDays =
+        Math.round((endOfRangeDay.getTime() - start.getTime()) / 86_400_000) +
+        1;
+      if (spanDays > MAX_DAYS) {
+        throw new BadRequestException(
+          `Please select a range of ${MAX_DAYS} days or less`,
+        );
+      }
+    } else if (period === "all") {
+      start = null;
+      end = null;
+    } else if (period) {
+      start = periodStart(period);
+      end = new Date();
+      end.setHours(23, 59, 59, 999);
+    } else {
+      end = new Date();
+      end.setHours(23, 59, 59, 999);
+      start = new Date(end);
+      start.setDate(start.getDate() - (MAX_DAYS - 1));
+      start.setHours(0, 0, 0, 0);
+    }
+
+    const applyRange = <T extends ObjectLiteral>(
+      qb: SelectQueryBuilder<T>,
+      alias: string,
+    ) => {
+      if (start) qb.andWhere(`${alias}.created_at >= :start`, { start });
+      if (end) qb.andWhere(`${alias}.created_at <= :end`, { end });
+      return qb;
+    };
+
+    const total = await applyRange(
+      this.userRepository.createQueryBuilder("u"),
+      "u",
+    ).getCount();
+
+    const emailVerified = await applyRange(
+      this.userRepository
+        .createQueryBuilder("u")
+        .where("u.email_verified_at IS NOT NULL"),
+      "u",
+    ).getCount();
+
+    const byKyc = await applyRange(
+      this.userRepository
+        .createQueryBuilder("u")
+        .select("u.kyc_status", "kyc_status")
+        .addSelect("COUNT(*)", "count")
+        .groupBy("u.kyc_status"),
+      "u",
+    ).getRawMany();
 
     const kyc: Record<string, number> = {};
     for (const row of byKyc) {
       kyc[row.kyc_status ?? "none"] = Number(row.count) || 0;
     }
 
+    const countUsersWithTransactionType = async (
+      types: TransactionEntityType[],
+    ) => {
+      const row = await applyRange(
+        this.transactionsRepository
+          .createQueryBuilder("t")
+          .innerJoin("t.user", "u")
+          .select("COUNT(DISTINCT t.user_id)", "count")
+          .where("t.entity_type IN (:...types)", { types })
+          .andWhere("t.status = :status", {
+            status: TransactionStatusType.success,
+          }),
+        "u",
+      ).getRawOne();
+      return Number(row.count) || 0;
+    };
+
+    const firstDeposit = await countUsersWithTransactionType([
+      TransactionEntityType.deposit,
+    ]);
+    const firstTrade = await countUsersWithTransactionType([
+      TransactionEntityType.withdrawal,
+      TransactionEntityType.airtime,
+      TransactionEntityType.data,
+      TransactionEntityType.electricity_bill,
+      TransactionEntityType.tv_subscription,
+    ]);
+
     return {
       registered: total,
       email_verified: emailVerified,
       kyc_verified: kyc[KycStatus.success] ?? 0,
-      // Everyone who has not completed KYC (total − verified)
       kyc_pending: total - (kyc[KycStatus.success] ?? 0),
+      first_deposit: firstDeposit,
+      first_trade: firstTrade,
       kyc_breakdown: kyc,
+      date_from: start,
+      date_to: end,
     };
   }
 

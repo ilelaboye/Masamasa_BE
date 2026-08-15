@@ -191,10 +191,30 @@ export class AdministratorController {
   }
 
   @ApiOperation({ summary: "Analytics: overview headline numbers" })
+  @ApiQuery({
+    name: "period",
+    required: false,
+    enum: ["today", "week", "month", "year"],
+    description:
+      "Scopes signups, funded accounts and transacting users. Omit for all-time.",
+  })
+  @ApiQuery({ name: "date_from", required: false, type: String })
+  @ApiQuery({ name: "date_to", required: false, type: String })
   @AllowRoles(AdministratorRoles.marketer)
   @Get("analytics/overview")
-  async analyticsOverview() {
-    return await this.analyticsService.overview();
+  async analyticsOverview(
+    @Query("period") period?: string,
+    @Query("date_from") dateFrom?: string,
+    @Query("date_to") dateTo?: string,
+  ) {
+    const valid = ["today", "week", "month", "year"] as const;
+    return await this.analyticsService.overview(
+      valid.includes(period as any)
+        ? (period as (typeof valid)[number])
+        : undefined,
+      dateFrom,
+      dateTo,
+    );
   }
 
   @ApiOperation({ summary: "Analytics: transactions per user for a period" })
@@ -262,20 +282,47 @@ export class AdministratorController {
     return await this.analyticsService.cryptoDeposits(dateFrom, dateTo);
   }
 
-  @ApiOperation({ summary: "Analytics: daily active users and signups" })
+  @ApiOperation({ summary: "Analytics: daily transacting users and signups" })
   @ApiQuery({ name: "days", required: false, type: Number })
+  @ApiQuery({ name: "date_from", required: false, type: String })
+  @ApiQuery({ name: "date_to", required: false, type: String })
   @AllowRoles(AdministratorRoles.marketer)
   @Get("analytics/daily-users")
-  async analyticsDailyUsers(@Query("days") days?: string) {
-    const d = Math.min(365, Math.max(7, parseInt(days ?? "30", 10) || 30));
-    return await this.analyticsService.dailyUsers(d);
+  async analyticsDailyUsers(
+    @Query("days") days?: string,
+    @Query("date_from") dateFrom?: string,
+    @Query("date_to") dateTo?: string,
+  ) {
+    const d = Math.min(365, Math.max(7, parseInt(days ?? "31", 10) || 31));
+    return await this.analyticsService.dailyUsers(d, dateFrom, dateTo);
   }
 
-  @ApiOperation({ summary: "Analytics: registration → KYC funnel" })
+  @ApiOperation({
+    summary: "Analytics: registration → KYC funnel (by registration date)",
+  })
+  @ApiQuery({ name: "date_from", required: false, type: String })
+  @ApiQuery({ name: "date_to", required: false, type: String })
+  @ApiQuery({
+    name: "period",
+    required: false,
+    enum: ["today", "week", "month", "year", "all"],
+    description: "Ignored when an explicit date range is supplied.",
+  })
   @AllowRoles(AdministratorRoles.marketer)
   @Get("analytics/kyc-funnel")
-  async analyticsKycFunnel() {
-    return await this.analyticsService.kycFunnel();
+  async analyticsKycFunnel(
+    @Query("date_from") dateFrom?: string,
+    @Query("date_to") dateTo?: string,
+    @Query("period") period?: string,
+  ) {
+    const valid = ["today", "week", "month", "year", "all"] as const;
+    return await this.analyticsService.kycFunnel(
+      dateFrom,
+      dateTo,
+      valid.includes(period as any)
+        ? (period as (typeof valid)[number])
+        : undefined,
+    );
   }
 
   @ApiOperation({ summary: "Analytics: user & volume locations" })
