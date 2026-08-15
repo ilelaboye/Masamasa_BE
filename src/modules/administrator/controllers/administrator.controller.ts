@@ -198,12 +198,22 @@ export class AdministratorController {
     description:
       "Scopes signups, funded accounts and transacting users. Omit for all-time.",
   })
+  @ApiQuery({ name: "date_from", required: false, type: String })
+  @ApiQuery({ name: "date_to", required: false, type: String })
   @AllowRoles(AdministratorRoles.marketer)
   @Get("analytics/overview")
-  async analyticsOverview(@Query("period") period?: string) {
+  async analyticsOverview(
+    @Query("period") period?: string,
+    @Query("date_from") dateFrom?: string,
+    @Query("date_to") dateTo?: string,
+  ) {
     const valid = ["today", "week", "month", "year"] as const;
     return await this.analyticsService.overview(
-      valid.includes(period as any) ? (period as (typeof valid)[number]) : undefined,
+      valid.includes(period as any)
+        ? (period as (typeof valid)[number])
+        : undefined,
+      dateFrom,
+      dateTo,
     );
   }
 
@@ -283,7 +293,7 @@ export class AdministratorController {
     @Query("date_from") dateFrom?: string,
     @Query("date_to") dateTo?: string,
   ) {
-    const d = Math.min(365, Math.max(7, parseInt(days ?? "30", 10) || 30));
+    const d = Math.min(365, Math.max(7, parseInt(days ?? "31", 10) || 31));
     return await this.analyticsService.dailyUsers(d, dateFrom, dateTo);
   }
 
@@ -292,13 +302,27 @@ export class AdministratorController {
   })
   @ApiQuery({ name: "date_from", required: false, type: String })
   @ApiQuery({ name: "date_to", required: false, type: String })
+  @ApiQuery({
+    name: "period",
+    required: false,
+    enum: ["today", "week", "month", "year", "all"],
+    description: "Ignored when an explicit date range is supplied.",
+  })
   @AllowRoles(AdministratorRoles.marketer)
   @Get("analytics/kyc-funnel")
   async analyticsKycFunnel(
     @Query("date_from") dateFrom?: string,
     @Query("date_to") dateTo?: string,
+    @Query("period") period?: string,
   ) {
-    return await this.analyticsService.kycFunnel(dateFrom, dateTo);
+    const valid = ["today", "week", "month", "year", "all"] as const;
+    return await this.analyticsService.kycFunnel(
+      dateFrom,
+      dateTo,
+      valid.includes(period as any)
+        ? (period as (typeof valid)[number])
+        : undefined,
+    );
   }
 
   @ApiOperation({ summary: "Analytics: user & volume locations" })

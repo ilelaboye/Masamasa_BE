@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { ObjectLiteral, Repository, SelectQueryBuilder } from "typeorm";
 import { KycStatus, Status, User } from "@/modules/users/entities/user.entity";
@@ -14,7 +14,9 @@ import { paginate } from "@/core/helpers";
 export type AnalyticsPeriod = "today" | "week" | "month" | "year";
 export type VolumeGranularity = "daily" | "weekly" | "monthly" | "yearly";
 
-/** Start date for a rolling analytics period. */
+/**
+ * Start of the current calendar period — this week, this month, this year —
+ */
 function periodStart(period: AnalyticsPeriod): Date {
   const now = new Date();
   switch (period) {
@@ -24,20 +26,16 @@ function periodStart(period: AnalyticsPeriod): Date {
       return d;
     }
     case "week": {
+      // Weeks start on Sunday,.
       const d = new Date(now);
-      d.setDate(d.getDate() - 7);
+      d.setDate(d.getDate() - d.getDay());
+      d.setHours(0, 0, 0, 0);
       return d;
     }
-    case "month": {
-      const d = new Date(now);
-      d.setMonth(d.getMonth() - 1);
-      return d;
-    }
-    case "year": {
-      const d = new Date(now);
-      d.setFullYear(d.getFullYear() - 1);
-      return d;
-    }
+    case "month":
+      return new Date(now.getFullYear(), now.getMonth(), 1);
+    case "year":
+      return new Date(now.getFullYear(), 0, 1);
   }
 }
 
@@ -59,9 +57,30 @@ export class AnalyticsService {
    * and transacting users. Omit it for all-time, which is what the dashboard
    * does; the "today" figures are unaffected either way.
    */
-  async overview(period?: AnalyticsPeriod) {
+  async overview(period?: AnalyticsPeriod, dateFrom?: string, dateTo?: string) {
     const startOfToday = periodStart("today");
-    const totalsStart = period ? periodStart(period) : null;
+
+    // An explicit range wins over the period toggle — the UI offers both, and
+    // picking dates is the more specific intent.
+    let totalsStart: Date | null = null;
+    let totalsEnd: Date | null = null;
+
+    if (dateFrom || dateTo) {
+      if (dateFrom) {
+        totalsStart = new Date(dateFrom);
+        totalsStart.setHours(0, 0, 0, 0);
+      }
+      totalsEnd = dateTo ? new Date(dateTo) : new Date();
+      totalsEnd.setHours(23, 59, 59, 999);
+
+      if (totalsStart && totalsStart > totalsEnd) {
+        throw new BadRequestException(
+          "Start date cannot be after the end date",
+        );
+      }
+    } else if (period) {
+      totalsStart = periodStart(period);
+    }
 
     const todayTx = await this.transactionsRepository
       .createQueryBuilder("t")
@@ -153,6 +172,12 @@ export class AnalyticsService {
       totalUsersQuery.andWhere("u.created_at >= :totalsStart", { totalsStart });
     }
 
+    if (totalsEnd) {
+      fundedQuery.andWhere("t.created_at <= :totalsEnd", { totalsEnd });
+      transactingQuery.andWhere("t.created_at <= :totalsEnd", { totalsEnd });
+      totalUsersQuery.andWhere("u.created_at <= :totalsEnd", { totalsEnd });
+    }
+
     const fundedAccounts = await fundedQuery.getRawOne();
     const transactingUsers = await transactingQuery.getRawOne();
     const totalUsers = await totalUsersQuery.getCount();
@@ -197,6 +222,10 @@ export class AnalyticsService {
           TransactionEntityType.tv_subscription,
         ],
       });
+
+    if (totalsEnd) {
+      timeToTradeQuery.andWhere("u.created_at <= :totalsEnd", { totalsEnd });
+    }
 
     if (totalsStart) {
       timeToTradeQuery.andWhere("u.created_at >= :totalsStart", {
@@ -247,6 +276,10 @@ export class AnalyticsService {
         repeatMode: TransactionModeType.credit,
         ...(repeatWindowDays ? { repeatWindowDays } : {}),
       });
+
+    if (totalsEnd) {
+      repeatQuery.andWhere("u.created_at <= :totalsEnd", { totalsEnd });
+    }
 
     if (totalsStart) {
       repeatQuery.andWhere("u.created_at >= :totalsStart", { totalsStart });
@@ -584,22 +617,39 @@ export class AnalyticsService {
     };
   }
 
-  async dailyUsers(days = 30, dateFrom?: string, dateTo?: string) {
-    const start = dateFrom ? new Date(dateFrom) : new Date();
-    if (!dateFrom) start.setDate(start.getDate() - days);
-    start.setHours(0, 0, 0, 0);
+  async dailyUsers(days = 31, dateFrom?: string, dateTo?: string) {
+    // Same contract as the KYC funnel: the start can be any date, but the
+    // span is capped and a wider range is refused rather than silently
+    // narrowed — a clamped range returns data the user did not ask for.
+    const MAX_DAYS = 31;
 
     const end = dateTo ? new Date(dateTo) : new Date();
     end.setHours(23, 59, 59, 999);
 
-    // Hard 30-day ceiling. A wider range would put 90+ bars in a chart sized
-    // for a month, so the start is pulled forward rather than the request
-    // being rejected.
-    const MAX_DAYS = 30;
-    const earliest = new Date(end);
-    earliest.setDate(earliest.getDate() - (MAX_DAYS - 1));
-    earliest.setHours(0, 0, 0, 0);
-    if (start < earliest) start.setTime(earliest.getTime());
+    // `days` counts the window inclusively, so today plus the previous 29 is
+    // 30 days. Subtracting the full count would produce 31 and fall foul of
+    // the check below.
+    const defaultDays = Math.min(days, MAX_DAYS);
+    const start = dateFrom ? new Date(dateFrom) : new Date(end);
+    if (!dateFrom) start.setDate(start.getDate() - (defaultDays - 1));
+    start.setHours(0, 0, 0, 0);
+
+    if (start > end) {
+      throw new BadRequestException("Start date cannot be after the end date");
+    }
+
+    // Counted midnight to midnight, since `end` sits at 23:59:59.999 and
+    // measuring against it directly would add a spurious day.
+    const endOfRangeDay = new Date(end);
+    endOfRangeDay.setHours(0, 0, 0, 0);
+
+    const spanDays =
+      Math.round((endOfRangeDay.getTime() - start.getTime()) / 86_400_000) + 1;
+    if (spanDays > MAX_DAYS) {
+      throw new BadRequestException(
+        `Please select a range of ${MAX_DAYS} days or less`,
+      );
+    }
 
     const activity = await this.transactionsRepository
       .createQueryBuilder("t")
@@ -675,12 +725,64 @@ export class AnalyticsService {
     return { days, series, date_from: start, date_to: end };
   }
 
-  async kycFunnel(dateFrom?: string, dateTo?: string) {
-    const start = dateFrom ? new Date(dateFrom) : null;
-    if (start) start.setHours(0, 0, 0, 0);
+  /**
+   * Registration cohort funnel.
+   *
+   * The window comes from one of three places, in priority order: an explicit
+   * date range, a calendar period preset, or the default last 31 days.
+   */
+  async kycFunnel(
+    dateFrom?: string,
+    dateTo?: string,
+    period?: AnalyticsPeriod | "all",
+  ) {
+    const MAX_DAYS = 31;
 
-    const end = dateTo ? new Date(dateTo) : null;
-    if (end) end.setHours(23, 59, 59, 999);
+    let start: Date | null;
+    let end: Date | null;
+
+    if (dateFrom || dateTo) {
+      end = dateTo ? new Date(dateTo) : new Date();
+      end.setHours(23, 59, 59, 999);
+
+      start = dateFrom ? new Date(dateFrom) : new Date(end);
+      if (!dateFrom) start.setDate(start.getDate() - (MAX_DAYS - 1));
+      start.setHours(0, 0, 0, 0);
+
+      if (start > end) {
+        throw new BadRequestException(
+          "Start date cannot be after the end date",
+        );
+      }
+
+      // Counted midnight to midnight — `end` sits at 23:59:59.999, so
+      // measuring against it directly would add a spurious day.
+      const endOfRangeDay = new Date(end);
+      endOfRangeDay.setHours(0, 0, 0, 0);
+
+      // Inclusive of both bounds, so the 1st to the 31st is exactly 31 days.
+      const spanDays =
+        Math.round((endOfRangeDay.getTime() - start.getTime()) / 86_400_000) +
+        1;
+      if (spanDays > MAX_DAYS) {
+        throw new BadRequestException(
+          `Please select a range of ${MAX_DAYS} days or less`,
+        );
+      }
+    } else if (period === "all") {
+      start = null;
+      end = null;
+    } else if (period) {
+      start = periodStart(period);
+      end = new Date();
+      end.setHours(23, 59, 59, 999);
+    } else {
+      end = new Date();
+      end.setHours(23, 59, 59, 999);
+      start = new Date(end);
+      start.setDate(start.getDate() - (MAX_DAYS - 1));
+      start.setHours(0, 0, 0, 0);
+    }
 
     const applyRange = <T extends ObjectLiteral>(
       qb: SelectQueryBuilder<T>,
@@ -749,11 +851,12 @@ export class AnalyticsService {
       registered: total,
       email_verified: emailVerified,
       kyc_verified: kyc[KycStatus.success] ?? 0,
-      // Everyone who has not completed KYC (total − verified)
       kyc_pending: total - (kyc[KycStatus.success] ?? 0),
       first_deposit: firstDeposit,
       first_trade: firstTrade,
       kyc_breakdown: kyc,
+      date_from: start,
+      date_to: end,
     };
   }
 
