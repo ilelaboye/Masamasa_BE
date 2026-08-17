@@ -6,7 +6,7 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { DataSource, Repository } from "typeorm";
+import { DataSource, EntityManager, Repository } from "typeorm";
 import { BaseService } from "../../base.service";
 import { KycStatus, User } from "../entities/user.entity";
 import {
@@ -34,8 +34,8 @@ import {
 } from "@/core/utils";
 import {
   WITHDRAWAL_MAX_PER_DAY,
-  WITHDRAWAL_MAX_PER_TRANSACTION,
   WITHDRAWAL_MAX_UNVERIFIED,
+  WITHDRAWAL_MIN_PER_TRANSACTION,
   ZohoMailTemplates,
 } from "@/constants";
 import { TransactionService } from "@/modules/transactions/transactions.service";
@@ -416,6 +416,88 @@ export class UsersService extends BaseService {
     return this.transactionService.getAccountBalance(user.id);
   }
 
+  // Start of the current calendar day, in the server's timezone. The daily
+  // window and the `resetsAt` we hand the client are both derived from this,
+  // so what the app displays cannot drift from what is enforced.
+  private startOfDay(): Date {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    return start;
+  }
+
+  // Total already withdrawn inside the current day window.
+  //
+  // Takes an EntityManager so the withdrawal path can run it inside its open
+  // transaction (where it must be read under the row lock), while the
+  // read-only limits endpoint can pass the default manager.
+  private async getWithdrawnToday(
+    manager: EntityManager,
+    userId: number,
+  ): Promise<number> {
+    const result = await manager
+      .createQueryBuilder(Transactions, "transaction")
+      .select("COALESCE(SUM(transaction.amount), 0)", "total")
+      .where("transaction.user_id = :user_id", { user_id: userId })
+      .andWhere("transaction.entity_type = :entityType", {
+        entityType: TransactionEntityType.withdrawal,
+      })
+      // Pending and processing withdrawals count — that money is already
+      // committed, so leaving them out would let the cap be overshot.
+      .andWhere("transaction.status IN (:...statuses)", {
+        statuses: [
+          TransactionStatusType.success,
+          TransactionStatusType.processing,
+          TransactionStatusType.pending,
+        ],
+      })
+      .andWhere("transaction.created_at >= :startOfDay", {
+        startOfDay: this.startOfDay(),
+      })
+      .getRawOne();
+
+    return parseFloat(result.total) || 0;
+  }
+
+  // What the account may still withdraw today. Backs `GET /user/withdrawal-limits`
+  // so the app can warn before the user reaches the PIN screen; the authoritative
+  // check still runs under the row lock in `withdrawal()`.
+  async withdrawalLimits(req: UserRequest) {
+    const user = await this.userRepository.findOne({
+      where: { id: req.user.id },
+    });
+    if (!user) {
+      throw new UnauthorizedException(
+        "Auth user not found, please login again",
+      );
+    }
+
+    const kycVerified = user.kyc_status == KycStatus.success;
+    const maxPerDay = kycVerified
+      ? WITHDRAWAL_MAX_PER_DAY
+      : WITHDRAWAL_MAX_UNVERIFIED;
+
+    const withdrawnToday = await this.getWithdrawnToday(
+      this.dataSource.manager,
+      user.id,
+    );
+
+    // Clamped at zero: a limit lowered after the fact (or a manual entry)
+    // could otherwise report a negative allowance.
+    const remainingToday = Math.max(0, maxPerDay - withdrawnToday);
+
+    const resetsAt = this.startOfDay();
+    resetsAt.setDate(resetsAt.getDate() + 1);
+
+    return {
+      kycVerified,
+      maxPerDay,
+      minPerTransaction: WITHDRAWAL_MIN_PER_TRANSACTION,
+      withdrawnToday,
+      remainingToday,
+      resetsAt: resetsAt.toISOString(),
+    };
+  }
+
   async transfer(transferDto: TransferDto, req: UserRequest) {
     const find = await this.userRepository.findOne({
       where: { email: transferDto.email },
@@ -625,22 +707,13 @@ export class UsersService extends BaseService {
     delete user.pin;
 
     // Unverified accounts are no longer blocked outright — they withdraw
-    // against a lower ceiling until KYC is approved.
+    // against a lower ceiling until KYC is approved. There is no per-transaction
+    // cap on top of this: a single withdrawal may use up the whole day's
+    // allowance, and the daily check below is what bounds it.
     const kycVerified = user.kyc_status == KycStatus.success;
-    const maxPerTransaction = kycVerified
-      ? WITHDRAWAL_MAX_PER_TRANSACTION
-      : WITHDRAWAL_MAX_UNVERIFIED;
     const maxPerDay = kycVerified
       ? WITHDRAWAL_MAX_PER_DAY
       : WITHDRAWAL_MAX_UNVERIFIED;
-
-    if (withdrawalDto.amount > maxPerTransaction) {
-      throw new BadRequestException(
-        kycVerified
-          ? `The maximum you can withdraw in a single transaction is NGN ${maxPerTransaction.toLocaleString("en-NG")}`
-          : `Unverified accounts can withdraw up to NGN ${maxPerTransaction.toLocaleString("en-NG")}. Complete your account verification (KYC) to raise this limit.`,
-      );
-    }
 
     // Lock the user row for the duration of the balance check + transaction insert
     // to prevent concurrent withdrawals from racing past the balance check.
@@ -679,42 +752,34 @@ export class UsersService extends BaseService {
         throw new BadRequestException("Insufficient wallet balance");
       }
 
-      // Daily cap. Checked inside the lock so two concurrent withdrawals
-      // cannot each see the same "already withdrawn today" figure and both
-      // pass. Pending (processing) withdrawals count — that money is
-      // already committed.
-      const startOfDay = new Date();
-      startOfDay.setHours(0, 0, 0, 0);
-
-      const dailyResult = await queryRunner.manager
-        .createQueryBuilder(Transactions, "transaction")
-        .select("COALESCE(SUM(transaction.amount), 0)", "total")
-        .where("transaction.user_id = :user_id", { user_id: user.id })
-        .andWhere("transaction.entity_type = :entityType", {
-          entityType: TransactionEntityType.withdrawal,
-        })
-        .andWhere("transaction.status IN (:...statuses)", {
-          statuses: [
-            TransactionStatusType.success,
-            TransactionStatusType.processing,
-            TransactionStatusType.pending,
-          ],
-        })
-        .andWhere("transaction.created_at >= :startOfDay", { startOfDay })
-        .getRawOne();
-
-      const withdrawnToday = parseFloat(dailyResult.total) || 0;
+      // Daily cap. Read inside the lock so two concurrent withdrawals cannot
+      // each see the same "already withdrawn today" figure and both pass.
+      const withdrawnToday = await this.getWithdrawnToday(
+        queryRunner.manager,
+        user.id,
+      );
       const remainingToday = maxPerDay - withdrawnToday;
 
       if (withdrawalDto.amount > remainingToday) {
+        const limit = maxPerDay.toLocaleString("en-NG");
         const upgradeHint = kycVerified
           ? ""
           : " Complete your account verification (KYC) to raise this limit.";
-        throw new BadRequestException(
-          remainingToday <= 0
-            ? `You have reached your daily withdrawal limit of NGN ${maxPerDay.toLocaleString("en-NG")}. Please try again tomorrow.${upgradeHint}`
-            : `This would exceed your daily withdrawal limit of NGN ${maxPerDay.toLocaleString("en-NG")}. You can still withdraw NGN ${remainingToday.toLocaleString("en-NG")} today.${upgradeHint}`,
-        );
+
+        let message: string;
+        if (withdrawnToday <= 0) {
+          // Nothing spent yet today, so the cap is the only thing in the way —
+          // phrasing it as a "daily" overrun would just confuse.
+          message = kycVerified
+            ? `The most you can withdraw in a day is NGN ${limit}.`
+            : `Unverified accounts can withdraw up to NGN ${limit}.${upgradeHint}`;
+        } else if (remainingToday <= 0) {
+          message = `You have reached your daily withdrawal limit of NGN ${limit}. Please try again tomorrow.${upgradeHint}`;
+        } else {
+          message = `This would exceed your daily withdrawal limit of NGN ${limit}. You can still withdraw NGN ${remainingToday.toLocaleString("en-NG")} today.${upgradeHint}`;
+        }
+
+        throw new BadRequestException(message);
       }
 
       trans = await queryRunner.manager.save(

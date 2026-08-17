@@ -1,4 +1,7 @@
-import { WITHDRAWAL_MAX_PER_TRANSACTION } from "@/constants";
+import {
+  WITHDRAWAL_MAX_PER_DAY,
+  WITHDRAWAL_MIN_PER_TRANSACTION,
+} from "@/constants";
 import * as Joi from "joi";
 
 export const LoginValidation = Joi.object().keys({
@@ -47,9 +50,11 @@ export const WithdrawalValidation = Joi.object().keys({
   // drift below the limit users.service actually enforces. Joi runs in the
   // pipe ahead of the service, so a lower number here silently becomes the
   // real limit and the service's own check never gets a chance to run.
+  // The daily cap is the widest a single withdrawal can ever be; the service
+  // narrows it further per account (KYC status, allowance already used today).
   amount: Joi.number()
-    .min(1000)
-    .max(WITHDRAWAL_MAX_PER_TRANSACTION)
+    .min(WITHDRAWAL_MIN_PER_TRANSACTION)
+    .max(WITHDRAWAL_MAX_PER_DAY)
     .required()
     .label("Amount"),
   pin: Joi.number().required().label("Pin"),

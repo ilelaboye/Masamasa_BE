@@ -97,6 +97,13 @@ export class UsersController {
     return await this.usersService.walletBalance(req);
   }
 
+  // How much of today's withdrawal allowance is left. Lets the app warn the
+  // user while they are still typing an amount, instead of at the PIN screen.
+  @Get("withdrawal-limits")
+  async withdrawalLimits(@Req() req: UserRequest) {
+    return await this.usersService.withdrawalLimits(req);
+  }
+
   @UsePipes(new JoiValidationPipe(ChangeUserPasswordValidation))
   @Post("change-password/request-otp")
   async requestPasswordChangeOtp(

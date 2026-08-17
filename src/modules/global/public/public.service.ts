@@ -405,9 +405,14 @@ export class PublicService {
   }
 
   /**
-   * Minimum supported app version per platform. The app calls this on
-   * launch and blocks the user behind an update prompt when its own
-   * version is below `min_version`.
+   * Supported app versions per platform. The app calls this on launch and
+   * blocks the user behind an update prompt when it is not running the newest
+   * release — every release is mandatory, patch releases included, so a client
+   * on 2.0.0 is forced to update as soon as 2.0.1 ships.
+   *
+   * Because of that, `*_LATEST_VERSION` must only be bumped once the build is
+   * actually downloadable from the store; raising it early hard-blocks every
+   * user until the rollout completes.
    */
   getAppVersion(platform?: string, currentVersion?: string) {
     const isIos = (platform ?? "").toLowerCase() === "ios";
@@ -430,8 +435,18 @@ export class PublicService {
     let forceUpdate = false;
     let updateAvailable = false;
     if (isValidVersion) {
-      forceUpdate = compareVersions(clientVersion, minVersion) < 0;
-      updateAvailable = compareVersions(clientVersion, latestVersion) < 0;
+      // Trailing the latest release is enough to force an update — comparing
+      // against min_version alone let a client sit on 2.0.0 after 2.0.1 shipped,
+      // since it was not below the minimum.
+      //
+      // The two are still compared separately rather than just using the
+      // latest: if the env vars are ever set with min_version above
+      // latest_version, falling behind the minimum must still force.
+      const behindMinimum = compareVersions(clientVersion, minVersion) < 0;
+      const behindLatest = compareVersions(clientVersion, latestVersion) < 0;
+
+      forceUpdate = behindMinimum || behindLatest;
+      updateAvailable = behindLatest;
     }
 
     return {
