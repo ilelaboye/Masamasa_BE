@@ -139,11 +139,11 @@ export class AdministratorController {
   @ApiOperation({
     summary: "Enable or disable a staff account (super_admin only)",
   })
-  @UsePipes(new JoiValidationPipe(UpdateStaffStatusValidation))
   @Patch("staff/:id/status")
   async updateStaffStatus(
     @Param("id") id: string,
-    @Body() updateStaffStatusDto: UpdateStaffStatusDto,
+    @Body(new JoiValidationPipe(UpdateStaffStatusValidation))
+    updateStaffStatusDto: UpdateStaffStatusDto,
     @Req() req: AdminRequest,
   ) {
     return this.administratorService.updateStaffStatus(
