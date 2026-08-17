@@ -160,7 +160,7 @@ export class PublicService {
 
     this.notificationsService.create({
       userId: wallet.user_id,
-      message: `Your deposit of ${amount} ${token_symbol} is confirmed`,
+      message: `Your deposit of ${currencyFormatter(amount, "NGN", 2, false)} ${token_symbol} is confirmed`,
       tag: NotificationTag.deposit,
       pushTitle: "Deposit Successful",
       metadata: transactionWebhook,
@@ -911,7 +911,7 @@ export class PublicService {
 
     this.notificationsService.create({
       userId: wallet.user_id,
-      message: `Incoming ${currency.toUpperCase()} deposit of ${amount} detected — awaiting blockchain confirmation`,
+      message: `Incoming ${currency.toUpperCase()} deposit of ${currencyFormatter(amount, "NGN", 2, false)} detected — awaiting blockchain confirmation`,
       tag: NotificationTag.deposit,
       pushTitle: "Deposit Detected",
       metadata: data,
@@ -1061,7 +1061,9 @@ export class PublicService {
 
     this.notificationsService.create({
       userId: wallet.user_id,
-      message: `Your deposit of ${amount} ${currency.toUpperCase()} has been confirmed`,
+      // Formatted the same way as the confirmation email above, so the two
+      // never quote different figures for one deposit.
+      message: `Your deposit of ${currencyFormatter(coinAmount, "NGN", 2, false)} ${currency.toUpperCase()} has been confirmed`,
       tag: NotificationTag.deposit,
       pushTitle: "Deposit Successful",
       metadata: data,
