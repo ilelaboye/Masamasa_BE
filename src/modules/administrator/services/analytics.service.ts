@@ -82,19 +82,18 @@ export class AnalyticsService {
       totalsStart = periodStart(period);
     }
 
-    // The count excludes deposit fees — a fee is revenue rather than an
-    // action a user took, and it rides along with the deposit that produced
-    // it, so counting both would show two transactions for one deposit. The
-    // volume still includes them; only the count is filtered.
+    // Deposit fees are excluded
     const todayTx = await this.transactionsRepository
       .createQueryBuilder("t")
-      .select("COUNT(*) FILTER (WHERE t.entity_type != :feeType)", "count")
+      .select("COUNT(*)", "count")
       .addSelect("COALESCE(SUM(t.amount), 0)", "volume")
       .where("t.created_at >= :start", { start: startOfToday })
       .andWhere("t.status = :status", {
         status: TransactionStatusType.success,
       })
-      .setParameters({ feeType: TransactionEntityType.deposit_fee })
+      .andWhere("t.entity_type != :feeType", {
+        feeType: TransactionEntityType.deposit_fee,
+      })
       .getRawOne();
 
     // Revenue: deposit fees + purchase commissions
