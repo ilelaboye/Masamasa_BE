@@ -36,6 +36,10 @@ export const appConfig = {
   ZOHO_FROM: process.env.ZOHO_FROM || "",
   ZOHO_FROM_NAME: process.env.ZOHO_FROM_NAME || "",
 
+  MAIL_LOGO_URL:
+    process.env.MAIL_LOGO_URL ||
+    "https://res.cloudinary.com/pwzr0vwy/image/upload/v1787059451/masa-logo-dark.png",
+
   CLOUDINARYNAME: process.env.CLOUDINARYNAME,
   CLOUDINARYAPIKEY: process.env.CLOUDINARYAPIKEY,
   CLOUDINARYAPISECRET: process.env.CLOUDINARYAPISECRET,

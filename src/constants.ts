@@ -58,4 +58,6 @@ export const ZohoMailTemplates = {
     "2d6f.7b2fb6a80c080b10.k1.83153ca0-d473-11f0-9139-fae9afc80e45.19affa08d6a",
   coins_deposit_confirmed:
     "2d6f.7b2fb6a80c080b10.k1.c1f29b71-85d0-11f1-93af-5254005934b4.19f8a005ea7",
+  withdrawal_successful:
+    "2d6f.7b2fb6a80c080b10.k1.b31daa61-9b54-11f1-b381-525400a229b1.1a017013805",
 };
