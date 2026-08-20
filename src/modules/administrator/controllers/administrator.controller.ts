@@ -393,12 +393,14 @@ export class AdministratorController {
   }
 
   @ApiOperation({ summary: "List notifications broadcast to users" })
+  @AllowRoles(AdministratorRoles.marketer)
   @Get("notifications")
   async listBroadcastNotifications() {
     return await this.notificationsService.listBroadcasts();
   }
 
   @ApiOperation({ summary: "Send a custom notification to all users" })
+  @AllowRoles(AdministratorRoles.marketer)
   @Post("notifications/broadcast")
   @UsePipes(new JoiValidationPipe(BroadcastNotificationValidation))
   async broadcastNotification(
@@ -431,6 +433,30 @@ export class AdministratorController {
   @Get("transactions")
   async transactions(@Req() req: AdminRequest) {
     return this.administratorService.transactions(req);
+  }
+
+  @ApiOperation({
+    summary: "Get pending withdrawals — payouts debited but not yet settled",
+  })
+  @ApiQuery({
+    name: "status",
+    required: false,
+    enum: ["processing", "pending"],
+    description: "Narrow to one leg of the queue. Omit for both.",
+  })
+  @ApiQuery({
+    name: "search",
+    required: false,
+    type: String,
+    description: "User email, phone or id, tx ref, or destination account",
+  })
+  @ApiQuery({ name: "date_from", required: false, type: String })
+  @ApiQuery({ name: "date_to", required: false, type: String })
+  @ApiQuery({ name: "page", required: false, type: Number })
+  @ApiQuery({ name: "limit", required: false, type: Number })
+  @Get("withdrawals/pending")
+  async pendingWithdrawals(@Req() req: AdminRequest) {
+    return this.administratorService.pendingWithdrawals(req);
   }
 
   @Get("withdrawal-wallets")

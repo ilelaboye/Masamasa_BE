@@ -35,6 +35,7 @@ import {
   paginate,
 } from "@/core/helpers";
 import {
+  TransactionEntityType,
   TransactionModeType,
   Transactions,
   TransactionStatusType,
@@ -494,6 +495,132 @@ export class AdministratorService {
     return { transactions, metadata };
   }
 
+  // Filters shared by the pending-payout list and its totals,
+  private pendingWithdrawalsQuery(filters: {
+    statuses: TransactionStatusType[];
+    search?: string;
+    date_from?: string;
+    date_to?: string;
+  }) {
+    const { search } = filters;
+
+    let queryRunner = this.transactionsRepository
+      .createQueryBuilder("trans")
+      .leftJoin("trans.user", "user")
+      .where("trans.entity_type = :entity_type", {
+        entity_type: TransactionEntityType.withdrawal,
+      })
+      .andWhere("trans.status IN (:...statuses)", {
+        statuses: filters.statuses,
+      });
+
+    if (search) {
+      queryRunner = queryRunner.andWhere(
+        new Brackets((qb) => {
+          qb.where("user.email ILIKE :search", { search: `%${search}%` })
+            .orWhere("user.phone ILIKE :search", { search: `%${search}%` })
+            .orWhere("trans.masamasa_ref ILIKE :search", {
+              search: `%${search}%`,
+            })
+            .orWhere("trans.metadata->>'accountNumber' ILIKE :search", {
+              search: `%${search}%`,
+            })
+            .orWhere("trans.metadata->>'accountName' ILIKE :search", {
+              search: `%${search}%`,
+            });
+          if (/^\d+$/.test(search)) {
+            qb.orWhere("user.id = :searchId", {
+              searchId: parseInt(search, 10),
+            });
+          }
+        }),
+      );
+    }
+
+    if (filters.date_from) {
+      queryRunner = queryRunner.andWhere("trans.created_at >= :startDate", {
+        startDate: new Date(filters.date_from).toISOString(),
+      });
+    }
+    if (filters.date_to) {
+      queryRunner = queryRunner.andWhere("trans.created_at <= :endDate", {
+        endDate: endOfDay(new Date(filters.date_to)),
+      });
+    }
+
+    return queryRunner;
+  }
+
+  async pendingWithdrawals(req: AdminRequest) {
+    const { limit, page, skip, search, status, date_from, date_to } =
+      getRequestQuery(req);
+
+    const pendingStatuses = [
+      TransactionStatusType.processing,
+      TransactionStatusType.pending,
+    ];
+
+    const filters = {
+      // ?status= narrows to one leg of the queue; anything else shows both.
+      statuses: pendingStatuses.includes(status as TransactionStatusType)
+        ? [status as TransactionStatusType]
+        : pendingStatuses,
+      search,
+      date_from,
+      date_to,
+    };
+
+    const listQuery = this.pendingWithdrawalsQuery(filters)
+      .addSelect([
+        "user.id",
+        "user.first_name",
+        "user.last_name",
+        "user.email",
+        "user.phone",
+      ])
+      .orderBy("trans.created_at", "DESC");
+
+    const count = await listQuery.getCount();
+    const rows = await listQuery.skip(skip).take(limit).getMany();
+
+    const totals = await this.pendingWithdrawalsQuery(filters)
+      .select("COALESCE(SUM(trans.amount), 0)", "total")
+      .getRawOne();
+
+    const withdrawals = rows.map((trans) => ({
+      id: trans.id,
+      reference: trans.masamasa_ref,
+      amount: Number(trans.amount) || 0,
+      currency: trans.currency,
+      status: trans.status,
+      retry: trans.retry,
+      session_id: trans.session_id,
+      bank_name: trans.metadata?.bankName ?? null,
+      account_name: trans.metadata?.accountName ?? null,
+      account_number: trans.metadata?.accountNumber ?? null,
+      narration: trans.metadata?.narration ?? null,
+      note: trans.metadata?.note ?? null,
+      created_at: trans.created_at,
+      updated_at: trans.updated_at,
+      user: trans.user
+        ? {
+            id: trans.user.id,
+            first_name: trans.user.first_name,
+            last_name: trans.user.last_name,
+            email: trans.user.email,
+            phone: trans.user.phone,
+          }
+        : null,
+    }));
+
+    const metadata = paginate(count, page, limit);
+    return {
+      withdrawals,
+      totals: { count, amount: parseFloat(totals?.total) || 0 },
+      metadata,
+    };
+  }
+
   async getUsers(req: AdminRequest) {
     const { limit, page, search, skip, date_from, date_to } =
       getRequestQuery(req);
@@ -751,7 +878,8 @@ export class AdministratorService {
     const staff = await this.adminRepository.findOne({
       where: { id: parseInt(id, 10) },
     });
-    if (!staff) throw new BadRequestException("This staff member was not found");
+    if (!staff)
+      throw new BadRequestException("This staff member was not found");
     return staff;
   }
 
