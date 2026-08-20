@@ -134,7 +134,11 @@ export class NotificationsService {
       where: {
         status: Status.active,
         kyc_status:
-          audience === "verified" ? KycStatus.success : Not(KycStatus.success),
+          audience === "verified"
+            ? KycStatus.success
+            : audience === "unverified"
+              ? KycStatus.none
+              : Not(IsNull()),
       },
     });
 
