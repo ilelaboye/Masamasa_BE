@@ -1,5 +1,5 @@
 import { UserRequest } from "@/definitions";
-import { Injectable, Logger } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { InjectRepository } from "@nestjs/typeorm";
 import { IsNull, QueryRunner, Repository } from "typeorm";
@@ -158,6 +158,41 @@ export class NotificationsService {
     };
   }
 
+  async updateBroadcast(
+    broadcastRef: string,
+    message: string,
+    adminId: number,
+  ) {
+    const recipients = await this.notificationRepository
+      .createQueryBuilder("n")
+      .where("n.tag = :tag", { tag: "announcement" })
+      .andWhere("n.metadata->>'broadcast_ref' = :ref", { ref: broadcastRef })
+      .getCount();
+
+    if (!recipients) {
+      throw new BadRequestException("Broadcast not found");
+    }
+
+    await this.notificationRepository.query(
+      `UPDATE notifications
+          SET message = $1,
+              metadata = (
+                COALESCE(metadata::jsonb, '{}'::jsonb) || jsonb_build_object(
+                  'edited_at', now(),
+                  'edited_by', $2::int,
+                  'original_message', COALESCE(metadata->>'original_message', message)
+                )
+              )::json
+        WHERE tag = 'announcement'
+          AND metadata->>'broadcast_ref' = $3`,
+      [message, adminId, broadcastRef],
+    );
+
+    return {
+      message: `Broadcast updated for ${recipients} user(s). Devices that already received the push keep the original text.`,
+    };
+  }
+
   /**
    * Admin history — one row per broadcast (grouped by the shared ref),
    * with the recipient count and send time.
@@ -170,6 +205,9 @@ export class NotificationsService {
       .addSelect("MIN(n.created_at)", "created_at")
       .addSelect("COUNT(*)", "recipients")
       .addSelect("MIN(n.metadata->>'sent_by_admin')", "sent_by_admin")
+      .addSelect("MAX(n.metadata->>'edited_at')", "edited_at")
+      .addSelect("MAX(n.metadata->>'edited_by')", "edited_by")
+      .addSelect("MIN(n.metadata->>'original_message')", "original_message")
       .where("n.tag = :tag", { tag: "announcement" })
       .groupBy("n.metadata->>'broadcast_ref'")
       .addGroupBy("n.message")

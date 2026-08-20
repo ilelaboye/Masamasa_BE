@@ -413,6 +413,25 @@ export class AdministratorController {
     );
   }
 
+  @ApiOperation({
+    summary:
+      "Edit a broadcast notification — updates the in-app message for every recipient",
+  })
+  @AllowRoles(AdministratorRoles.marketer)
+  @Patch("notifications/:ref")
+  async updateBroadcastNotification(
+    @Param("ref") ref: string,
+    @Body(new JoiValidationPipe(BroadcastNotificationValidation))
+    body: BroadcastNotificationDto,
+    @Req() req: AdminRequest,
+  ) {
+    return await this.notificationsService.updateBroadcast(
+      ref,
+      body.message,
+      req.admin.id,
+    );
+  }
+
   @ApiOperation({ summary: "Get a single transaction details" })
   @Get("transaction/:id")
   async transaction(@Param("id") id: string, @Req() req: AdminRequest) {
