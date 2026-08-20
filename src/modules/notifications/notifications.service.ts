@@ -2,7 +2,7 @@ import { UserRequest } from "@/definitions";
 import { Injectable, Logger } from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { InjectRepository } from "@nestjs/typeorm";
-import { IsNull, QueryRunner, Repository } from "typeorm";
+import { IsNull, Not, QueryRunner, Repository } from "typeorm";
 import { CreateNotificationDto } from "./dto/create-notification.dto";
 import { Notification } from "./entities/notification.entity";
 import { KycStatus, Status, User } from "@/modules/users/entities/user.entity";
@@ -129,19 +129,28 @@ export class NotificationsService {
   ) {
     const notificationTag = tag?.trim() || "announcement";
 
-    const allUsers = await this.userRepository.find({
+    // const allUsers = await this.userRepository.find({
+    //   select: ["id", "notification_token", "kyc_status", "status"],
+    // });
+
+    const users = await this.userRepository.find({
       select: ["id", "notification_token", "kyc_status", "status"],
+      where: {
+        status: Status.active,
+        kyc_status:
+          audience === "verified" ? KycStatus.success : Not(KycStatus.success),
+      },
     });
 
     // Soft-deleted users are already excluded by TypeORM. Deactivated accounts
     // are dropped here — a suspended user should not receive announcements.
     // Filtering in plain JS rather than SQL: the whole list is loaded anyway.
-    let users = allUsers.filter((user) => user.status === Status.active);
-    if (audience === "verified") {
-      users = users.filter((user) => user.kyc_status === KycStatus.success);
-    } else if (audience === "unverified") {
-      users = users.filter((user) => user.kyc_status !== KycStatus.success);
-    }
+    // let users = allUsers.filter((user) => user.status === Status.active);
+    // if (audience === "verified") {
+    //   users = users.filter((user) => user.kyc_status === KycStatus.success);
+    // } else if (audience === "unverified") {
+    //   users = users.filter((user) => user.kyc_status !== KycStatus.success);
+    // }
 
     // One shared ref per broadcast so the per-user rows can be grouped back
     // into a single entry in the admin history.
@@ -166,7 +175,7 @@ export class NotificationsService {
     const delivered = await this.pushService.sendToTokens(
       tokens,
       "MasaMasa",
-      message,
+      `${notificationTag}: ${message}`,
       { tag: notificationTag, broadcast_ref: broadcastRef },
     );
 

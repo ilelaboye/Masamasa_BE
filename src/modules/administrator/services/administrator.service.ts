@@ -430,8 +430,16 @@ export class AdministratorService {
   }
 
   async transactions(req: AdminRequest) {
-    const { limit, page, skip, date_from, date_to, search } =
-      getRequestQuery(req);
+    const {
+      limit,
+      page,
+      skip,
+      date_from,
+      date_to,
+      search,
+      entity_type,
+      status,
+    } = getRequestQuery(req);
 
     let queryRunner = this.transactionsRepository
       .createQueryBuilder("trans")
@@ -484,6 +492,27 @@ export class AdministratorService {
           endDate: endOfDay(new Date(date_to)),
         },
       );
+    }
+    if (
+      entity_type &&
+      Object.values(TransactionEntityType).includes(
+        entity_type as TransactionEntityType,
+      )
+    ) {
+      queryRunner = queryRunner.andWhere("trans.entity_type = :entity_type", {
+        entity_type: entity_type,
+      });
+    }
+
+    if (
+      status &&
+      Object.values(TransactionStatusType).includes(
+        status as TransactionStatusType,
+      )
+    ) {
+      queryRunner = queryRunner.andWhere("trans.status = :status", {
+        status: status,
+      });
     }
 
     queryRunner = queryRunner.orderBy("trans.created_at", "DESC");
