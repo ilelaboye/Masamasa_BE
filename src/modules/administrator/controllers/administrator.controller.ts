@@ -59,6 +59,10 @@ import { QuidaxService } from "@/modules/quidax/quidax.service";
 import { AdminRoleGuard } from "@/guards/admin-role.guard";
 import { AllowAllAdmins, AllowRoles } from "@/guards/decorator/roles.decorator";
 import { AdministratorRoles } from "../entities/administrator.entity";
+import {
+  TransactionEntityType,
+  TransactionStatusType,
+} from "@/modules/transactions/transactions.entity";
 
 @ApiTags("Admin")
 @ApiCookieAuth(_ADMIN_AUTH_COOKIE_NAME_)
@@ -432,33 +436,21 @@ export class AdministratorController {
     required: false,
     description: "Filter transaction by date range",
   })
-  @Get("transactions")
-  async transactions(@Req() req: AdminRequest) {
-    return this.administratorService.transactions(req);
-  }
-
-  @ApiOperation({
-    summary: "Get pending withdrawals — payouts debited but not yet settled",
-  })
   @ApiQuery({
     name: "status",
     required: false,
-    enum: ["processing", "pending"],
-    description: "Narrow to one leg of the queue. Omit for both.",
+    enum: TransactionStatusType,
+    description: "status of the transaction",
   })
   @ApiQuery({
-    name: "search",
+    name: "entity_type",
     required: false,
-    type: String,
-    description: "User email, phone or id, tx ref, or destination account",
+    enum: TransactionEntityType,
+    description: "Entity type of the transaction",
   })
-  @ApiQuery({ name: "date_from", required: false, type: String })
-  @ApiQuery({ name: "date_to", required: false, type: String })
-  @ApiQuery({ name: "page", required: false, type: Number })
-  @ApiQuery({ name: "limit", required: false, type: Number })
-  @Get("withdrawals/pending")
-  async pendingWithdrawals(@Req() req: AdminRequest) {
-    return this.administratorService.pendingWithdrawals(req);
+  @Get("transactions")
+  async transactions(@Req() req: AdminRequest) {
+    return this.administratorService.transactions(req);
   }
 
   @Get("withdrawal-wallets")

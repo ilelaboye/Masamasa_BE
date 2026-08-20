@@ -129,10 +129,6 @@ export class NotificationsService {
   ) {
     const notificationTag = tag?.trim() || "announcement";
 
-    // const allUsers = await this.userRepository.find({
-    //   select: ["id", "notification_token", "kyc_status", "status"],
-    // });
-
     const users = await this.userRepository.find({
       select: ["id", "notification_token", "kyc_status", "status"],
       where: {
@@ -142,18 +138,6 @@ export class NotificationsService {
       },
     });
 
-    // Soft-deleted users are already excluded by TypeORM. Deactivated accounts
-    // are dropped here — a suspended user should not receive announcements.
-    // Filtering in plain JS rather than SQL: the whole list is loaded anyway.
-    // let users = allUsers.filter((user) => user.status === Status.active);
-    // if (audience === "verified") {
-    //   users = users.filter((user) => user.kyc_status === KycStatus.success);
-    // } else if (audience === "unverified") {
-    //   users = users.filter((user) => user.kyc_status !== KycStatus.success);
-    // }
-
-    // One shared ref per broadcast so the per-user rows can be grouped back
-    // into a single entry in the admin history.
     const broadcastRef = generateMasamasaRef();
 
     const chunkSize = 500;
