@@ -167,8 +167,8 @@ export class NotificationsService {
     const tokens = users.map((u) => u.notification_token).filter(Boolean);
     const delivered = await this.pushService.sendToTokens(
       tokens,
-      "MasaMasa",
-      `${notificationTag}: ${message}`,
+      notificationTag,
+      `${message}`,
       { tag: notificationTag, broadcast_ref: broadcastRef },
     );
 
