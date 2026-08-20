@@ -80,7 +80,10 @@ export class AuthService extends BaseService {
     const client = req ? getClientInfo(req) : undefined;
 
     sendLoginAlertEmail(user, {
-      device: client?.user_agent,
+      // device_name, not the raw user_agent: the UA of an app build that does
+      // not identify itself reads as "Dart/3.13 (dart:io)", which told users
+      // nothing on an email meant to help them spot a login they did not make.
+      device: client?.device_name,
       ip: client?.ip,
     });
 

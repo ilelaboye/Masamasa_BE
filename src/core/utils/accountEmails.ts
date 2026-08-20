@@ -61,7 +61,9 @@ function shell(greetingName: string, body: string): string {
 
 export function sendLoginAlertEmail(
   user: EmailUser,
-  context: { device?: string; ip?: string } = {},
+  // Both are nullable: the device cannot always be determined from a request,
+  // and getClientInfo yields null rather than undefined when it cannot.
+  context: { device?: string | null; ip?: string | null } = {},
 ) {
   const details = [
     `<li><b>Time:</b> ${nowInLagos()} (WAT)</li>`,

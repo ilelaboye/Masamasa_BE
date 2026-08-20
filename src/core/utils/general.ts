@@ -56,6 +56,69 @@ export const verifyQuidaxWebhook = (
 };
 
 /**
+ * A device label fit to show a user, or null when we genuinely cannot tell.
+ *
+ * The mobile app sends `x-device-name` ("iPhone (iOS 17.2)"). Anything else is
+ * derived from the User-Agent. Returning null matters: HTTP clients that do
+ * not identify themselves send things like `Dart/3.13 (dart:io)`, and printing
+ * that in a security email tells the reader nothing about whether the login
+ * was theirs — an omitted line is better than a misleading one.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const describeDevice = (req: any): string | null => {
+  const declared = req?.headers?.["x-device-name"];
+  if (typeof declared === "string" && declared.trim()) {
+    // Header values are attacker-controlled and land in an HTML email, so
+    // strip anything that could break out of the markup and cap the length.
+    return declared
+      .replace(/[<>&"']/g, "")
+      .trim()
+      .slice(0, 80);
+  }
+
+  const agent = req?.headers?.["user-agent"];
+  if (typeof agent !== "string" || !agent.trim()) return null;
+
+  // Bare HTTP-client UAs — our own older app builds, curl, Postman. None of
+  // them say anything about the device.
+  if (/^(Dart|dio|axios|node|okhttp|curl|PostmanRuntime|python)/i.test(agent)) {
+    return null;
+  }
+
+  // Order is specific-before-generic, not alphabetical: an iPhone UA contains
+  // "like Mac OS X" and an Android UA contains "Linux", so testing for macOS
+  // or Linux first misreports both.
+  const os = /(iPhone|iPad|iPod)/.test(agent)
+    ? "iOS"
+    : /Android/.test(agent)
+      ? "Android"
+      : /Windows NT/.test(agent)
+        ? "Windows"
+        : /Mac OS X|Macintosh/.test(agent)
+          ? "macOS"
+          : /Linux|X11/.test(agent)
+            ? "Linux"
+            : null;
+
+  // Edge and Opera also contain "Chrome", and Chrome contains "Safari", so the
+  // order here is the specific-before-generic one, not alphabetical.
+  const browser = /Edg\//.test(agent)
+    ? "Edge"
+    : /OPR\//.test(agent)
+      ? "Opera"
+      : /Firefox\//.test(agent)
+        ? "Firefox"
+        : /Chrome\//.test(agent)
+          ? "Chrome"
+          : /Safari\//.test(agent)
+            ? "Safari"
+            : null;
+
+  if (browser && os) return `${browser} on ${os}`;
+  return browser ?? os;
+};
+
+/**
  * Client context captured on user-initiated transactions so the admin can
  * see where and on what device a transaction was carried out.
  */
@@ -70,7 +133,9 @@ export const getClientInfo = (req: any) => {
 
   return {
     ip,
+    // Kept raw for forensics; use device_name for anything a user reads.
     user_agent: req?.headers?.["user-agent"] ?? null,
+    device_name: describeDevice(req),
     device_id: req?.user?.device_id ?? null,
   };
 };
