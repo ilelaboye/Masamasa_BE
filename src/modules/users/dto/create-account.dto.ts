@@ -31,6 +31,10 @@ export class CreateAccountDto {
 
   @ApiProperty({ example: "fcm-token", required: false })
   notification_token?: string;
+
+  /** Someone else's referral code. Optional — most signups are organic. */
+  @ApiProperty({ example: "TEE2026", required: false })
+  referral_code?: string;
 }
 
 export class UpdateAccountDto {

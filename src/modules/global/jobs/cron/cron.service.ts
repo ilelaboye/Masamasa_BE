@@ -2,10 +2,14 @@ import { Injectable } from "@nestjs/common";
 import { CronJob } from "./cron.job";
 import { Cron, Interval } from "@nestjs/schedule";
 import { _IS_PROD_ } from "@/constants";
+import { ReferralsService } from "@/modules/referrals/referrals.service";
 
 @Injectable()
 export class CronService {
-  constructor(private readonly cronJob: CronJob) {}
+  constructor(
+    private readonly cronJob: CronJob,
+    private readonly referralsService: ReferralsService,
+  ) {}
 
   // @Interval(50000)
   // @Interval(10000)
@@ -38,5 +42,15 @@ export class CronService {
   async monitorProviderBalances() {
     if (!_IS_PROD_) return;
     await this.cronJob.monitorProviderBalances();
+  }
+
+  // Safety net for referral rewards. The deposit webhooks award them in the
+  // moment; this catches any deposit that reached `success` without passing
+  // through those paths. Nightly, since a few hours' delay on a reward is
+  // acceptable and the sweep scans every referred account.
+  @Cron("15 2 * * *")
+  async awardMissedReferralRewards() {
+    if (!_IS_PROD_) return;
+    await this.referralsService.awardMissedQualifications();
   }
 }

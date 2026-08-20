@@ -37,6 +37,9 @@ export enum TransactionEntityType {
   electricity_bill = "electricity_bill",
   tv_subscription = "tv_subscription",
   data = "data",
+  // Referral earnings moved out of the earning account into the main balance.
+  // The column is varchar, not a DB enum, so adding a member needs no migration.
+  referral_earning = "referral_earning",
 }
 export enum TransactionStatusType {
   success = "success",

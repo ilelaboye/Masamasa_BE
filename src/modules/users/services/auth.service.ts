@@ -50,6 +50,7 @@ import { QuidaxService } from "@/modules/quidax/quidax.service";
 import { MixpanelService } from "@/modules/global/mixpanel/mixpanel.service";
 import { NotificationsService } from "@/modules/notifications/notifications.service";
 import { NotificationTag } from "@/modules/notifications/entities/notification.entity";
+import { ReferralsService } from "@/modules/referrals/referrals.service";
 import { User, Status, TokenType } from "../entities/user.entity";
 
 @Injectable()
@@ -66,6 +67,7 @@ export class AuthService extends BaseService {
     private readonly quidaxService: QuidaxService,
     private readonly mixpanel: MixpanelService,
     private readonly notificationsService: NotificationsService,
+    private readonly referralsService: ReferralsService,
   ) {
     super();
   }
@@ -323,6 +325,14 @@ export class AuthService extends BaseService {
         }
       }
 
+      // Resolved before the insert so an unrecognised code fails the signup
+      // outright — quietly dropping it would cost the referrer a reward with
+      // nothing to explain why. Throws BadRequestException on a bad code.
+      const referredById = await this.referralsService.resolveReferrer(
+        createAccountDto.referral_code,
+        queryRunner.manager,
+      );
+
       const rememberToken = generateRandomNumberString(6);
       const user = await queryRunner.manager.save(User, {
         first_name: first_name.toLowerCase(),
@@ -337,6 +347,12 @@ export class AuthService extends BaseService {
         email_verified_at: google_id ? new Date() : null,
         device_id: createAccountDto.device_id || undefined,
         notification_token: createAccountDto.notification_token || undefined,
+        // Every account gets its own code at creation, so the Refer & Earn
+        // screen has something to show from the very first session.
+        referral_code: await this.referralsService.generateUniqueCode(
+          queryRunner.manager,
+        ),
+        referred_by_id: referredById,
       });
 
       await queryRunner.commitTransaction();

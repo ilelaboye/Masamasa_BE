@@ -47,6 +47,15 @@ export const WITHDRAWAL_MIN_PER_TRANSACTION = 1000;
 // could simply be withdrawn again.
 export const WITHDRAWAL_MAX_UNVERIFIED = 50000;
 
+// ─── Referrals ───────────────────────────────────────────────────────────────
+// A referrer earns REFERRAL_REWARD_NGN once — and only once — per person they
+// referred, the moment that person's lifetime successful deposits cross
+// REFERRAL_QUALIFYING_DEPOSIT_USD. Both figures are shown to users in the app,
+// so they are defined here rather than inline at the check.
+export const REFERRAL_REWARD_NGN = 1500;
+export const REFERRAL_QUALIFYING_DEPOSIT_USD = 2000;
+export const REFERRAL_CODE_LENGTH = 7;
+
 export const MAILJETTemplates = {
   verify_email: 7451545,
 };

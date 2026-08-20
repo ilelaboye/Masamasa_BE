@@ -22,6 +22,15 @@ export const CreateAccountValidation = Joi.object().keys({
       "any.only": "password does not match",
     })
     .label("Confirm password"),
+  // Someone else's referral code. The length range matches the users
+  // .referral_code column (varchar(10), generated at 7) so a code that could
+  // never exist is rejected before it reaches a database lookup.
+  referral_code: Joi.string()
+    .min(7)
+    .max(10)
+    .optional()
+    .allow(null, "")
+    .label("Referral code"),
   // Present only on the final change call; the OTP-request step omits it.
   otp: Joi.string().optional().allow(null, "").label("Verification code"),
 });

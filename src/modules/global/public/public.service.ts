@@ -43,6 +43,7 @@ import {
 } from "@/modules/quidax/quidax.constants";
 import { QuidaxService } from "@/modules/quidax/quidax.service";
 import { CacheService } from "../cache-container/cache-container.service";
+import { ReferralsService } from "@/modules/referrals/referrals.service";
 import { MixpanelService } from "../mixpanel/mixpanel.service";
 import {
   capitalizeString,
@@ -78,6 +79,7 @@ export class PublicService {
     private readonly quidaxService: QuidaxService,
     private readonly cacheService: CacheService,
     private readonly mixpanel: MixpanelService,
+    private readonly referralsService: ReferralsService,
   ) {}
 
   async transactionWebhook(transactionWebhook: TransactionWebhookDto) {
@@ -165,6 +167,12 @@ export class PublicService {
       pushTitle: "Deposit Successful",
       metadata: transactionWebhook,
     });
+
+    // This deposit may be the one that takes the depositor past the referral
+    // threshold. Awaited so the reward is in place before the webhook returns,
+    // but the call swallows its own errors — referral bookkeeping must never
+    // fail a deposit that has already been credited.
+    await this.referralsService.evaluateQualification(wallet.user_id);
 
     return trans;
   }
@@ -1068,6 +1076,12 @@ export class PublicService {
       pushTitle: "Deposit Successful",
       metadata: data,
     });
+
+    // This deposit may be the one that takes the depositor past the referral
+    // threshold. Awaited so the reward is in place before the webhook returns,
+    // but the call swallows its own errors — referral bookkeeping must never
+    // fail a deposit that has already been credited.
+    await this.referralsService.evaluateQualification(wallet.user_id);
 
     // Move the deposited crypto from the user's Quidax sub-account into the
     // master account. Non-blocking — a sweep failure must never fail the

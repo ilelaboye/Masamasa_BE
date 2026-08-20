@@ -6,6 +6,7 @@ import {
   DeleteDateColumn,
   Entity,
   JoinColumn,
+  ManyToOne,
   OneToMany,
   OneToOne,
   PrimaryGeneratedColumn,
@@ -95,6 +96,30 @@ export class User {
 
   @Column({ nullable: true })
   country: string;
+
+  /**
+   * This user's own referral code — what they share with other people.
+   * Unique across the table; generated at signup and backfilled for accounts
+   * that predate the referral feature. Sized to 10 so the generated length
+   * (7 today) can grow without a schema change.
+   */
+  @Column({ type: "varchar", length: 10, unique: true })
+  referral_code: string;
+
+  /**
+   * The user whose referral code this account signed up with, or null for an
+   * organic signup. Set once at registration and never changed — retroactive
+   * attribution would let anyone claim rewards for existing users.
+   */
+  @ManyToOne(() => User, (user) => user.id, {
+    nullable: true,
+    onDelete: "SET NULL",
+  })
+  @JoinColumn({ name: "referred_by_id" })
+  referred_by?: User;
+
+  @Column({ nullable: true })
+  referred_by_id?: number | null;
 
   @Column({ nullable: true })
   quidax_id?: string;
