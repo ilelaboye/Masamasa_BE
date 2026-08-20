@@ -410,25 +410,8 @@ export class AdministratorController {
     return await this.notificationsService.broadcastToAll(
       body.message,
       req.admin.id,
-    );
-  }
-
-  @ApiOperation({
-    summary:
-      "Edit a broadcast notification — updates the in-app message for every recipient",
-  })
-  @AllowRoles(AdministratorRoles.marketer)
-  @Patch("notifications/:ref")
-  async updateBroadcastNotification(
-    @Param("ref") ref: string,
-    @Body(new JoiValidationPipe(BroadcastNotificationValidation))
-    body: BroadcastNotificationDto,
-    @Req() req: AdminRequest,
-  ) {
-    return await this.notificationsService.updateBroadcast(
-      ref,
-      body.message,
-      req.admin.id,
+      body.tag,
+      body.audience,
     );
   }
 

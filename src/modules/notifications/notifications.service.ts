@@ -1,11 +1,15 @@
 import { UserRequest } from "@/definitions";
-import { BadRequestException, Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { InjectRepository } from "@nestjs/typeorm";
 import { IsNull, QueryRunner, Repository } from "typeorm";
 import { CreateNotificationDto } from "./dto/create-notification.dto";
 import { Notification } from "./entities/notification.entity";
-import { User } from "@/modules/users/entities/user.entity";
+import { KycStatus, Status, User } from "@/modules/users/entities/user.entity";
+
+/** Who a broadcast reaches. "verified" is KYC, the platform's own notion of a
+ *  verified account — not email confirmation. */
+export type BroadcastAudience = "all" | "verified" | "unverified";
 import { getRequestQuery } from "@/core/utils";
 import { generateMasamasaRef, paginate } from "@/core/helpers";
 import { PushService } from "./push.service";
@@ -117,14 +121,27 @@ export class NotificationsService {
     return { message: "All notifications marked as read." };
   }
 
-  /**
-   * Admin broadcast — creates one notification per user with the given
-   * message. Inserted in chunks to keep a single statement from ballooning.
-   */
-  async broadcastToAll(message: string, adminId: number) {
-    const users = await this.userRepository.find({
-      select: ["id", "notification_token"],
+  async broadcastToAll(
+    message: string,
+    adminId: number,
+    tag?: string,
+    audience: BroadcastAudience = "all",
+  ) {
+    const notificationTag = tag?.trim() || "announcement";
+
+    const allUsers = await this.userRepository.find({
+      select: ["id", "notification_token", "kyc_status", "status"],
     });
+
+    // Soft-deleted users are already excluded by TypeORM. Deactivated accounts
+    // are dropped here — a suspended user should not receive announcements.
+    // Filtering in plain JS rather than SQL: the whole list is loaded anyway.
+    let users = allUsers.filter((user) => user.status === Status.active);
+    if (audience === "verified") {
+      users = users.filter((user) => user.kyc_status === KycStatus.success);
+    } else if (audience === "unverified") {
+      users = users.filter((user) => user.kyc_status !== KycStatus.success);
+    }
 
     // One shared ref per broadcast so the per-user rows can be grouped back
     // into a single entry in the admin history.
@@ -136,7 +153,7 @@ export class NotificationsService {
         this.notificationRepository.create({
           user_id: user.id,
           message,
-          tag: "announcement",
+          tag: notificationTag,
           metadata: { sent_by_admin: adminId, broadcast_ref: broadcastRef },
         }),
       );
@@ -150,46 +167,11 @@ export class NotificationsService {
       tokens,
       "MasaMasa",
       message,
-      { tag: "announcement", broadcast_ref: broadcastRef },
+      { tag: notificationTag, broadcast_ref: broadcastRef },
     );
 
     return {
       message: `Notification sent to ${users.length} user(s), push delivered to ${delivered} device(s).`,
-    };
-  }
-
-  async updateBroadcast(
-    broadcastRef: string,
-    message: string,
-    adminId: number,
-  ) {
-    const recipients = await this.notificationRepository
-      .createQueryBuilder("n")
-      .where("n.tag = :tag", { tag: "announcement" })
-      .andWhere("n.metadata->>'broadcast_ref' = :ref", { ref: broadcastRef })
-      .getCount();
-
-    if (!recipients) {
-      throw new BadRequestException("Broadcast not found");
-    }
-
-    await this.notificationRepository.query(
-      `UPDATE notifications
-          SET message = $1,
-              metadata = (
-                COALESCE(metadata::jsonb, '{}'::jsonb) || jsonb_build_object(
-                  'edited_at', now(),
-                  'edited_by', $2::int,
-                  'original_message', COALESCE(metadata->>'original_message', message)
-                )
-              )::json
-        WHERE tag = 'announcement'
-          AND metadata->>'broadcast_ref' = $3`,
-      [message, adminId, broadcastRef],
-    );
-
-    return {
-      message: `Broadcast updated for ${recipients} user(s). Devices that already received the push keep the original text.`,
     };
   }
 
@@ -202,15 +184,16 @@ export class NotificationsService {
       .createQueryBuilder("n")
       .select("n.metadata->>'broadcast_ref'", "broadcast_ref")
       .addSelect("n.message", "message")
+      .addSelect("n.tag", "tag")
       .addSelect("MIN(n.created_at)", "created_at")
       .addSelect("COUNT(*)", "recipients")
       .addSelect("MIN(n.metadata->>'sent_by_admin')", "sent_by_admin")
-      .addSelect("MAX(n.metadata->>'edited_at')", "edited_at")
-      .addSelect("MAX(n.metadata->>'edited_by')", "edited_by")
-      .addSelect("MIN(n.metadata->>'original_message')", "original_message")
-      .where("n.tag = :tag", { tag: "announcement" })
+      // Keyed off the shared ref, not the tag: the tag is caller-supplied now,
+      // so filtering on "announcement" would hide every custom category.
+      .where("n.metadata->>'broadcast_ref' IS NOT NULL")
       .groupBy("n.metadata->>'broadcast_ref'")
       .addGroupBy("n.message")
+      .addGroupBy("n.tag")
       .orderBy("MIN(n.created_at)", "DESC")
       .limit(200)
       .getRawMany();

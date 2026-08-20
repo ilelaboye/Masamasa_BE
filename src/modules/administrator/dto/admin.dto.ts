@@ -21,6 +21,22 @@ export class DeclineKycDto {
 export class BroadcastNotificationDto {
   @ApiProperty({ example: "We have a new feature!" })
   message: string;
+
+  @ApiProperty({
+    example: "announcement",
+    required: false,
+    description:
+      "Category the app uses to pick an icon. Defaults to 'announcement'.",
+  })
+  tag?: string;
+
+  @ApiProperty({
+    example: "all",
+    required: false,
+    enum: ["all", "verified", "unverified"],
+    description: "Who receives it. 'verified' means KYC verified.",
+  })
+  audience?: "all" | "verified" | "unverified";
 }
 
 export class UpdateAdminProfileDto {
