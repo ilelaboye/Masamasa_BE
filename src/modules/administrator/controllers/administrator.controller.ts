@@ -59,6 +59,10 @@ import { QuidaxService } from "@/modules/quidax/quidax.service";
 import { AdminRoleGuard } from "@/guards/admin-role.guard";
 import { AllowAllAdmins, AllowRoles } from "@/guards/decorator/roles.decorator";
 import { AdministratorRoles } from "../entities/administrator.entity";
+import {
+  TransactionEntityType,
+  TransactionStatusType,
+} from "@/modules/transactions/transactions.entity";
 
 @ApiTags("Admin")
 @ApiCookieAuth(_ADMIN_AUTH_COOKIE_NAME_)
@@ -393,12 +397,14 @@ export class AdministratorController {
   }
 
   @ApiOperation({ summary: "List notifications broadcast to users" })
+  @AllowRoles(AdministratorRoles.marketer)
   @Get("notifications")
   async listBroadcastNotifications() {
     return await this.notificationsService.listBroadcasts();
   }
 
   @ApiOperation({ summary: "Send a custom notification to all users" })
+  @AllowRoles(AdministratorRoles.marketer)
   @Post("notifications/broadcast")
   @UsePipes(new JoiValidationPipe(BroadcastNotificationValidation))
   async broadcastNotification(
@@ -408,6 +414,8 @@ export class AdministratorController {
     return await this.notificationsService.broadcastToAll(
       body.message,
       req.admin.id,
+      body.tag,
+      body.audience,
     );
   }
 
@@ -427,6 +435,18 @@ export class AdministratorController {
     name: "date_to",
     required: false,
     description: "Filter transaction by date range",
+  })
+  @ApiQuery({
+    name: "status",
+    required: false,
+    enum: TransactionStatusType,
+    description: "status of the transaction",
+  })
+  @ApiQuery({
+    name: "entity_type",
+    required: false,
+    enum: TransactionEntityType,
+    description: "Entity type of the transaction",
   })
   @Get("transactions")
   async transactions(@Req() req: AdminRequest) {

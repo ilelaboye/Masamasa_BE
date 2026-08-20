@@ -220,6 +220,7 @@ export function sendWithdrawalSuccessEmail(
         accountNumber: maskedAccount,
         reference: details.reference ?? "",
         date: `${nowInLagos()} (WAT)`,
+        supportEmail: appConfig.SUPPORT_EMAIL,
       },
     },
   ).catch(() => {});
@@ -324,4 +325,32 @@ export function sendStaffInviteEmail(
       ),
     },
   );
+}
+
+/**
+ * Internal ops alert: a provider's float has fallen below its threshold. Goes
+ * to the ops inbox rather than to a user, but through the same shell as every
+ * other email we send, so it carries the MasaMasa header.
+ */
+export function sendLowBalanceAlertEmail(
+  to: string,
+  details: { provider: string; balance: number; threshold: number },
+) {
+  const naira = (value: number) =>
+    `₦${(Number(value) || 0).toLocaleString("en-NG")}`;
+
+  const downstream =
+    details.provider === "Nomba" ? "withdrawals" : "bill purchases";
+
+  sendZohoMail(
+    { to: { name: "MasaMasa", email: to } },
+    {
+      subject: `⚠️ ${details.provider} balance low — ${naira(details.balance)}`,
+      html: shell(
+        "team",
+        `<p>The <b>${esc(details.provider)}</b> account balance is <b>${naira(details.balance)}</b>, below the ${naira(details.threshold)} threshold.</p>
+         <p>Please top up the account to keep ${downstream} flowing — parked transactions retry automatically once funded.</p>`,
+      ),
+    },
+  ).catch(() => {});
 }

@@ -14,6 +14,13 @@ export const CreateUpdateExchangeRateValidation = Joi.object().keys({
 
 export const BroadcastNotificationValidation = Joi.object().keys({
   message: Joi.string().trim().min(1).max(500).required().label("Message"),
+  // Optional so clients that only send a message keep working. The fallback
+  // lives in broadcastToAll — JoiValidationPipe returns the raw body, so a
+  // Joi .default() here would never reach the service.
+  tag: Joi.string().trim().min(1).max(255).label("Tag"),
+  audience: Joi.string()
+    .valid("all", "verified", "unverified")
+    .label("Audience"),
 });
 
 export const UpdateUserStatusValidation = Joi.object().keys({

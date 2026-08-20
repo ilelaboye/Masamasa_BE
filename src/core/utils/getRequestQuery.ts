@@ -9,6 +9,7 @@ export const getRequestQuery = (req) => {
   const currency = req.query.currency as string;
   const payee = req.query.payee as string;
   const payee_search = req.query.payee_search as string;
+  const entity_type = req.query.entity_type as string;
 
   const page =
     req.query.page &&
@@ -40,6 +41,7 @@ export const getRequestQuery = (req) => {
     payee,
     payee_search,
     status,
+    entity_type,
   };
 };
 

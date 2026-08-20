@@ -2,10 +2,15 @@ import { UserRequest } from "@/definitions";
 import { Injectable, Logger } from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { InjectRepository } from "@nestjs/typeorm";
-import { IsNull, QueryRunner, Repository } from "typeorm";
+import { IsNull, Not, QueryRunner, Repository } from "typeorm";
 import { CreateNotificationDto } from "./dto/create-notification.dto";
 import { Notification } from "./entities/notification.entity";
-import { User } from "@/modules/users/entities/user.entity";
+import { KycStatus, Status, User } from "@/modules/users/entities/user.entity";
+import { Administrator } from "@/modules/administrator/entities/administrator.entity";
+
+/** Who a broadcast reaches. "verified" is KYC, the platform's own notion of a
+ *  verified account — not email confirmation. */
+export type BroadcastAudience = "all" | "verified" | "unverified";
 import { getRequestQuery } from "@/core/utils";
 import { generateMasamasaRef, paginate } from "@/core/helpers";
 import { PushService } from "./push.service";
@@ -117,17 +122,27 @@ export class NotificationsService {
     return { message: "All notifications marked as read." };
   }
 
-  /**
-   * Admin broadcast — creates one notification per user with the given
-   * message. Inserted in chunks to keep a single statement from ballooning.
-   */
-  async broadcastToAll(message: string, adminId: number) {
+  async broadcastToAll(
+    message: string,
+    adminId: number,
+    tag?: string,
+    audience: BroadcastAudience = "all",
+  ) {
+    const notificationTag = tag?.trim() || "announcement";
+
     const users = await this.userRepository.find({
-      select: ["id", "notification_token"],
+      select: ["id", "notification_token", "kyc_status", "status"],
+      where: {
+        status: Status.active,
+        kyc_status:
+          audience === "verified"
+            ? KycStatus.success
+            : audience === "unverified"
+              ? KycStatus.none
+              : Not(IsNull()),
+      },
     });
 
-    // One shared ref per broadcast so the per-user rows can be grouped back
-    // into a single entry in the admin history.
     const broadcastRef = generateMasamasaRef();
 
     const chunkSize = 500;
@@ -136,8 +151,12 @@ export class NotificationsService {
         this.notificationRepository.create({
           user_id: user.id,
           message,
-          tag: "announcement",
-          metadata: { sent_by_admin: adminId, broadcast_ref: broadcastRef },
+          tag: notificationTag,
+          metadata: {
+            sent_by_admin: adminId,
+            broadcast_ref: broadcastRef,
+            audience,
+          },
         }),
       );
       await this.notificationRepository.insert(chunk);
@@ -148,9 +167,9 @@ export class NotificationsService {
     const tokens = users.map((u) => u.notification_token).filter(Boolean);
     const delivered = await this.pushService.sendToTokens(
       tokens,
-      "MasaMasa",
-      message,
-      { tag: "announcement", broadcast_ref: broadcastRef },
+      notificationTag,
+      `${message}`,
+      { tag: notificationTag, broadcast_ref: broadcastRef },
     );
 
     return {
@@ -160,19 +179,55 @@ export class NotificationsService {
 
   /**
    * Admin history — one row per broadcast (grouped by the shared ref),
-   * with the recipient count and send time.
+   * with the recipient count, send time and who sent it.
    */
   async listBroadcasts() {
     return await this.notificationRepository
       .createQueryBuilder("n")
+      // Compared as text rather than casting the JSON value to int: metadata is
+      // schemaless, and a single row holding a non-numeric sent_by_admin would
+      // make `::int` throw for the whole query. Casting the trusted integer
+      // column instead cannot fail. The table is tiny and this is capped at 200
+      // rows, so losing the index on administrators.id costs nothing. CAST
+      // rather than ::text — TypeORM scans condition strings for ":param"
+      // placeholders, and a bare "::" is trouble this does not need.
+      //
+      // withDeleted because Administrator is soft-deleted, so TypeORM otherwise
+      // appends "admin.deleted_at IS NULL" to this join and a broadcast sent by
+      // an admin who has since left silently loses its sender. This is an audit
+      // list — it should still say who sent it. Safe on the root entity too:
+      // Notification has no delete column, so nothing else is unfiltered.
+      .withDeleted()
+      .leftJoin(
+        Administrator,
+        "admin",
+        "n.metadata->>'sent_by_admin' = CAST(admin.id AS text)",
+      )
       .select("n.metadata->>'broadcast_ref'", "broadcast_ref")
       .addSelect("n.message", "message")
+      // Aggregated, not bare: everything in the SELECT has to be grouped on or
+      // wrapped in an aggregate, and audience is constant per broadcast. Left
+      // bare, Postgres rejects the whole query with "must appear in the GROUP
+      // BY clause or be used in an aggregate function".
+      .addSelect("MIN(n.metadata->>'audience')", "audience")
+      .addSelect("n.tag", "tag")
       .addSelect("MIN(n.created_at)", "created_at")
       .addSelect("COUNT(*)", "recipients")
       .addSelect("MIN(n.metadata->>'sent_by_admin')", "sent_by_admin")
-      .where("n.tag = :tag", { tag: "announcement" })
+      // Aggregated rather than grouped on, so a broadcast stays one row even if
+      // its rows somehow disagree about the sender. NULLIF collapses the
+      // " " that CONCAT leaves behind when an admin has no name on record.
+      .addSelect(
+        "MIN(NULLIF(TRIM(CONCAT(admin.first_name, ' ', admin.last_name)), ''))",
+        "sent_by_name",
+      )
+      .addSelect("MIN(admin.email)", "sent_by_email")
+      // Keyed off the shared ref, not the tag: the tag is caller-supplied now,
+      // so filtering on "announcement" would hide every custom category.
+      .where("n.metadata->>'broadcast_ref' IS NOT NULL")
       .groupBy("n.metadata->>'broadcast_ref'")
       .addGroupBy("n.message")
+      .addGroupBy("n.tag")
       .orderBy("MIN(n.created_at)", "DESC")
       .limit(200)
       .getRawMany();
