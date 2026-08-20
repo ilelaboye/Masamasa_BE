@@ -398,7 +398,7 @@ export class PublicService {
       );
 
       return resp.data;
-    } catch (error) {
+    } catch (error: any) {
       console.log("banks", error);
       throw new BadRequestException(error.response.data.description);
     }
@@ -539,7 +539,7 @@ export class PublicService {
           account_number: accountNumber,
         },
       };
-    } catch (e) {
+    } catch (e: any) {
       console.log("Error loop bank details from Nomba:", e);
       // // this.monitorService.recordError(e);
 
@@ -567,7 +567,7 @@ export class PublicService {
         message: "Account number verified",
         data: { bank_name: bankName, ...response.data },
       };
-    } catch (error) {
+    } catch (error: any) {
       throw new BadRequestException(error.message);
     }
   }
@@ -620,7 +620,7 @@ export class PublicService {
       // );
       // console.log("quidax test", res);
       // return res;
-    } catch (error) {
+    } catch (error: any) {
       console.log("quidax test error", error.response?.data);
       console.log("quidax test error", error);
     }
@@ -809,7 +809,7 @@ export class PublicService {
         pushTitle: "Withdrawal Successful",
         metadata: { reference: transaction.masamasa_ref },
       });
-    } catch (err) {
+    } catch (err: any) {
       this.logger.warn(
         `Withdrawal notification failed for ${transaction.masamasa_ref}: ${err?.message}`,
       );
