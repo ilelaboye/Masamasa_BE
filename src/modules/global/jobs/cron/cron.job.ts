@@ -203,7 +203,7 @@ export class CronJob {
 
   // A withdrawal is re-initiated at most this many times before being parked
   // for manual review.
-  private static readonly MAX_WITHDRAWAL_RETRIES = 3;
+  private static readonly MAX_WITHDRAWAL_RETRIES = 10;
 
   async verifyTransactionJob() {
     console.log("START VERIFYING MASAMASA TRANSACTION");
