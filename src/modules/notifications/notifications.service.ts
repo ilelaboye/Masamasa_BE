@@ -151,7 +151,11 @@ export class NotificationsService {
           user_id: user.id,
           message,
           tag: notificationTag,
-          metadata: { sent_by_admin: adminId, broadcast_ref: broadcastRef },
+          metadata: {
+            sent_by_admin: adminId,
+            broadcast_ref: broadcastRef,
+            audience,
+          },
         }),
       );
       await this.notificationRepository.insert(chunk);
