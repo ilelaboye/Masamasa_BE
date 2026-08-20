@@ -152,7 +152,7 @@ export class CronJob {
             account_number: trans.metadata.accountNumber,
           },
         };
-      } catch (e) {
+      } catch (e: any) {
         console.log("Error from Nomba Transfer:", e.response);
         // // this.monitorService.recordError(e);
 
@@ -296,7 +296,7 @@ export class CronJob {
             "failure reason code": "PAYMENT_FAILED",
           });
         }
-      } catch (e) {
+      } catch (e: any) {
         const errData = e?.response?.data;
         console.log(
           "Error from Nomba verify Transfer:",
@@ -308,7 +308,7 @@ export class CronJob {
           // Nomba hard-rejects a duplicate merchantTxRef.
           try {
             await this.retryWithdrawal(trans, accessToken.token);
-          } catch (retryErr) {
+          } catch (retryErr: any) {
             console.log(
               `Retry failed for ${trans.masamasa_ref}: ${retryErr?.response?.data?.description ?? retryErr?.message}`,
               "VerifyTransactionJob",
@@ -369,7 +369,7 @@ export class CronJob {
         pushTitle: "Withdrawal Successful",
         metadata: { reference: trans.masamasa_ref },
       });
-    } catch (err) {
+    } catch (err: any) {
       console.log(
         `Withdrawal notification failed for ${trans.masamasa_ref}:`,
         err?.message,
@@ -547,7 +547,7 @@ export class CronJob {
       if (purchase.metadata?.needs_initiation) {
         try {
           await this.retryPurchaseInitiation(purchase);
-        } catch (e) {
+        } catch (e: any) {
           console.log(
             `Purchase retry failed for ${purchase.masamasa_ref}:`,
             e?.response?.data ?? e?.message,
@@ -847,7 +847,7 @@ export class CronJob {
           );
         }
       }
-    } catch (e) {
+    } catch (e: any) {
       console.log(
         "Nomba balance check failed:",
         e?.response?.data ?? e?.message,
@@ -875,7 +875,7 @@ export class CronJob {
           CronJob.VTPASS_BALANCE_THRESHOLD,
         );
       }
-    } catch (e) {
+    } catch (e: any) {
       console.log(
         "VTPass balance check failed:",
         e?.response?.data ?? e?.message,
@@ -946,7 +946,7 @@ export class CronJob {
         console.log("NOMBA ACCESS TOKEN GENERATED SUCCESSFULLY");
         return res.data;
       }
-    } catch (e) {
+    } catch (e: any) {
       console.log("Error generating Nomba access token:", e);
       // // this.monitorService.recordError(e);
       throw new BadRequestException(e.message);
