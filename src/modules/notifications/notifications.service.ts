@@ -2,10 +2,14 @@ import { UserRequest } from "@/definitions";
 import { Injectable, Logger } from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { InjectRepository } from "@nestjs/typeorm";
-import { IsNull, QueryRunner, Repository } from "typeorm";
+import { IsNull, Not, QueryRunner, Repository } from "typeorm";
 import { CreateNotificationDto } from "./dto/create-notification.dto";
 import { Notification } from "./entities/notification.entity";
-import { User } from "@/modules/users/entities/user.entity";
+import { KycStatus, Status, User } from "@/modules/users/entities/user.entity";
+
+/** Who a broadcast reaches. "verified" is KYC, the platform's own notion of a
+ *  verified account — not email confirmation. */
+export type BroadcastAudience = "all" | "verified" | "unverified";
 import { getRequestQuery } from "@/core/utils";
 import { generateMasamasaRef, paginate } from "@/core/helpers";
 import { PushService } from "./push.service";
@@ -117,17 +121,23 @@ export class NotificationsService {
     return { message: "All notifications marked as read." };
   }
 
-  /**
-   * Admin broadcast — creates one notification per user with the given
-   * message. Inserted in chunks to keep a single statement from ballooning.
-   */
-  async broadcastToAll(message: string, adminId: number) {
+  async broadcastToAll(
+    message: string,
+    adminId: number,
+    tag?: string,
+    audience: BroadcastAudience = "all",
+  ) {
+    const notificationTag = tag?.trim() || "announcement";
+
     const users = await this.userRepository.find({
-      select: ["id", "notification_token"],
+      select: ["id", "notification_token", "kyc_status", "status"],
+      where: {
+        status: Status.active,
+        kyc_status:
+          audience === "verified" ? KycStatus.success : Not(KycStatus.success),
+      },
     });
 
-    // One shared ref per broadcast so the per-user rows can be grouped back
-    // into a single entry in the admin history.
     const broadcastRef = generateMasamasaRef();
 
     const chunkSize = 500;
@@ -136,7 +146,7 @@ export class NotificationsService {
         this.notificationRepository.create({
           user_id: user.id,
           message,
-          tag: "announcement",
+          tag: notificationTag,
           metadata: { sent_by_admin: adminId, broadcast_ref: broadcastRef },
         }),
       );
@@ -149,8 +159,8 @@ export class NotificationsService {
     const delivered = await this.pushService.sendToTokens(
       tokens,
       "MasaMasa",
-      message,
-      { tag: "announcement", broadcast_ref: broadcastRef },
+      `${notificationTag}: ${message}`,
+      { tag: notificationTag, broadcast_ref: broadcastRef },
     );
 
     return {
@@ -167,12 +177,16 @@ export class NotificationsService {
       .createQueryBuilder("n")
       .select("n.metadata->>'broadcast_ref'", "broadcast_ref")
       .addSelect("n.message", "message")
+      .addSelect("n.tag", "tag")
       .addSelect("MIN(n.created_at)", "created_at")
       .addSelect("COUNT(*)", "recipients")
       .addSelect("MIN(n.metadata->>'sent_by_admin')", "sent_by_admin")
-      .where("n.tag = :tag", { tag: "announcement" })
+      // Keyed off the shared ref, not the tag: the tag is caller-supplied now,
+      // so filtering on "announcement" would hide every custom category.
+      .where("n.metadata->>'broadcast_ref' IS NOT NULL")
       .groupBy("n.metadata->>'broadcast_ref'")
       .addGroupBy("n.message")
+      .addGroupBy("n.tag")
       .orderBy("MIN(n.created_at)", "DESC")
       .limit(200)
       .getRawMany();

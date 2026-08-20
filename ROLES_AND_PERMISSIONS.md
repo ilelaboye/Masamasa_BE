@@ -17,7 +17,7 @@ Defined by `AdministratorRoles` in `src/modules/administrator/entities/administr
 | Role | Meaning |
 |---|---|
 | `super_admin` | Full access to everything. The default for existing and seeded accounts. |
-| `marketer` | Dashboard analytics only. No user records, no KYC, no money movement. |
+| `marketer` | Dashboard analytics, plus sending user notifications. No user records, no KYC, no money movement. |
 
 `super_admin` passes every check and never needs to be listed in a decorator.
 
@@ -88,7 +88,7 @@ Both guards are applied once, at class scope on `AdministratorController`:
 
 ### Marketer — `@AllowRoles(AdministratorRoles.marketer)`
 
-All aggregate figures. None of these return per-user rows.
+Aggregate figures, plus user-facing announcements. None of these return per-user rows.
 
 | Route | |
 |---|---|
@@ -100,6 +100,8 @@ All aggregate figures. None of these return per-user rows.
 | `GET /admin/analytics/kyc-funnel` | counts |
 | `GET /admin/analytics/locations` | grouped by country/state |
 | `GET /admin/dashboard-kpi` | dashboard tiles |
+| `GET /admin/notifications` | past broadcasts |
+| `POST /admin/notifications/broadcast` | **write** — reaches every user; recorded against the sending admin's id |
 
 ### super_admin only — no decorator
 
@@ -108,8 +110,7 @@ Everything else, including:
 - **User records** — `GET /admin/users`, `GET /admin/user/:id`, `GET /admin/user/:id/transactions`, `PATCH /admin/user/:id/status`, `GET /admin/quidax/sub-accounts`
 - **KYC** — `GET /admin/get-pending-kyc`, `GET /admin/verify-kyc/:id`, `POST /admin/decline-kyc`
 - **Money** — `POST /admin/web3/withdraw-token`, `GET /admin/web3/balances`, `GET /admin/withdrawal-wallets`, `GET /admin/withdraw/history`, `POST /admin/create-exchange-rate`, `GET /admin/exchange-rates`
-- **Transactions** — `GET /admin/transactions`, `GET /admin/transaction/:id`
-- **Notifications** — `GET /admin/notifications`, `POST /admin/notifications/broadcast`
+- **Transactions** — `GET /admin/transactions`, `GET /admin/transaction/:id`, `GET /admin/withdrawals/pending`
 - **Staff management** — `POST /admin/staff/invite`, `GET /admin/staff`, `PATCH /admin/staff/:id/status`, `POST /admin/staff/:id/resend-invite`
 
 > `GET /admin/analytics/transactions-per-user` sits here despite the `analytics/` prefix — it selects `first_name`, `last_name` and `email` per user, so it is not an aggregate.
