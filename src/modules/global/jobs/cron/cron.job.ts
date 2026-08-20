@@ -1,7 +1,7 @@
 import {
   axiosClient,
+  sendLowBalanceAlertEmail,
   sendWithdrawalSuccessEmail,
-  sendZohoMail,
   transferWithFlutterWave,
   verifyTransfer,
 } from "@/core/utils";
@@ -894,18 +894,8 @@ export class CronJob {
     this.lastBalanceAlertAt[provider] = now;
 
     for (const email of CronJob.BALANCE_ALERT_EMAILS) {
-      sendZohoMail(
-        {
-          to: { name: "MasaMasa", email },
-        },
-        {
-          subject: `⚠️ ${provider} balance low — ₦${balance.toLocaleString()}`,
-          html: `<p>The <b>${provider}</b> account balance is <b>₦${balance.toLocaleString()}</b>, below the ₦${threshold.toLocaleString()} threshold.</p>
-               <p>Please top up the account to keep ${provider === "Nomba" ? "withdrawals" : "bill purchases"} flowing — parked transactions retry automatically once funded.</p>`,
-        },
-      );
+      sendLowBalanceAlertEmail(email, { provider, balance, threshold });
     }
-    console.log(`Low balance alert sent for ${provider} (₦${balance})`);
   }
 
   async generateNombaAccessToken() {
