@@ -25,8 +25,8 @@ import {
   getRequestQuery,
   hashResourceSync,
   verifyHash,
-  sendMailJetWithTemplate,
   sendZohoMailWithTemplate,
+  sendAccountDeletedEmail,
   sendPasswordChangedEmail,
   sendPinChangedEmail,
   sendWithdrawalSuccessEmail,
@@ -1076,37 +1076,9 @@ export class UsersService extends BaseService {
     // Clear the deletion request from cache
     await this.cacheService.del(cacheKey);
 
-    // Send confirmation email
-    try {
-      await sendMailJetWithTemplate(
-        {
-          to: {
-            email: user.email,
-            name: `${user.first_name} ${user.last_name}`,
-          },
-        },
-        {
-          subject: "Account Deleted Successfully",
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #d32f2f;">Account Deleted</h2>
-              <p>Hello ${capitalizeString(user.first_name)},</p>
-              <p>Your account has been successfully deleted as requested.</p>
-              <p><strong>Reason:</strong> ${cachedData.reason}</p>
-              <p>Your data will be permanently removed from our system within 30 days in accordance with our data retention policy.</p>
-              <p>If you did not request this deletion, please contact our support team immediately.</p>
-              <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 20px 0;">
-              <p style="color: #999; font-size: 12px;">Thank you for using our service.</p>
-            </div>
-          `,
-        },
-      );
-    } catch (emailError) {
-      console.error(
-        "Failed to send account deletion confirmation email:",
-        emailError,
-      );
-    }
+    // Fire-and-forget: the account is already deleted, so a mail failure must
+    // not turn a successful deletion into an error response.
+    sendAccountDeletedEmail(user, cachedData.reason);
 
     return {
       success: true,

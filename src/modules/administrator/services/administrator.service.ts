@@ -25,8 +25,8 @@ import {
   endOfDay,
   getRequestQuery,
   hashResource,
+  sendAccountStatusChangedEmail,
   sendStaffInviteEmail,
-  sendZohoMail,
   verifyHash,
 } from "@/core/utils";
 import {
@@ -386,26 +386,7 @@ export class AdministratorService {
     const msg = `${req.admin.first_name} ${req.admin.last_name} ${activated ? "activated" : "deactivated"} ${user.first_name} ${user.last_name}'s account`;
     this.createAdminLog(null, req.admin, AdminLogEntities.USER_STATUS, msg);
 
-    sendZohoMail(
-      {
-        to: {
-          name: `${capitalizeString(user.first_name)} ${capitalizeString(user.last_name)}`,
-          email: user.email,
-        },
-      },
-      {
-        subject: activated
-          ? "Your MasaMasa account has been activated"
-          : "Your MasaMasa account has been deactivated",
-        html: activated
-          ? `<p>Hello ${capitalizeString(user.first_name)},</p>
-             <p>Good news — your MasaMasa account has been activated. You can now log in and use all features of the app.</p>
-             <p>If you have any questions, please contact our support team.</p>`
-          : `<p>Hello ${capitalizeString(user.first_name)},</p>
-             <p>Your MasaMasa account has been deactivated. You will not be able to log in or perform any transactions.</p>
-             <p>If you believe this is a mistake, please reach out to our support team to have your account reactivated.</p>`,
-      },
-    );
+    sendAccountStatusChangedEmail(user, activated);
 
     return {
       message: `User ${activated ? "activated" : "deactivated"} successfully`,

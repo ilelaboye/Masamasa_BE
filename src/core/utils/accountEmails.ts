@@ -1,5 +1,7 @@
+import { appConfig } from "@/config";
+import { ZohoMailTemplates } from "@/constants";
 import { capitalizeString, INVITE_EXPIRY_HOURS } from "../helpers";
-import { sendZohoMail } from "./mailer";
+import { sendZohoMail, sendZohoMailWithTemplate } from "./mailer";
 
 type EmailUser = {
   first_name?: string;
@@ -16,15 +18,47 @@ function nowInLagos(): string {
   });
 }
 
-function shell(greetingName: string, body: string): string {
-  return `<p>Hello ${capitalizeString(greetingName || "there")},</p>${body}
-    <p style="margin-top:24px">— The MasaMasa Team</p>`;
+/** Escapes values that reach the email from webhooks or user input. */
+function esc(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
-/**
- * Security alert sent on every successful sign-in. Fire-and-forget: a mail
- * failure must never block a login.
- */
+function brandHeader(): string {
+  return appConfig.MAIL_LOGO_URL
+    ? `<img src="${esc(appConfig.MAIL_LOGO_URL)}" alt="MasaMasa" width="150" style="display:block;width:150px;max-width:150px;height:auto;border:0;outline:none;text-decoration:none" />`
+    : `<span style="font-family:Arial,Helvetica,sans-serif;font-size:22px;font-weight:bold;color:#1a1a1a">MasaMasa</span>`;
+}
+
+function shell(greetingName: string, body: string): string {
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f4f5f7;margin:0;padding:24px 0">
+  <tr>
+    <td align="center">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px">
+        <tr>
+          <td align="left" style="padding:0 8px 20px">${brandHeader()}</td>
+        </tr>
+        <tr>
+          <td style="background:#ffffff;border-radius:10px;padding:32px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6;color:#1a1a1a">
+            <p style="margin:0 0 16px">Hello ${capitalizeString(greetingName || "there")},</p>
+            ${body}
+            <p style="margin:24px 0 0">— The MasaMasa Team</p>
+          </td>
+        </tr>
+        <tr>
+          <td align="center" style="padding:20px 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;color:#8a8f98">
+            This is an automated message from MasaMasa. Please do not reply to this email.
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>`;
+}
+
 export function sendLoginAlertEmail(
   user: EmailUser,
   context: { device?: string; ip?: string } = {},
@@ -95,7 +129,59 @@ export function sendPinChangedEmail(user: EmailUser) {
   ).catch(() => {});
 }
 
-/** Confirmation that a bank withdrawal was paid out successfully. */
+/** Confirmation that the account was deleted at the user's own request. */
+export function sendAccountDeletedEmail(user: EmailUser, reason?: string) {
+  sendZohoMail(
+    {
+      to: {
+        name: `${capitalizeString(user.first_name ?? "")} ${capitalizeString(user.last_name ?? "")}`.trim(),
+        email: user.email,
+      },
+    },
+    {
+      subject: "Your MasaMasa account has been deleted",
+      html: shell(
+        user.first_name ?? "",
+        `<p>Your account has been successfully deleted as requested.</p>
+         ${reason ? `<p><b>Reason:</b> ${esc(reason)}</p>` : ""}
+         <p>Your data will be permanently removed from our systems within 30 days, in line with our data retention policy.</p>
+         <p><b>If you did not request this deletion, contact our support team immediately.</b></p>`,
+      ),
+    },
+  ).catch(() => {});
+}
+
+/** Notice that an admin activated or deactivated the user's account. */
+export function sendAccountStatusChangedEmail(
+  user: EmailUser,
+  activated: boolean,
+) {
+  sendZohoMail(
+    {
+      to: {
+        name: `${capitalizeString(user.first_name ?? "")} ${capitalizeString(user.last_name ?? "")}`.trim(),
+        email: user.email,
+      },
+    },
+    {
+      subject: activated
+        ? "Your MasaMasa account has been activated"
+        : "Your MasaMasa account has been deactivated",
+      html: shell(
+        user.first_name ?? "",
+        activated
+          ? `<p>Good news — your MasaMasa account has been activated. You can now log in and use all features of the app.</p>
+             <p>If you have any questions, please contact our support team.</p>`
+          : `<p>Your MasaMasa account has been deactivated. You will not be able to log in or perform any transactions.</p>
+             <p>If you believe this is a mistake, please reach out to our support team to have your account reactivated.</p>`,
+      ),
+    },
+  ).catch(() => {});
+}
+
+/**
+ * Confirmation that a bank withdrawal was paid out successfully.
+ */
 export function sendWithdrawalSuccessEmail(
   user: EmailUser,
   details: {
@@ -113,13 +199,73 @@ export function sendWithdrawalSuccessEmail(
   // Only the last 4 digits of the account number are ever shown.
   const maskedAccount = details.accountNumber
     ? `******${String(details.accountNumber).slice(-4)}`
-    : null;
+    : "";
+
+  sendZohoMailWithTemplate(
+    {
+      to: {
+        name: `${capitalizeString(user.first_name ?? "")} ${capitalizeString(user.last_name ?? "")}`.trim(),
+        email: user.email,
+      },
+    },
+    {
+      subject: "Withdrawal successful",
+      templateId: ZohoMailTemplates.withdrawal_successful,
+      variables: {
+        firstName: capitalizeString(user.first_name ?? ""),
+        amount,
+        bankName: details.bankName ?? "",
+        accountNumber: maskedAccount,
+        reference: details.reference ?? "",
+        date: `${nowInLagos()} (WAT)`,
+      },
+    },
+  ).catch(() => {});
+}
+
+/**
+ * Crypto amounts need more precision than the 2dp naira formatter — a 0.0005
+ * BTC deposit must not render as "0.00 BTC". Up to 8 decimals, trailing zeros
+ * dropped by the formatter.
+ */
+function formatCoinAmount(value: number): string {
+  return (Number(value) || 0).toLocaleString("en-NG", {
+    maximumFractionDigits: 8,
+  });
+}
+
+/**
+ * Confirmation that a crypto deposit was credited to the user's wallet.
+ */
+export function sendDepositConfirmedEmail(
+  user: EmailUser,
+  details: {
+    coinAmount: number;
+    currency: string;
+    network?: string;
+    nairaAmount: number;
+    address?: string;
+  },
+) {
+  const currency = String(details.currency ?? "").toUpperCase();
+  const coin = `${formatCoinAmount(details.coinAmount)} ${currency}`.trim();
+  const naira = `NGN ${Number(details.nairaAmount ?? 0).toLocaleString(
+    "en-NG",
+    {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    },
+  )}`;
 
   const rows = [
-    `<li><b>Amount:</b> ${amount}</li>`,
-    details.bankName ? `<li><b>Bank:</b> ${details.bankName}</li>` : "",
-    maskedAccount ? `<li><b>Account:</b> ${maskedAccount}</li>` : "",
-    details.reference ? `<li><b>Reference:</b> ${details.reference}</li>` : "",
+    `<li><b>Amount:</b> ${esc(coin)}</li>`,
+    `<li><b>Value:</b> ${naira}</li>`,
+    details.network
+      ? `<li><b>Network:</b> ${esc(String(details.network).toUpperCase())}</li>`
+      : "",
+    details.address
+      ? `<li style="word-break:break-all"><b>Deposit address:</b> ${esc(details.address)}</li>`
+      : "",
     `<li><b>Date:</b> ${nowInLagos()} (WAT)</li>`,
   ].join("");
 
@@ -131,24 +277,19 @@ export function sendWithdrawalSuccessEmail(
       },
     },
     {
-      subject: `Withdrawal successful — ${amount}`,
+      subject: `Deposit confirmed — ${coin}`,
       html: shell(
         user.first_name ?? "",
-        `<p>Your withdrawal has been paid out successfully.</p>
+        `<p>Your deposit has been confirmed and credited to your MasaMasa wallet.</p>
          <ul>${rows}</ul>
-         <p>If you did not authorise this withdrawal, contact our support team immediately.</p>`,
+         <p>If you did not make this deposit, contact our support team immediately.</p>`,
       ),
     },
   ).catch(() => {});
 }
 
 /**
- * Staff invite link. Sent as raw HTML rather than a Zoho template because
- * template keys are provisioned in the Zoho dashboard and there is no
- * staff-invite template there.
- *
- * Awaited by the caller — unlike the alerts above, a silent failure here means
- * the staff member never receives their link.
+ * Staff invite link.
  */
 export function sendStaffInviteEmail(
   user: EmailUser,
