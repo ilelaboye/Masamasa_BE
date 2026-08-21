@@ -14,6 +14,11 @@ export enum NotificationTag {
   login = "login",
   security = "security",
   withdrawal = "withdrawal",
+  // Paid out when someone you referred crosses the qualifying deposit. Kept
+  // apart from wallet_credit so the reward itself is distinguishable in the
+  // list from the later transfer of those earnings into the main balance.
+  // `tag` is a varchar rather than a DB enum, so a new member needs no migration.
+  referral_bonus = "referral_bonus",
 }
 @Entity({ name: "notifications" })
 export class Notification {

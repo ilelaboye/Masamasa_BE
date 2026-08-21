@@ -133,14 +133,6 @@ export class ReferralsService {
     return parseFloat(result?.total) || 0;
   }
 
-  /**
-   * Awards the referrer their one-time reward if [refereeId] has now deposited
-   * enough. Safe to call after every deposit — it is a no-op for users with no
-   * referrer, users below the threshold, and referrals already paid.
-   *
-   * Never throws: this runs off the back of deposit webhooks, and a referral
-   * bookkeeping problem must not fail a deposit that already landed.
-   */
   async evaluateQualification(refereeId: number): Promise<void> {
     try {
       const referee = await this.userRepository.findOne({
@@ -150,8 +142,6 @@ export class ReferralsService {
 
       if (!referee?.referred_by_id) return;
 
-      // Cheap exit before the SUM: the overwhelming majority of deposits are
-      // from referees whose reward has already been paid.
       const alreadyPaid = await this.earningRepository.exists({
         where: { user_id: referee.referred_by_id, referee_id: referee.id },
       });
@@ -171,16 +161,14 @@ export class ReferralsService {
         `Referral reward awarded — referrer ${referee.referred_by_id}, referee ${referee.id}`,
       );
 
-      // Fire-and-forget: the reward row is already committed, and a push or
-      // in-app write that fails must not make the award look like it failed.
       this.notificationsService
         .create({
           userId: referee.referred_by_id,
           message:
             `You earned ₦${REFERRAL_REWARD_NGN.toLocaleString("en-NG")} — ` +
             `someone you referred hit $${REFERRAL_QUALIFYING_DEPOSIT_USD.toLocaleString("en-NG")} in deposits.`,
-          tag: NotificationTag.wallet_credit,
-          pushTitle: "Referral reward earned",
+          tag: NotificationTag.referral_bonus,
+          pushTitle: "Referral bonus earned",
           metadata: { referee_id: referee.id, amount: REFERRAL_REWARD_NGN },
         })
         .catch(() => {});
@@ -198,17 +186,6 @@ export class ReferralsService {
     }
   }
 
-  /**
-   * Sweep for referrals that qualify but were never awarded, and award them.
-   *
-   * The webhooks call [evaluateQualification] on every confirmed deposit, so
-   * this should find nothing. It exists because a deposit can reach `success`
-   * without going through those paths — a missed Quidax event replayed by the
-   * hourly verify cron, or an admin correcting a transaction by hand — and a
-   * silently unpaid reward is the kind of bug users report, not logs.
-   *
-   * Returns the number awarded so the caller can log a non-zero result.
-   */
   async awardMissedQualifications(): Promise<number> {
     const candidates: { referee_id: number }[] = await this.userRepository
       .createQueryBuilder("user")

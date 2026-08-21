@@ -666,7 +666,6 @@ export class PublicService {
         metadata: payload,
       });
     } catch {
-      // Unique-constraint violation — a concurrent duplicate claimed it first
       console.log(`Duplicate Quidax webhook skipped (race): ${eventKey}`);
       return;
     }
@@ -674,13 +673,11 @@ export class PublicService {
     try {
       await this.dispatchQuidaxEvent(event, data);
     } catch (err) {
-      // Release the claim so the retry can reprocess this event
       await this.webhookRepository.delete({ id: marker.id }).catch(() => {});
       throw err;
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async dispatchQuidaxEvent(event: string, data: any): Promise<void> {
     switch (event) {
       case "wallet.address.generated":
@@ -738,8 +735,6 @@ export class PublicService {
     });
 
     if (existingWallet) {
-      // Record already exists (created by API response during registration/backfill).
-      // Idempotent: only update if the address slot is still empty.
       console.log(
         `[QuidaxWebhook] wallet already exists for user ${user.id} (${currency}/${appNetwork})`,
       );
@@ -764,17 +759,11 @@ export class PublicService {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private handleWalletUpdated(data: any): void {
-    // wallet.updated fires on any balance change (deposit received, transfer sent).
-    // We do not write transaction records here — deposit.* events own that.
     this.logger.log(
       `wallet.updated — user: ${data?.user?.id}, currency: ${data?.currency}, balance: ${data?.balance}`,
     );
   }
 
-  // Extracts the consistent fields from all deposit event payloads.
-  // Idempotency key is data.id (Quidax deposit record ID — same value across
-  // deposit.transaction.confirmation, deposit.successful, deposit.on_hold, etc.
-  // for the same physical deposit).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private extractDepositFields(data: any) {
     return {
@@ -1014,9 +1003,6 @@ export class PublicService {
       } as unknown as Transactions);
     }
 
-    // Flat deposit fee: the deposit is credited in full above, then the fee
-    // is taken as a separate debit row tagged deposit_fee. Capped at the
-    // deposit's value so tiny deposits never push the balance negative.
     const feeApplies = !DEPOSIT_FEE_EXEMPT_CURRENCIES.has(
       currency.toLowerCase(),
     );
@@ -1069,8 +1055,6 @@ export class PublicService {
 
     this.notificationsService.create({
       userId: wallet.user_id,
-      // Formatted the same way as the confirmation email above, so the two
-      // never quote different figures for one deposit.
       message: `Your deposit of ${currencyFormatter(coinAmount, "NGN", 2, false)} ${currency.toUpperCase()} has been confirmed`,
       tag: NotificationTag.deposit,
       pushTitle: "Deposit Successful",
@@ -1083,9 +1067,7 @@ export class PublicService {
     // fail a deposit that has already been credited.
     await this.referralsService.evaluateQualification(wallet.user_id);
 
-    // Move the deposited crypto from the user's Quidax sub-account into the
-    // master account. Non-blocking — a sweep failure must never fail the
-    // webhook (Quidax would retry it and double-process the deposit).
+    // Move the deposited crypto from the user's Quidax sub-account into the master account.
     if (wallet.user.quidax_id) {
       this.quidaxService
         .sweepToMasterAccount(
