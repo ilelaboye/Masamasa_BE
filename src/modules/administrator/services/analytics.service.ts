@@ -15,6 +15,34 @@ export type AnalyticsPeriod = "today" | "week" | "month" | "year";
 export type VolumeGranularity = "daily" | "weekly" | "monthly" | "yearly";
 
 /**
+ * Timezone the product's calendar days are measured in. Matches `TZ` in the
+ * environment, which is what every `setHours(0, 0, 0, 0)` here resolves
+ * against — SQL day buckets must agree with it or they will not join.
+ */
+const REPORTING_TIMEZONE = "Africa/Lagos";
+
+/**
+ * SQL expression bucketing a bare UTC `timestamp` column into a
+ * REPORTING_TIMEZONE calendar day, rendered as `YYYY-MM-DD`.
+ *
+ * The column is labelled UTC before the shift because `timestamp without time
+ * zone` carries no offset of its own (see config/pg-timezone.ts). Rendering
+ * the bucket as text rather than a timestamp keeps the join key exact: an
+ * instant would have to survive the driver's UTC parser and a second
+ * conversion in JS before it could be compared.
+ */
+function localDayBucket(column: string): string {
+  return `TO_CHAR(${column} AT TIME ZONE 'UTC' AT TIME ZONE '${REPORTING_TIMEZONE}', 'YYYY-MM-DD')`;
+}
+
+/** Local calendar date of `date` as `YYYY-MM-DD` — the JS side of that join. */
+function localDayKey(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+/**
  * Start of the current calendar period — this week, this month, this year —
  */
 function periodStart(period: AnalyticsPeriod): Date {
@@ -657,7 +685,7 @@ export class AnalyticsService {
 
     const activity = await this.transactionsRepository
       .createQueryBuilder("t")
-      .select(`DATE_TRUNC('day', t.created_at)`, "day")
+      .select(localDayBucket("t.created_at"), "day")
       .addSelect("COUNT(DISTINCT t.user_id)", "active_users")
       .addSelect("COUNT(*)", "transactions")
       .where("t.created_at >= :start", { start })
@@ -668,7 +696,7 @@ export class AnalyticsService {
 
     const signups = await this.userRepository
       .createQueryBuilder("u")
-      .select(`DATE_TRUNC('day', u.created_at)`, "day")
+      .select(localDayBucket("u.created_at"), "day")
       .addSelect("COUNT(*)", "signups")
       .where("u.created_at >= :start", { start })
       .andWhere("u.created_at <= :end", { end })
@@ -680,7 +708,7 @@ export class AnalyticsService {
     // "funded accounts" total.
     const funded = await this.transactionsRepository
       .createQueryBuilder("t")
-      .select(`DATE_TRUNC('day', t.created_at)`, "day")
+      .select(localDayBucket("t.created_at"), "day")
       .addSelect("COUNT(DISTINCT t.user_id)", "funded_users")
       .where("t.created_at >= :start", { start })
       .andWhere("t.created_at <= :end", { end })
@@ -690,14 +718,12 @@ export class AnalyticsService {
       .orderBy("day", "ASC")
       .getRawMany();
 
-    const dayKey = (day: string | Date) => new Date(day).toISOString();
-
-    const activityByDay = new Map(activity.map((a) => [dayKey(a.day), a]));
+    const activityByDay = new Map(activity.map((a) => [a.day as string, a]));
     const signupsByDay = new Map(
-      signups.map((s) => [dayKey(s.day), Number(s.signups)]),
+      signups.map((s) => [s.day as string, Number(s.signups)]),
     );
     const fundedByDay = new Map(
-      funded.map((f) => [dayKey(f.day), Number(f.funded_users)]),
+      funded.map((f) => [f.day as string, Number(f.funded_users)]),
     );
 
     const series: {
@@ -716,13 +742,14 @@ export class AnalyticsService {
       day <= lastDay;
       day.setDate(day.getDate() + 1)
     ) {
-      const found = activityByDay.get(dayKey(day));
+      const key = localDayKey(day);
+      const found = activityByDay.get(key);
       series.push({
         day: new Date(day),
         active_users: Number(found?.active_users) || 0,
         transactions: Number(found?.transactions) || 0,
-        signups: signupsByDay.get(dayKey(day)) ?? 0,
-        funded_users: fundedByDay.get(dayKey(day)) ?? 0,
+        signups: signupsByDay.get(key) ?? 0,
+        funded_users: fundedByDay.get(key) ?? 0,
       });
     }
 
