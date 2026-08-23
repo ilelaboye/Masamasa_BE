@@ -96,6 +96,26 @@ export class ReferralsService {
   }
 
   /**
+   * The account behind a referral code, or null when there is none.
+   *
+   * The non-throwing counterpart to [resolveReferrer]: this backs the public
+   * lookup and the invite landing page, where an unrecognised code is an
+   * ordinary outcome — a stale link, or a code someone half-typed — rather
+   * than the deliberate entry a 400 is the right answer to.
+   */
+  async lookupByCode(
+    code: string | null | undefined,
+  ): Promise<{ id: number; first_name: string } | null> {
+    const normalised = (code ?? "").trim().toUpperCase();
+    if (!normalised) return null;
+
+    return await this.userRepository.findOne({
+      where: { referral_code: normalised },
+      select: ["id", "first_name"],
+    });
+  }
+
+  /**
    * The caller's own code, generating one if the account somehow has none.
    *
    * Signup assigns a code and the migration backfilled every existing account,

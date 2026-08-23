@@ -141,6 +141,21 @@ export const appConfig = {
     process.env.IOS_STORE_URL ||
     "https://apps.apple.com/ng/app/masamasa/id6760827663",
 
+  // ─── DEEP LINKS ────────────────────────────────────────────────────────────
+  // Backing the referral invite links. REFERRAL_LINK_BASE is the host users
+  // see; it must be the same host that serves /.well-known/* (see
+  // ReferralLinksController) or Universal Links silently stop working.
+  REFERRAL_LINK_BASE:
+    process.env.REFERRAL_LINK_BASE || "https://referral.masamasa.ng/r",
+  APP_LINK_SCHEME: process.env.APP_LINK_SCHEME || "masamasa",
+  IOS_BUNDLE_ID: process.env.IOS_BUNDLE_ID || "com.masamasang",
+  IOS_TEAM_ID: process.env.IOS_TEAM_ID || "2H446HFGL6",
+  ANDROID_PACKAGE_NAME: process.env.ANDROID_PACKAGE_NAME || "com.masamasang",
+  // Comma-separated SHA-256 fingerprints. Empty means Android App Links are
+  // unverified, so links open in the browser instead of the app — the file is
+  // still served so the failure is visible rather than a 404.
+  ANDROID_CERT_FINGERPRINTS: process.env.ANDROID_CERT_FINGERPRINTS || "",
+
   // Mixpanel — analytics disabled entirely when the token is absent.
   // The salt must NEVER be rotated (it would orphan every historic profile).
   MIXPANEL_TOKEN: process.env.MIXPANEL_TOKEN || "",
