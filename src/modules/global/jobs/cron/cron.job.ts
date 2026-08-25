@@ -5,7 +5,6 @@ import {
   transferWithFlutterWave,
   verifyTransfer,
 } from "@/core/utils";
-import { AdministratorService } from "@/modules/administrator/services/administrator.service";
 import {
   PurchaseRequest,
   PurchaseStatus,
@@ -26,7 +25,6 @@ import {
   AccessTokenType,
 } from "../../bank-verification/entities/access-token.entity";
 import { appConfig } from "@/config";
-import { UsersService } from "@/modules/users/services/users.service";
 import { generateMasamasaRef } from "@/core/helpers";
 import { TransactionService } from "@/modules/transactions/transactions.service";
 import { User } from "@/modules/users/entities/user.entity";
@@ -202,8 +200,9 @@ export class CronJob {
   }
 
   // A withdrawal is re-initiated at most this many times before being parked
-  // for manual review.
-  private static readonly MAX_WITHDRAWAL_RETRIES = 10;
+  // for manual review. Public because AdministratorService.reprocessTransaction
+  // gates on the same cap when an admin unparks a withdrawal.
+  static readonly MAX_WITHDRAWAL_RETRIES = 10;
 
   async verifyTransactionJob() {
     console.log("START VERIFYING MASAMASA TRANSACTION");

@@ -23,6 +23,18 @@ export const BroadcastNotificationValidation = Joi.object().keys({
     .label("Audience"),
 });
 
+export const ReprocessTransactionValidation = Joi.object().keys({
+  // Capped so one call cannot walk the whole withdrawal table; each id costs
+  // a row lock and a balance aggregate.
+  transaction_ids: Joi.array()
+    .items(Joi.number().integer().positive().required())
+    .min(1)
+    .max(50)
+    .unique()
+    .required()
+    .label("Transaction ids"),
+});
+
 export const UpdateUserStatusValidation = Joi.object().keys({
   status: Joi.string()
     .valid("active", "deactivated")

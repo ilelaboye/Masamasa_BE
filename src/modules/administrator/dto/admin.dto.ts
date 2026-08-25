@@ -18,6 +18,11 @@ export class DeclineKycDto {
   reason: string;
 }
 
+export class ReprocessTransactionDto {
+  @ApiProperty({ example: [2, 3, 4] })
+  transaction_ids: number[];
+}
+
 export class BroadcastNotificationDto {
   @ApiProperty({ example: "We have a new feature!" })
   message: string;

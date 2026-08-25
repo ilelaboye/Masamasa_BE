@@ -7,7 +7,7 @@ import {
   AdministratorRoles,
   AdminStatus,
 } from "../entities/administrator.entity";
-import { Brackets, Repository, SelectQueryBuilder } from "typeorm";
+import { Brackets, DataSource, Repository, SelectQueryBuilder } from "typeorm";
 import { InjectRepository } from "@nestjs/typeorm";
 import { AdminLogEntities, AdminLogs } from "../entities/admin-logs.entity";
 import { AdminRequest } from "@/definitions";
@@ -16,6 +16,7 @@ import {
   CreateExchangeRateDto,
   CreateStaffDto,
   DeclineKycDto,
+  ReprocessTransactionDto,
   UpdateAdminProfileDto,
   UpdateStaffStatusDto,
 } from "../dto/admin.dto";
@@ -41,6 +42,7 @@ import {
   TransactionStatusType,
 } from "@/modules/transactions/transactions.entity";
 import { WithdrawalWallet } from "@/modules/web3/entity/withdrawal-wallet.entity";
+import { CronJob } from "@/modules/global/jobs/cron/cron.job";
 
 @Injectable()
 export class AdministratorService {
@@ -58,7 +60,14 @@ export class AdministratorService {
     private readonly cacheService: CacheService,
     private readonly exchangeRateService: ExchangeRateService,
     private readonly mixpanel: MixpanelService,
+    private readonly dataSource: DataSource,
   ) {}
+
+  // What a reprocessed withdrawal's retry counter is wound back to. Not 0:
+  // processPaymentJob re-initiates every `retry = 0` processing withdrawal,
+  // so zeroing it would fire a Nomba transfer from that job at the same time
+  // verifyTransactionJob is retrying the same reference.
+  private static readonly REPROCESS_RETRY_VALUE = 1;
 
   async getWithId(id: string) {
     const cachedData = await this.cacheService.get<Administrator | undefined>(
@@ -365,6 +374,155 @@ export class AdministratorService {
     this.mixpanel.setProfile(user.id, { "kyc status": "rejected" });
 
     return update;
+  }
+
+  /**
+   * Unparks withdrawals that verifyTransactionJob gave up on.
+   *
+   * `retryWithdrawal` stops re-initiating once `retry` hits the cap and flags
+   * the row `needs_review`. This winds the counter back so the next cron run
+   * picks the withdrawal up again — but only for rows that are still an open
+   * debit and only when the user can actually cover the amount, so an admin
+   * cannot hand the cron a withdrawal it will immediately skip (or worse, pay
+   * out of a balance that is no longer there).
+   *
+   * Nothing is paid out here: the cron owns the Nomba call.
+   */
+  async reprocessTransaction(
+    reprocessTransactionDto: ReprocessTransactionDto,
+    req: AdminRequest,
+  ) {
+    const ids = [...new Set(reprocessTransactionDto.transaction_ids ?? [])];
+    if (!ids.length) {
+      throw new BadRequestException("No transaction was selected");
+    }
+
+    const reprocessed: number[] = [];
+    const skipped: { id: number; reason: string }[] = [];
+
+    for (const id of ids) {
+      const reason = await this.reprocessOneWithdrawal(id);
+      if (reason) skipped.push({ id, reason });
+      else reprocessed.push(id);
+    }
+
+    if (reprocessed.length) {
+      const msg = `${req.admin.first_name} ${req.admin.last_name} queued transaction(s) ${reprocessed.join(", ")} for reprocessing`;
+      this.createAdminLog(null, req.admin, AdminLogEntities.TRANSACTION, msg);
+    }
+
+    return {
+      message: reprocessed.length
+        ? `${reprocessed.length} transaction(s) queued for reprocessing`
+        : "No transaction was eligible for reprocessing",
+      reprocessed,
+      skipped,
+    };
+  }
+
+  /**
+   * Returns null when the withdrawal was requeued, or the reason it was not.
+   * One transaction per DB transaction so a single ineligible id in the batch
+   * never rolls back the ones that succeeded.
+   */
+  private async reprocessOneWithdrawal(id: number): Promise<string | null> {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      const trans = await queryRunner.manager.findOne(Transactions, {
+        where: { id },
+      });
+      if (!trans) {
+        await queryRunner.commitTransaction();
+        return "Transaction not found";
+      }
+
+      // Lock the owner's row before reading their balance, the same order the
+      // withdrawal and cron paths take it in.
+      await queryRunner.manager
+        .createQueryBuilder(User, "user")
+        .setLock("pessimistic_write")
+        .where("user.id = :id", { id: trans.user_id })
+        .getOne();
+
+      // Re-read under the lock — the cron or a webhook may have settled this
+      // withdrawal between the fetch above and the lock being granted.
+      const fresh = await queryRunner.manager.findOne(Transactions, {
+        where: { id },
+      });
+      if (!fresh) {
+        await queryRunner.commitTransaction();
+        return "Transaction not found";
+      }
+
+      if (fresh.entity_type !== TransactionEntityType.withdrawal) {
+        await queryRunner.commitTransaction();
+        return "Only withdrawals can be reprocessed";
+      }
+
+      // The cron only looks at processing withdrawals. Winding back the retry
+      // counter on anything else changes nothing.
+      if (fresh.status !== TransactionStatusType.processing) {
+        await queryRunner.commitTransaction();
+        return `Transaction is already ${fresh.status}`;
+      }
+
+      if (fresh.retry < CronJob.MAX_WITHDRAWAL_RETRIES) {
+        await queryRunner.commitTransaction();
+        return "Transaction has not exhausted its automatic retries";
+      }
+
+      // This withdrawal is already reserved as a processing debit, so exclude
+      // it from the sum — counting it would charge the user twice and block
+      // every legitimate reprocess. Same exclusion CronJob.retryWithdrawal makes.
+      const balanceResult = await queryRunner.manager
+        .createQueryBuilder(Transactions, "transaction")
+        .select(
+          `
+            SUM(CASE WHEN transaction.mode = :credit AND transaction.status = :success THEN transaction.amount ELSE 0 END) -
+            SUM(CASE WHEN transaction.mode = :debit AND transaction.status IN (:success, :processing) THEN transaction.amount ELSE 0 END)
+          `,
+          "balance",
+        )
+        .where("transaction.user_id = :user_id", { user_id: fresh.user_id })
+        .andWhere("transaction.id != :transId", { transId: fresh.id })
+        .setParameters({
+          credit: TransactionModeType.credit,
+          debit: TransactionModeType.debit,
+          success: TransactionStatusType.success,
+          processing: TransactionStatusType.processing,
+        })
+        .getRawOne();
+
+      const balance = parseFloat(balanceResult?.balance) || 0;
+      const amount = Number(fresh.amount) || 0;
+      if (balance < amount) {
+        await queryRunner.commitTransaction();
+        return `Insufficient wallet balance (${balance} < ${amount})`;
+      }
+
+      await queryRunner.manager.update(
+        Transactions,
+        { id: fresh.id },
+        {
+          retry: AdministratorService.REPROCESS_RETRY_VALUE,
+          metadata: {
+            ...fresh.metadata,
+            needs_review: false,
+            note: "Requeued for reprocessing by an admin",
+          },
+        },
+      );
+
+      await queryRunner.commitTransaction();
+      return null;
+    } catch (e) {
+      await queryRunner.rollbackTransaction();
+      throw e;
+    } finally {
+      await queryRunner.release();
+    }
   }
 
   async updateUserStatus(

@@ -15,6 +15,7 @@ export enum AdminLogEntities {
   KYC_STATUS = "KYC_STATUS",
   USER_STATUS = "USER_STATUS",
   STAFF = "STAFF",
+  TRANSACTION = "TRANSACTION",
 }
 
 @Entity({ name: "admin_logs" })

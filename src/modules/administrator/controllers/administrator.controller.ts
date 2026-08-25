@@ -36,6 +36,7 @@ import {
   CreateExchangeRateDto,
   CreateStaffDto,
   DeclineKycDto,
+  ReprocessTransactionDto,
   UpdateAdminProfileDto,
   UpdateStaffStatusDto,
 } from "../dto/admin.dto";
@@ -47,6 +48,7 @@ import {
   ChangeAdminPasswordValidation,
   CreateStaffValidation,
   CreateUpdateExchangeRateValidation,
+  ReprocessTransactionValidation,
   UpdateAdminProfileValidation,
   UpdateStaffStatusValidation,
   UpdateUserStatusValidation,
@@ -377,6 +379,22 @@ export class AdministratorController {
     @Req() req: AdminRequest,
   ) {
     return this.administratorService.declineKyc(declineKycDto, req);
+  }
+
+  @ApiOperation({
+    summary:
+      "Requeue processing withdrawals that exhausted their automatic retries",
+  })
+  @Post("transaction/reprocess")
+  @UsePipes(new JoiValidationPipe(ReprocessTransactionValidation))
+  async reprocessTransaction(
+    @Body() reprocessTransactionDto: ReprocessTransactionDto,
+    @Req() req: AdminRequest,
+  ) {
+    return this.administratorService.reprocessTransaction(
+      reprocessTransactionDto,
+      req,
+    );
   }
 
   @ApiOperation({ summary: "Activate or deactivate a user account" })
