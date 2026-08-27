@@ -138,7 +138,7 @@ export class AdministratorController {
   @ApiQuery({
     name: "role",
     required: false,
-    enum: ["super_admin", "marketer"],
+    enum: AdministratorRoles,
   })
   @ApiQuery({ name: "page", required: false, type: Number })
   @ApiQuery({ name: "limit", required: false, type: Number })
@@ -170,6 +170,7 @@ export class AdministratorController {
     return this.administratorService.resendStaffInvite(id, req);
   }
 
+  @AllowRoles(AdministratorRoles.support)
   @Get("users")
   async users(@Req() req: AdminRequest) {
     return this.administratorService.getUsers(req);
@@ -189,12 +190,14 @@ export class AdministratorController {
   }
 
   @ApiOperation({ summary: "Get a single user details" })
+  @AllowRoles(AdministratorRoles.support)
   @Get("user/:id")
   async getUser(@Param("id") id: string, @Req() req: AdminRequest) {
     return await this.administratorService.getUser(+id, req);
   }
 
   @ApiOperation({ summary: "Get a user transactions" })
+  @AllowRoles(AdministratorRoles.support)
   @Get("user/:id/transactions")
   async getUserTransaction(@Param("id") id: string, @Req() req: AdminRequest) {
     return await this.administratorService.getUserTransactions(+id, req);
@@ -210,7 +213,7 @@ export class AdministratorController {
   })
   @ApiQuery({ name: "date_from", required: false, type: String })
   @ApiQuery({ name: "date_to", required: false, type: String })
-  @AllowRoles(AdministratorRoles.marketer)
+  @AllowRoles(AdministratorRoles.marketer, AdministratorRoles.support)
   @Get("analytics/overview")
   async analyticsOverview(
     @Query("period") period?: string,
@@ -258,7 +261,7 @@ export class AdministratorController {
     required: false,
     enum: ["daily", "weekly", "monthly", "yearly"],
   })
-  @AllowRoles(AdministratorRoles.marketer)
+  @AllowRoles(AdministratorRoles.marketer, AdministratorRoles.support)
   @Get("analytics/volume")
   async analyticsVolume(@Query("granularity") granularity?: string) {
     const valid = ["daily", "weekly", "monthly", "yearly"] as const;
@@ -271,7 +274,7 @@ export class AdministratorController {
   @ApiOperation({ summary: "Analytics: daily inflow vs outflow" })
   @ApiQuery({ name: "date_from", required: false, type: String })
   @ApiQuery({ name: "date_to", required: false, type: String })
-  @AllowRoles(AdministratorRoles.marketer)
+  @AllowRoles(AdministratorRoles.marketer, AdministratorRoles.support)
   @Get("analytics/cash-flow")
   async analyticsCashFlow(
     @Query("date_from") dateFrom?: string,
@@ -283,7 +286,7 @@ export class AdministratorController {
   @ApiOperation({ summary: "Analytics: crypto deposits by coin and depositor" })
   @ApiQuery({ name: "date_from", required: false, type: String })
   @ApiQuery({ name: "date_to", required: false, type: String })
-  @AllowRoles(AdministratorRoles.marketer)
+  @AllowRoles(AdministratorRoles.marketer, AdministratorRoles.support)
   @Get("analytics/crypto-deposits")
   async analyticsCryptoDeposits(
     @Query("date_from") dateFrom?: string,
@@ -296,7 +299,7 @@ export class AdministratorController {
   @ApiQuery({ name: "days", required: false, type: Number })
   @ApiQuery({ name: "date_from", required: false, type: String })
   @ApiQuery({ name: "date_to", required: false, type: String })
-  @AllowRoles(AdministratorRoles.marketer)
+  @AllowRoles(AdministratorRoles.marketer, AdministratorRoles.support)
   @Get("analytics/daily-users")
   async analyticsDailyUsers(
     @Query("days") days?: string,
@@ -318,7 +321,7 @@ export class AdministratorController {
     enum: ["today", "week", "month", "year", "all"],
     description: "Ignored when an explicit date range is supplied.",
   })
-  @AllowRoles(AdministratorRoles.marketer)
+  @AllowRoles(AdministratorRoles.marketer, AdministratorRoles.support)
   @Get("analytics/kyc-funnel")
   async analyticsKycFunnel(
     @Query("date_from") dateFrom?: string,
@@ -336,14 +339,14 @@ export class AdministratorController {
   }
 
   @ApiOperation({ summary: "Analytics: user & volume locations" })
-  @AllowRoles(AdministratorRoles.marketer)
+  @AllowRoles(AdministratorRoles.marketer, AdministratorRoles.support)
   @Get("analytics/locations")
   async analyticsLocations() {
     return await this.analyticsService.userLocations();
   }
 
   @ApiOperation({ summary: "Get dashboard KPI" })
-  @AllowRoles(AdministratorRoles.marketer)
+  @AllowRoles(AdministratorRoles.marketer, AdministratorRoles.support)
   @Get("dashboard-kpi")
   async getDashboardKPI(@Req() req: AdminRequest) {
     return this.administratorService.getDashboardKPI(req);
@@ -359,6 +362,7 @@ export class AdministratorController {
   })
   @ApiQuery({ name: "page", required: false, type: Number })
   @ApiQuery({ name: "limit", required: false, type: Number })
+  @AllowRoles(AdministratorRoles.support)
   @Get("get-pending-kyc")
   async pendingKYC(@Req() req: AdminRequest) {
     return await this.administratorService.getPendingKYC(req);
@@ -402,6 +406,7 @@ export class AdministratorController {
   }
 
   @ApiOperation({ summary: "Activate or deactivate a user account" })
+  @AllowRoles(AdministratorRoles.support)
   @Patch("user/:id/status")
   async updateUserStatus(
     @Param("id") id: string,
@@ -478,6 +483,7 @@ export class AdministratorController {
   }
 
   @ApiOperation({ summary: "Get a single transaction details" })
+  @AllowRoles(AdministratorRoles.support)
   @Get("transaction/:id")
   async transaction(@Param("id") id: string, @Req() req: AdminRequest) {
     return await this.administratorService.transaction(+id, req);
@@ -506,6 +512,7 @@ export class AdministratorController {
     enum: TransactionEntityType,
     description: "Entity type of the transaction",
   })
+  @AllowRoles(AdministratorRoles.support)
   @Get("transactions")
   async transactions(@Req() req: AdminRequest) {
     return this.administratorService.transactions(req);

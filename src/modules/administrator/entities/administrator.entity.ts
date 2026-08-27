@@ -12,7 +12,12 @@ import { AdminLogs } from "./admin-logs.entity";
 export enum AdministratorRoles {
   super_admin = "super_admin",
   marketer = "marketer",
+  support = "support",
 }
+
+export const ASSIGNABLE_ADMIN_ROLES = Object.values(AdministratorRoles).filter(
+  (role) => role !== AdministratorRoles.super_admin,
+);
 
 export enum AdminStatus {
   active = "active",
@@ -44,9 +49,10 @@ export class Administrator {
   })
   status: AdminStatus;
 
+  // varchar rather than a DB enum, so a new role needs no migration. The Joi
+  // schema on the invite route is what constrains assignable values.
   @Column({
-    type: "enum",
-    enum: AdministratorRoles,
+    type: "varchar",
     default: AdministratorRoles.super_admin,
   })
   role: AdministratorRoles;
