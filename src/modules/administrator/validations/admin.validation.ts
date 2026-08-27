@@ -64,6 +64,12 @@ export const UpdateScheduledBroadcastValidation = Joi.object()
   .min(1)
   .messages({ "object.min": "Provide at least one field to update" });
 
+// Only cancelling is a manual transition — "sent" is set by the cron when it
+// releases the broadcast, never by an admin.
+export const UpdateBroadcastStatusValidation = Joi.object().keys({
+  status: Joi.string().valid("cancelled").required().label("Status"),
+});
+
 export const UpdateUserStatusValidation = Joi.object().keys({
   status: Joi.string()
     .valid("active", "deactivated")

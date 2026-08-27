@@ -267,10 +267,10 @@ export class NotificationsService {
       .groupBy("n.metadata->>'broadcast_ref'")
       .addGroupBy("n.message")
       .addGroupBy("n.tag")
-      // Pending broadcasts sort by when they will fire rather than when they
-      // were created, so upcoming sends stay together at the top.
-      .orderBy("COALESCE(MIN(n.scheduled_for), MIN(n.created_at))", "DESC")
-
+      // Newest-created first. Deliberately not scheduled_for — the admin list
+      // reads as a history of what was sent out, so a broadcast stays where it
+      // was created regardless of when it is due to fire.
+      .orderBy("MIN(n.created_at)", "DESC")
       .limit(limit)
       .offset(skip);
 

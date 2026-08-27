@@ -44,6 +44,7 @@ import {
 import { NotificationsService } from "@/modules/notifications/notifications.service";
 import {
   BroadcastNotificationValidation,
+  UpdateBroadcastStatusValidation,
   UpdateScheduledBroadcastValidation,
 } from "../validations/admin.validation";
 import { PublicService } from "@/modules/global/public/public.service";
@@ -467,8 +468,12 @@ export class AdministratorController {
 
   @ApiOperation({ summary: "Cancel a scheduled broadcast before it goes out" })
   @AllowRoles(AdministratorRoles.marketer)
-  @Delete("notifications/broadcast/:ref")
-  async cancelScheduledBroadcast(@Param("ref") ref: string) {
+  @Patch("notifications/broadcast/:ref/status")
+  async updateScheduledBroadcastStatus(
+    @Param("ref") ref: string,
+    @Body(new JoiValidationPipe(UpdateBroadcastStatusValidation))
+    body: { status: "cancelled" },
+  ) {
     return await this.notificationsService.cancelScheduledBroadcast(ref);
   }
 
