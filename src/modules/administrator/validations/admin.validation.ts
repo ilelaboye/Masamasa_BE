@@ -1,7 +1,7 @@
 import { CurrencyCoin } from "@/modules/exchange-rates/exchange-rates.entity";
 import * as Joi from "joi";
 import {
-  AdministratorRoles,
+  ASSIGNABLE_ADMIN_ROLES,
   AdminStatus,
 } from "../entities/administrator.entity";
 
@@ -59,10 +59,11 @@ export const CreateStaffValidation = Joi.object().keys({
   first_name: Joi.string().trim().min(1).max(50).required().label("First name"),
   last_name: Joi.string().trim().min(1).max(50).required().label("Last name"),
   email: Joi.string().trim().lowercase().email().required().label("Email"),
-  // Deliberately narrower than AdministratorRoles: the invite flow must never
-  // be able to mint a super_admin. Promoting someone is a manual DB change.
+  // Every role except super_admin — the invite flow must never be able to mint
+  // one. Promoting someone stays a manual DB change. Derived rather than
+  // listed, so a new role becomes assignable without editing this.
   role: Joi.string()
-    .valid(AdministratorRoles.marketer)
+    .valid(...ASSIGNABLE_ADMIN_ROLES)
     .required()
     .label("Role"),
 });
