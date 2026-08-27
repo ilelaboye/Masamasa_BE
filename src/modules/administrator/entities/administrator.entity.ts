@@ -15,11 +15,6 @@ export enum AdministratorRoles {
   support = "support",
 }
 
-/**
- * Roles an admin may hand out through the invite flow — everything except
- * super_admin, which stays a manual promotion. Derived from the enum so a new
- * role is assignable the moment it is added.
- */
 export const ASSIGNABLE_ADMIN_ROLES = Object.values(AdministratorRoles).filter(
   (role) => role !== AdministratorRoles.super_admin,
 );
