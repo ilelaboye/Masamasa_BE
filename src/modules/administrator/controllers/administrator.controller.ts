@@ -418,6 +418,14 @@ export class AdministratorController {
   }
 
   @ApiOperation({ summary: "List notifications broadcast to users" })
+  @ApiQuery({
+    name: "status",
+    required: false,
+    enum: ["pending", "sent", "cancelled"],
+    description: "Pending means scheduled and not yet released.",
+  })
+  @ApiQuery({ name: "page", required: false, type: Number })
+  @ApiQuery({ name: "limit", required: false, type: Number })
   @AllowRoles(AdministratorRoles.marketer)
   @Get("notifications")
   async listBroadcastNotifications(@Req() req: AdminRequest) {
