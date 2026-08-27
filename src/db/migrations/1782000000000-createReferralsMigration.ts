@@ -1,24 +1,4 @@
 import { MigrationInterface, QueryRunner } from "typeorm";
-
-/**
- * Referral programme schema.
- *
- * Three pieces:
- *  1. `users.referral_code`   — every user's own code, UNIQUE. Sized varchar(10)
- *                               so the code length can grow later without a
- *                               second migration; codes are generated at 7
- *                               characters today. Backfilled for existing rows
- *                               before the unique index goes on, so the feature
- *                               works for accounts that predate it.
- *  2. `users.referred_by_id`  — FK to users(id): the account whose code the
- *                               user signed up with. Set once, at signup.
- *  3. `referral_earnings`     — one row per qualifying referral.
- *
- * The UNIQUE(user_id, referee_id) on `referral_earnings` is what makes the
- * reward one-time. It is a database constraint rather than only a service
- * check because two deposits confirming at once would otherwise both pass an
- * application-level "has this been paid?" read and insert twice.
- */
 export class CreateReferralsMigration1782000000000 implements MigrationInterface {
   name = "CreateReferralsMigration1782000000000";
 

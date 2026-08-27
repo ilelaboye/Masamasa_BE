@@ -19,7 +19,7 @@ import { Administrator } from "@/modules/administrator/entities/administrator.en
 /** Who a broadcast reaches. "verified" is KYC, the platform's own notion of a
  *  verified account — not email confirmation. */
 export type BroadcastAudience = "all" | "verified" | "unverified";
-import { getRequestQuery } from "@/core/utils";
+import { formateDate, getRequestQuery } from "@/core/utils";
 import { generateMasamasaRef, paginate } from "@/core/helpers";
 import { PushService } from "./push.service";
 
@@ -148,6 +148,26 @@ export class NotificationsService {
   ) {
     const notificationTag = tag?.trim() || "announcement";
 
+    const broadcastRef = generateMasamasaRef();
+
+    if (scheduledFor) {
+      this.notificationRepository.create({
+        user_id: 1,
+        message,
+        tag: notificationTag,
+        scheduled_for: scheduledFor,
+        status: NotificationStatus.pending,
+        metadata: {
+          sent_by_admin: adminId,
+          broadcast_ref: broadcastRef,
+          audience,
+        },
+      });
+      return {
+        message: `Notification scheduled for ${formateDate(scheduledFor)}.`,
+      };
+    }
+
     const users = await this.userRepository.find({
       select: ["id", "notification_token", "kyc_status", "status"],
       where: {
@@ -160,8 +180,6 @@ export class NotificationsService {
               : Not(IsNull()),
       },
     });
-
-    const broadcastRef = generateMasamasaRef();
 
     const chunkSize = 500;
     for (let i = 0; i < users.length; i += chunkSize) {
@@ -182,15 +200,6 @@ export class NotificationsService {
         }),
       );
       await this.notificationRepository.insert(chunk);
-    }
-
-    // A scheduled broadcast pushes when the cron releases it, not now.
-    if (scheduledFor) {
-      return {
-        message: `Notification scheduled for ${users.length} user(s).`,
-        broadcast_ref: broadcastRef,
-        recipients: users.length,
-      };
     }
 
     // Best-effort device push — DB rows above are the source of truth, so a
