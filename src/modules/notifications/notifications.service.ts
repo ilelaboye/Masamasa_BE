@@ -1,10 +1,18 @@
-import { UserRequest } from "@/definitions";
-import { Injectable, Logger } from "@nestjs/common";
+import { AdminRequest, UserRequest } from "@/definitions";
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { InjectRepository } from "@nestjs/typeorm";
-import { IsNull, Not, QueryRunner, Repository } from "typeorm";
+import { In, IsNull, Not, QueryRunner, Repository } from "typeorm";
 import { CreateNotificationDto } from "./dto/create-notification.dto";
-import { Notification } from "./entities/notification.entity";
+import {
+  Notification,
+  NotificationStatus,
+} from "./entities/notification.entity";
 import { KycStatus, Status, User } from "@/modules/users/entities/user.entity";
 import { Administrator } from "@/modules/administrator/entities/administrator.entity";
 
@@ -97,7 +105,16 @@ export class NotificationsService {
     const queryRunner = this.notificationRepository
       .createQueryBuilder("notification")
       .where("user_id = :user_id", { user_id: req.user.id })
-      .orderBy("notification.created_at", "DESC");
+      .andWhere("notification.status = :sent", {
+        sent: NotificationStatus.sent,
+      })
+      // A scheduled row is created days before it is delivered, so ordering on
+      // created_at alone would bury it. COALESCE leaves immediate
+      // notifications ordering exactly as before.
+      .orderBy(
+        "COALESCE(notification.scheduled_for, notification.created_at)",
+        "DESC",
+      );
 
     const count = await queryRunner.getCount();
     const notifications = await queryRunner.skip(skip).take(limit).getMany();
@@ -110,13 +127,13 @@ export class NotificationsService {
     const { id: userId } = req.user;
 
     return await this.notificationRepository.findOne({
-      where: { id, user: { id: userId } },
+      where: { id, user: { id: userId }, status: NotificationStatus.sent },
     });
   }
 
   async markAllAsRead(req: UserRequest) {
     await this.notificationRepository.update(
-      { user_id: req.user.id, is_read: false },
+      { user_id: req.user.id, is_read: false, status: NotificationStatus.sent },
       { is_read: true },
     );
     return { message: "All notifications marked as read." };
@@ -127,6 +144,7 @@ export class NotificationsService {
     adminId: number,
     tag?: string,
     audience: BroadcastAudience = "all",
+    scheduledFor?: Date | null,
   ) {
     const notificationTag = tag?.trim() || "announcement";
 
@@ -152,6 +170,10 @@ export class NotificationsService {
           user_id: user.id,
           message,
           tag: notificationTag,
+          scheduled_for: scheduledFor ?? null,
+          status: scheduledFor
+            ? NotificationStatus.pending
+            : NotificationStatus.sent,
           metadata: {
             sent_by_admin: adminId,
             broadcast_ref: broadcastRef,
@@ -160,6 +182,15 @@ export class NotificationsService {
         }),
       );
       await this.notificationRepository.insert(chunk);
+    }
+
+    // A scheduled broadcast pushes when the cron releases it, not now.
+    if (scheduledFor) {
+      return {
+        message: `Notification scheduled for ${users.length} user(s).`,
+        broadcast_ref: broadcastRef,
+        recipients: users.length,
+      };
     }
 
     // Best-effort device push — DB rows above are the source of truth, so a
@@ -181,22 +212,23 @@ export class NotificationsService {
    * Admin history — one row per broadcast (grouped by the shared ref),
    * with the recipient count, send time and who sent it.
    */
-  async listBroadcasts() {
-    return await this.notificationRepository
+  async listBroadcasts(req: AdminRequest) {
+    const { limit, page, skip } = getRequestQuery(req);
+    const status = req.query.status as string;
+
+    // Every row of a broadcast is written and released in one statement, so
+    // filtering at row level and the rollup in the SELECT always agree.
+    const countQuery = this.notificationRepository
       .createQueryBuilder("n")
-      // Compared as text rather than casting the JSON value to int: metadata is
-      // schemaless, and a single row holding a non-numeric sent_by_admin would
-      // make `::int` throw for the whole query. Casting the trusted integer
-      // column instead cannot fail. The table is tiny and this is capped at 200
-      // rows, so losing the index on administrators.id costs nothing. CAST
-      // rather than ::text — TypeORM scans condition strings for ":param"
-      // placeholders, and a bare "::" is trouble this does not need.
-      //
-      // withDeleted because Administrator is soft-deleted, so TypeORM otherwise
-      // appends "admin.deleted_at IS NULL" to this join and a broadcast sent by
-      // an admin who has since left silently loses its sender. This is an audit
-      // list — it should still say who sent it. Safe on the root entity too:
-      // Notification has no delete column, so nothing else is unfiltered.
+      .select("COUNT(DISTINCT n.metadata->>'broadcast_ref')", "count")
+      .where("n.metadata->>'broadcast_ref' IS NOT NULL");
+
+    if (status) countQuery.andWhere("n.status = :status", { status });
+
+    const counted = await countQuery.getRawOne<{ count: string }>();
+
+    const query = this.notificationRepository
+      .createQueryBuilder("n")
       .withDeleted()
       .leftJoin(
         Administrator,
@@ -205,13 +237,20 @@ export class NotificationsService {
       )
       .select("n.metadata->>'broadcast_ref'", "broadcast_ref")
       .addSelect("n.message", "message")
-      // Aggregated, not bare: everything in the SELECT has to be grouped on or
-      // wrapped in an aggregate, and audience is constant per broadcast. Left
-      // bare, Postgres rejects the whole query with "must appear in the GROUP
-      // BY clause or be used in an aggregate function".
       .addSelect("MIN(n.metadata->>'audience')", "audience")
       .addSelect("n.tag", "tag")
       .addSelect("MIN(n.created_at)", "created_at")
+      .addSelect("MIN(n.scheduled_for)", "scheduled_for")
+      // Rolled up from the per-user rows: cancelled wins over pending, and a
+      // broadcast only reads as sent once every one of its rows is.
+      .addSelect(
+        `CASE
+           WHEN BOOL_OR(n.status = 'cancelled') THEN 'cancelled'
+           WHEN BOOL_OR(n.status = 'pending') THEN 'pending'
+           ELSE 'sent'
+         END`,
+        "status",
+      )
       .addSelect("COUNT(*)", "recipients")
       .addSelect("MIN(n.metadata->>'sent_by_admin')", "sent_by_admin")
       // Aggregated rather than grouped on, so a broadcast stays one row even if
@@ -228,8 +267,167 @@ export class NotificationsService {
       .groupBy("n.metadata->>'broadcast_ref'")
       .addGroupBy("n.message")
       .addGroupBy("n.tag")
-      .orderBy("MIN(n.created_at)", "DESC")
-      .limit(200)
-      .getRawMany();
+      // Pending broadcasts sort by when they will fire rather than when they
+      // were created, so upcoming sends stay together at the top.
+      .orderBy("COALESCE(MIN(n.scheduled_for), MIN(n.created_at))", "DESC")
+
+      .limit(limit)
+      .offset(skip);
+
+    if (status) query.andWhere("n.status = :status", { status });
+
+    const notifications = await query.getRawMany();
+
+    return {
+      notifications,
+      metadata: paginate(Number(counted?.count) || 0, page, limit),
+    };
+  }
+
+  /**
+   * Releases scheduled notifications whose hour has arrived, then pushes them.
+   * Driven by the hourly cron.
+   *
+   * A row is deliverable from its scheduled hour until the end of that hour
+   * (2:00pm–2:59pm for a 2pm schedule). Anything past that stays unsent rather
+   * than arriving late, and remains visible in the admin list as such.
+   */
+  async releaseScheduleNotifications() {
+    const result = await this.notificationRepository
+      .createQueryBuilder()
+      .update(Notification)
+      .set({ status: NotificationStatus.sent })
+      .where("status = :pending", { pending: NotificationStatus.pending })
+      .andWhere(`scheduled_for <= now() + interval '1 minute'`)
+      .andWhere(`now() < scheduled_for + interval '1 hour'`)
+      .returning(["id", "user_id", "message", "tag", "metadata"])
+      .execute();
+
+    const released = (result.raw ?? []) as Array<{
+      id: number;
+      user_id: number;
+      message: string;
+      tag: string;
+      metadata: { broadcast_ref?: string } | null;
+    }>;
+
+    if (!released.length) return { released: 0, delivered: 0 };
+    const groups = new Map<
+      string,
+      { message: string; tag: string; userIds: number[] }
+    >();
+    for (const row of released) {
+      const key = row.metadata?.broadcast_ref ?? `single-${row.id}`;
+      const group = groups.get(key) ?? {
+        message: row.message,
+        tag: row.tag,
+        userIds: [],
+      };
+      group.userIds.push(row.user_id);
+      groups.set(key, group);
+    }
+
+    const users = await this.userRepository.find({
+      select: ["id", "notification_token"],
+      where: { id: In(released.map((row) => row.user_id)) },
+    });
+    const tokenByUserId = new Map(
+      users.map((user) => [user.id, user.notification_token]),
+    );
+
+    let delivered = 0;
+    for (const [ref, group] of groups) {
+      const tokens = group.userIds
+        .map((id) => tokenByUserId.get(id))
+        .filter(Boolean) as string[];
+
+      delivered += await this.pushService.sendToTokens(
+        tokens,
+        group.tag,
+        group.message,
+        { tag: group.tag, broadcast_ref: ref },
+      );
+    }
+
+    this.logger.log(
+      `Released ${released.length} scheduled notification(s), push delivered to ${delivered} device(s).`,
+    );
+
+    return { released: released.length, delivered };
+  }
+
+  /**
+   * Edits a scheduled broadcast before it goes out. Every per-user row sharing
+   * the ref is updated together, since the broadcast only exists as those rows.
+   */
+  async updateScheduledBroadcast(
+    ref: string,
+    message?: string,
+    tag?: string,
+    scheduledFor?: Date,
+  ) {
+    await this.assertPendingBroadcast(ref);
+
+    // Only the fields the admin actually sent get overwritten.
+    const fields = {
+      ...(message !== undefined ? { message: message.trim() } : {}),
+      ...(tag !== undefined ? { tag: tag.trim() || "announcement" } : {}),
+      ...(scheduledFor !== undefined ? { scheduled_for: scheduledFor } : {}),
+    };
+
+    const result = await this.notificationRepository
+      .createQueryBuilder()
+      .update(Notification)
+      .set(fields)
+      .where("metadata->>'broadcast_ref' = :ref", { ref })
+      .andWhere("status = :pending", { pending: NotificationStatus.pending })
+      .execute();
+
+    return {
+      message: `Scheduled notification updated for ${result.affected ?? 0} user(s).`,
+    };
+  }
+
+  /**
+   * Cancels a scheduled broadcast. The rows are kept and marked cancelled
+   * rather than deleted, so the broadcast stays visible in the admin list —
+   * and `status = 'pending'` in the cron query excludes them on its own.
+   */
+  async cancelScheduledBroadcast(ref: string) {
+    await this.assertPendingBroadcast(ref);
+
+    const result = await this.notificationRepository
+      .createQueryBuilder()
+      .update(Notification)
+      .set({ status: NotificationStatus.cancelled })
+      .where("metadata->>'broadcast_ref' = :ref", { ref })
+      .andWhere("status = :pending", { pending: NotificationStatus.pending })
+      .execute();
+
+    return {
+      message: `Scheduled notification cancelled for ${result.affected ?? 0} user(s).`,
+    };
+  }
+
+  /** A broadcast can only be changed while every one of its rows is pending. */
+  private async assertPendingBroadcast(ref: string) {
+    const rows = await this.notificationRepository
+      .createQueryBuilder("n")
+      .select("n.status", "status")
+      .where("n.metadata->>'broadcast_ref' = :ref", { ref })
+      .groupBy("n.status")
+      .getRawMany<{ status: NotificationStatus }>();
+
+    if (!rows.length)
+      throw new NotFoundException("Scheduled notification not found");
+
+    const blocking = rows
+      .map((row) => row.status)
+      .find((status) => status !== NotificationStatus.pending);
+
+    if (blocking)
+      throw new BadRequestException(
+        `This notification has already been ${blocking} and can no longer be changed`,
+      );
   }
 }

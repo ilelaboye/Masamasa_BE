@@ -3,13 +3,20 @@ import { CronJob } from "./cron.job";
 import { Cron, Interval } from "@nestjs/schedule";
 import { _IS_PROD_ } from "@/constants";
 import { ReferralsService } from "@/modules/referrals/referrals.service";
+import { NotificationsService } from "@/modules/notifications/notifications.service";
 
 @Injectable()
 export class CronService {
   constructor(
     private readonly cronJob: CronJob,
     private readonly referralsService: ReferralsService,
+    private readonly notificationsService: NotificationsService,
   ) {}
+
+  @Cron("0 * * * *")
+  async releaseScheduledNotifications() {
+    await this.notificationsService.releaseScheduleNotifications();
+  }
 
   // @Interval(50000)
   // @Interval(10000)

@@ -42,6 +42,29 @@ export class BroadcastNotificationDto {
     description: "Who receives it. 'verified' means KYC verified.",
   })
   audience?: "all" | "verified" | "unverified";
+
+  @ApiProperty({
+    example: "2026-09-01T14:00:00+01:00",
+    required: false,
+    description:
+      "Leave empty to send now. Pick a future time on the hour and it goes out during that hour.",
+  })
+  scheduled_for?: string;
+}
+
+export class UpdateScheduledBroadcastDto {
+  @ApiProperty({ example: "Updated announcement text", required: false })
+  message?: string;
+
+  @ApiProperty({ example: "announcement", required: false })
+  tag?: string;
+
+  @ApiProperty({
+    example: "2026-09-01T15:00:00+01:00",
+    required: false,
+    description: "Reschedule to a different hour. Must be on the hour.",
+  })
+  scheduled_for?: string;
 }
 
 export class UpdateAdminProfileDto {
