@@ -10,6 +10,18 @@ export class CreateExchangeRateDto {
   currency: CurrencyCoin;
 }
 
+export class EditBulkRateDto {
+  @ApiProperty({ example: 1400 })
+  rate: number;
+
+  @ApiProperty({
+    example: [CurrencyCoin.btc, CurrencyCoin.eth],
+    isArray: true,
+    enum: CurrencyCoin,
+  })
+  currencies: CurrencyCoin[];
+}
+
 export class DeclineKycDto {
   @ApiProperty({ example: 2 })
   user: number;

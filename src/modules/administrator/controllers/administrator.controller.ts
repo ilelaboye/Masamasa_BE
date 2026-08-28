@@ -36,6 +36,7 @@ import {
   CreateExchangeRateDto,
   CreateStaffDto,
   DeclineKycDto,
+  EditBulkRateDto,
   ReprocessTransactionDto,
   UpdateAdminProfileDto,
   UpdateStaffStatusDto,
@@ -48,6 +49,7 @@ import {
   ChangeAdminPasswordValidation,
   CreateStaffValidation,
   CreateUpdateExchangeRateValidation,
+  EditBulkRateValidation,
   ReprocessTransactionValidation,
   UpdateAdminProfileValidation,
   UpdateStaffStatusValidation,
@@ -493,6 +495,16 @@ export class AdministratorController {
       createExchangeRateDto,
       req,
     );
+  }
+
+  @ApiOperation({ summary: "Set one rate across several currencies at once" })
+  @Post("edit-bulk-rate")
+  @UsePipes(new JoiValidationPipe(EditBulkRateValidation))
+  async editBulkRate(
+    @Body() editBulkRateDto: EditBulkRateDto,
+    @Req() req: AdminRequest,
+  ) {
+    return this.administratorService.editBulkRate(editBulkRateDto, req);
   }
 
   //WEB3 API's

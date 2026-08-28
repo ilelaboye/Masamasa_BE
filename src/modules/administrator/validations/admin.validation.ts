@@ -12,6 +12,16 @@ export const CreateUpdateExchangeRateValidation = Joi.object().keys({
     .required(),
 });
 
+export const EditBulkRateValidation = Joi.object().keys({
+  rate: Joi.number().greater(0).required().label("Rate"),
+  currencies: Joi.array()
+    .items(Joi.string().valid(...Object.values(CurrencyCoin)))
+    .min(1)
+    .unique()
+    .required()
+    .label("Currencies"),
+});
+
 export const BroadcastNotificationValidation = Joi.object().keys({
   message: Joi.string().trim().min(1).max(500).required().label("Message"),
   // Optional so clients that only send a message keep working. The fallback
