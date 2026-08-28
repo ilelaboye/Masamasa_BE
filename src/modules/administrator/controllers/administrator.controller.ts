@@ -457,18 +457,13 @@ export class AdministratorController {
 
   @ApiOperation({ summary: "Edit a scheduled broadcast before it goes out" })
   @AllowRoles(AdministratorRoles.marketer)
-  @Patch("notifications/broadcast/:ref")
+  @Patch("notifications/broadcast")
   async updateScheduledBroadcast(
-    @Param("ref") ref: string,
     @Body(new JoiValidationPipe(UpdateScheduledBroadcastValidation))
     body: UpdateScheduledBroadcastDto,
+    @Req() req: AdminRequest,
   ) {
-    return await this.notificationsService.updateScheduledBroadcast(
-      ref,
-      body.message,
-      body.tag,
-      body.scheduled_for ? new Date(body.scheduled_for) : undefined,
-    );
+    return await this.notificationsService.updateScheduledBroadcast(body, req);
   }
 
   @ApiOperation({ summary: "Cancel a scheduled broadcast before it goes out" })

@@ -55,14 +55,12 @@ export const ReprocessTransactionValidation = Joi.object().keys({
 
 // Audience is deliberately absent: changing it would mean adding or removing
 // per-user rows, not editing the ones that exist. Cancel and recreate instead.
-export const UpdateScheduledBroadcastValidation = Joi.object()
-  .keys({
-    message: Joi.string().trim().min(1).max(500).label("Message"),
-    tag: Joi.string().trim().min(1).max(255).label("Tag"),
-    scheduled_for: scheduledFor,
-  })
-  .min(1)
-  .messages({ "object.min": "Provide at least one field to update" });
+export const UpdateScheduledBroadcastValidation = Joi.object().keys({
+  id: Joi.number().integer().positive().required().label("Id"),
+  message: Joi.string().trim().min(1).max(500).label("Message"),
+  tag: Joi.string().trim().min(1).max(255).label("Tag"),
+  scheduled_for: scheduledFor,
+});
 
 // Only cancelling is a manual transition — "sent" is set by the cron when it
 // releases the broadcast, never by an admin.

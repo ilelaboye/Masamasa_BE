@@ -7,7 +7,7 @@ import {
 } from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { InjectRepository } from "@nestjs/typeorm";
-import { In, IsNull, Not, QueryRunner, Repository } from "typeorm";
+import { IsNull, Not, QueryRunner, Repository } from "typeorm";
 import { CreateNotificationDto } from "./dto/create-notification.dto";
 import {
   Notification,
@@ -22,6 +22,7 @@ export type BroadcastAudience = "all" | "verified" | "unverified";
 import { formateDate, getRequestQuery } from "@/core/utils";
 import { generateMasamasaRef, paginate } from "@/core/helpers";
 import { PushService } from "./push.service";
+import { UpdateScheduledBroadcastDto } from "../administrator/dto/admin.dto";
 
 @Injectable()
 export class NotificationsService {
@@ -202,8 +203,6 @@ export class NotificationsService {
       await this.notificationRepository.insert(chunk);
     }
 
-    // Best-effort device push — DB rows above are the source of truth, so a
-    // push failure must not fail the broadcast.
     const tokens = users.map((u) => u.notification_token).filter(Boolean);
     const delivered = await this.pushService.sendToTokens(
       tokens,
@@ -217,10 +216,6 @@ export class NotificationsService {
     };
   }
 
-  /**
-   * Admin history — one row per broadcast (grouped by the shared ref),
-   * with the recipient count, send time and who sent it.
-   */
   async listBroadcasts(req: AdminRequest) {
     const { limit, page, skip } = getRequestQuery(req);
     const status = req.query.status as string;
@@ -293,107 +288,238 @@ export class NotificationsService {
     };
   }
 
-  /**
-   * Releases scheduled notifications whose hour has arrived, then pushes them.
-   * Driven by the hourly cron.
-   *
-   * A row is deliverable from its scheduled hour until the end of that hour
-   * (2:00pm–2:59pm for a 2pm schedule). Anything past that stays unsent rather
-   * than arriving late, and remains visible in the admin list as such.
-   */
+  private audienceFilter(
+    audience: BroadcastAudience | undefined,
+    params: unknown[],
+  ): string {
+    if (audience === "verified") {
+      params.push(KycStatus.success);
+      return `AND u.kyc_status = $${params.length}`;
+    }
+    if (audience === "unverified") {
+      params.push(KycStatus.none);
+      return `AND u.kyc_status = $${params.length}`;
+    }
+    return "";
+  }
+
+  private async audienceTokens(
+    audience: BroadcastAudience | undefined,
+  ): Promise<string[]> {
+    const params: unknown[] = [Status.active];
+    const filter = this.audienceFilter(audience, params);
+
+    const rows: Array<{ notification_token: string }> =
+      await this.userRepository.query(
+        `SELECT u.notification_token
+           FROM users u
+          WHERE u.deleted_at IS NULL
+            AND u.status = $1
+            AND u.notification_token IS NOT NULL
+            AND u.notification_token <> ''
+            ${filter}`,
+        params,
+      );
+
+    return rows.map((row) => row.notification_token);
+  }
+
   async releaseScheduleNotifications() {
-    const result = await this.notificationRepository
+    // Claim and select in the same statement. A run that overlaps the previous
+    // one (or a second instance of the API) finds the rows already marked and
+    // fans nothing out twice — the old read-then-write left that window open
+    // for the whole delivery.
+    const claim = await this.notificationRepository
       .createQueryBuilder()
       .update(Notification)
       .set({ status: NotificationStatus.sent })
       .where("status = :pending", { pending: NotificationStatus.pending })
-      .andWhere(`scheduled_for <= now() + interval '1 minute'`)
-      .andWhere(`now() < scheduled_for + interval '1 hour'`)
-      .returning(["id", "user_id", "message", "tag", "metadata"])
+      .andWhere("scheduled_for >= date_trunc('hour', now())")
+      .andWhere("scheduled_for < date_trunc('hour', now()) + interval '1 hour'")
+      .returning(["id", "message", "tag", "metadata"])
       .execute();
 
-    const released = (result.raw ?? []) as Array<{
+    const due = (claim.raw ?? []) as Array<{
       id: number;
-      user_id: number;
       message: string;
       tag: string;
-      metadata: { broadcast_ref?: string } | null;
+      metadata: {
+        sent_by_admin?: number;
+        broadcast_ref?: string;
+        audience?: BroadcastAudience;
+      } | null;
     }>;
 
-    if (!released.length) return { released: 0, delivered: 0 };
-    const groups = new Map<
-      string,
-      { message: string; tag: string; userIds: number[] }
-    >();
-    for (const row of released) {
-      const key = row.metadata?.broadcast_ref ?? `single-${row.id}`;
-      const group = groups.get(key) ?? {
-        message: row.message,
-        tag: row.tag,
-        userIds: [],
-      };
-      group.userIds.push(row.user_id);
-      groups.set(key, group);
-    }
+    if (!due.length) return { released: 0, delivered: 0 };
 
-    const users = await this.userRepository.find({
-      select: ["id", "notification_token"],
-      where: { id: In(released.map((row) => row.user_id)) },
-    });
-    const tokenByUserId = new Map(
-      users.map((user) => [user.id, user.notification_token]),
+    const tokensByAudience = new Map<string, Promise<string[]>>();
+    const tokensFor = (audience: BroadcastAudience | undefined) => {
+      const key = audience ?? "all";
+      const cached = tokensByAudience.get(key);
+      if (cached) return cached;
+      const pending = this.audienceTokens(audience);
+      tokensByAudience.set(key, pending);
+      return pending;
+    };
+
+    const outcomes = await Promise.allSettled(
+      due.map((row) => this.fanOutBroadcast(row, tokensFor)),
     );
 
     let delivered = 0;
-    for (const [ref, group] of groups) {
-      const tokens = group.userIds
-        .map((id) => tokenByUserId.get(id))
-        .filter(Boolean) as string[];
-
-      delivered += await this.pushService.sendToTokens(
-        tokens,
-        group.tag,
-        group.message,
-        { tag: group.tag, broadcast_ref: ref },
-      );
+    for (const outcome of outcomes) {
+      if (outcome.status === "fulfilled") delivered += outcome.value;
+      else
+        this.logger.error(
+          `Scheduled broadcast failed: ${(outcome.reason as Error)?.message}`,
+        );
     }
 
-    this.logger.log(
-      `Released ${released.length} scheduled notification(s), push delivered to ${delivered} device(s).`,
-    );
-
-    return { released: released.length, delivered };
+    return { released: due.length, delivered };
   }
 
-  /**
-   * Edits a scheduled broadcast before it goes out. Every per-user row sharing
-   * the ref is updated together, since the broadcast only exists as those rows.
-   */
+  /** Writes one claimed broadcast's rows and pushes it. Returns devices reached. */
+  private async fanOutBroadcast(
+    row: {
+      id: number;
+      message: string;
+      tag: string;
+      metadata: {
+        sent_by_admin?: number;
+        broadcast_ref?: string;
+        audience?: BroadcastAudience;
+      } | null;
+    },
+    tokensFor: (audience: BroadcastAudience | undefined) => Promise<string[]>,
+  ): Promise<number> {
+    const audience = row.metadata?.audience;
+    // Started before the insert, awaited after — the token read and the
+    // fan-out are independent and overlap.
+    const tokens = tokensFor(audience).catch((err: Error) => {
+      this.logger.error(`Token lookup failed: ${err.message}`);
+      return [] as string[];
+    });
+
+    const params: unknown[] = [
+      row.message,
+      row.tag,
+      NotificationStatus.sent,
+      JSON.stringify({
+        sent_by_admin: row.metadata?.sent_by_admin,
+        broadcast_ref: row.metadata?.broadcast_ref,
+        audience,
+      }),
+      Status.active,
+    ];
+    const filter = this.audienceFilter(audience, params);
+
+    try {
+      // is_read and created_at come from their column defaults.
+      await this.notificationRepository.query(
+        `INSERT INTO notifications (user_id, message, tag, status, metadata)
+         SELECT u.id, $1, $2, $3, $4::json
+           FROM users u
+          WHERE u.deleted_at IS NULL
+            AND u.status = $5
+            ${filter}`,
+        params,
+      );
+    } catch (err) {
+      // The insert is one statement, so nothing was written. Hand the template
+      // row back to the next tick rather than losing the broadcast.
+      await this.notificationRepository.update(
+        { id: row.id },
+        { status: NotificationStatus.pending },
+      );
+      throw err;
+    }
+
+    // Past this point the rows exist and are the source of truth; push is
+    // best-effort and never reverts the claim.
+    return this.pushService.sendToTokens(await tokens, row.tag, row.message, {
+      tag: row.tag,
+      broadcast_ref: row.metadata?.broadcast_ref ?? "",
+    });
+  }
+
   async updateScheduledBroadcast(
-    ref: string,
-    message?: string,
-    tag?: string,
-    scheduledFor?: Date,
+    body: UpdateScheduledBroadcastDto,
+    req: AdminRequest,
   ) {
-    await this.assertPendingBroadcast(ref);
+    const notification = await this.notificationRepository.findOne({
+      where: { id: body.id, status: NotificationStatus.pending },
+    });
 
-    // Only the fields the admin actually sent get overwritten.
-    const fields = {
-      ...(message !== undefined ? { message: message.trim() } : {}),
-      ...(tag !== undefined ? { tag: tag.trim() || "announcement" } : {}),
-      ...(scheduledFor !== undefined ? { scheduled_for: scheduledFor } : {}),
-    };
+    if (!notification)
+      throw new BadRequestException(
+        "Scheduled notification not found or already sent. Only scheduled notifications can be edited.",
+      );
+    const notificationTag = body.tag.trim() || "announcement";
 
-    const result = await this.notificationRepository
-      .createQueryBuilder()
-      .update(Notification)
-      .set(fields)
-      .where("metadata->>'broadcast_ref' = :ref", { ref })
-      .andWhere("status = :pending", { pending: NotificationStatus.pending })
-      .execute();
+    const broadcastRef = generateMasamasaRef();
+
+    if (body.scheduled_for) {
+      await this.notificationRepository.update(
+        { id: body.id },
+        {
+          message: body.message,
+          tag: notificationTag,
+          scheduled_for: body.scheduled_for,
+          status: NotificationStatus.pending,
+          metadata: {
+            sent_by_admin: req.admin.id,
+            broadcast_ref: broadcastRef,
+            audience: body.audience,
+          } as any,
+        },
+      );
+      return {
+        message: `Notification updated and scheduled for ${formateDate(body.scheduled_for)}.`,
+      };
+    }
+
+    const users = await this.userRepository.find({
+      select: ["id", "notification_token", "kyc_status", "status"],
+      where: {
+        status: Status.active,
+        kyc_status:
+          body.audience === "verified"
+            ? KycStatus.success
+            : body.audience === "unverified"
+              ? KycStatus.none
+              : Not(IsNull()),
+      },
+    });
+
+    const chunkSize = 500;
+    for (let i = 0; i < users.length; i += chunkSize) {
+      const chunk = users.slice(i, i + chunkSize).map((user) =>
+        this.notificationRepository.create({
+          user_id: user.id,
+          message: body.message,
+          tag: notificationTag,
+          scheduled_for: null,
+          status: NotificationStatus.sent,
+          metadata: {
+            sent_by_admin: req.admin.id,
+            broadcast_ref: broadcastRef,
+            audience: body.audience,
+          },
+        }),
+      );
+      await this.notificationRepository.insert(chunk);
+    }
+
+    const tokens = users.map((u) => u.notification_token).filter(Boolean);
+    const delivered = await this.pushService.sendToTokens(
+      tokens,
+      notificationTag,
+      `${body.message}`,
+      { tag: notificationTag, broadcast_ref: broadcastRef },
+    );
 
     return {
-      message: `Scheduled notification updated for ${result.affected ?? 0} user(s).`,
+      message: `Notification sent to ${users.length} user(s), push delivered to ${delivered} device(s).`,
     };
   }
 
