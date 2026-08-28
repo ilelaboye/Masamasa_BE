@@ -238,6 +238,7 @@ export class NotificationsService {
         "n.metadata->>'sent_by_admin' = CAST(admin.id AS text)",
       )
       .select("n.metadata->>'broadcast_ref'", "broadcast_ref")
+      .addSelect("n.id", "id")
       .addSelect("n.message", "message")
       .addSelect("MIN(n.metadata->>'audience')", "audience")
       .addSelect("n.tag", "tag")
