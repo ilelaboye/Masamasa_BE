@@ -238,13 +238,12 @@ export class NotificationsService {
         "n.metadata->>'sent_by_admin' = CAST(admin.id AS text)",
       )
       .select("n.metadata->>'broadcast_ref'", "broadcast_ref")
+      .addSelect("MIN(n.id)", "id")
       .addSelect("n.message", "message")
       .addSelect("MIN(n.metadata->>'audience')", "audience")
       .addSelect("n.tag", "tag")
       .addSelect("MIN(n.created_at)", "created_at")
       .addSelect("MIN(n.scheduled_for)", "scheduled_for")
-      // Rolled up from the per-user rows: cancelled wins over pending, and a
-      // broadcast only reads as sent once every one of its rows is.
       .addSelect(
         `CASE
            WHEN BOOL_OR(n.status = 'cancelled') THEN 'cancelled'
@@ -255,23 +254,15 @@ export class NotificationsService {
       )
       .addSelect("COUNT(*)", "recipients")
       .addSelect("MIN(n.metadata->>'sent_by_admin')", "sent_by_admin")
-      // Aggregated rather than grouped on, so a broadcast stays one row even if
-      // its rows somehow disagree about the sender. NULLIF collapses the
-      // " " that CONCAT leaves behind when an admin has no name on record.
       .addSelect(
         "MIN(NULLIF(TRIM(CONCAT(admin.first_name, ' ', admin.last_name)), ''))",
         "sent_by_name",
       )
       .addSelect("MIN(admin.email)", "sent_by_email")
-      // Keyed off the shared ref, not the tag: the tag is caller-supplied now,
-      // so filtering on "announcement" would hide every custom category.
       .where("n.metadata->>'broadcast_ref' IS NOT NULL")
       .groupBy("n.metadata->>'broadcast_ref'")
       .addGroupBy("n.message")
       .addGroupBy("n.tag")
-      // Newest-created first. Deliberately not scheduled_for — the admin list
-      // reads as a history of what was sent out, so a broadcast stays where it
-      // was created regardless of when it is due to fire.
       .orderBy("MIN(n.created_at)", "DESC")
       .limit(limit)
       .offset(skip);
