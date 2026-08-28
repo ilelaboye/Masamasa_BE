@@ -468,13 +468,13 @@ export class AdministratorController {
 
   @ApiOperation({ summary: "Cancel a scheduled broadcast before it goes out" })
   @AllowRoles(AdministratorRoles.marketer)
-  @Patch("notifications/broadcast/:ref/status")
+  @Patch("notifications/broadcast/:id/status")
   async updateScheduledBroadcastStatus(
-    @Param("ref") ref: string,
+    @Param("id") id: number,
     @Body(new JoiValidationPipe(UpdateBroadcastStatusValidation))
     body: { status: "cancelled" },
   ) {
-    return await this.notificationsService.cancelScheduledBroadcast(ref);
+    return await this.notificationsService.cancelScheduledBroadcast(id);
   }
 
   @ApiOperation({ summary: "Get a single transaction details" })

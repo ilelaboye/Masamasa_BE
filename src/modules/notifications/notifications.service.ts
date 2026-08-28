@@ -220,8 +220,6 @@ export class NotificationsService {
     const { limit, page, skip } = getRequestQuery(req);
     const status = req.query.status as string;
 
-    // Every row of a broadcast is written and released in one statement, so
-    // filtering at row level and the rollup in the SELECT always agree.
     const countQuery = this.notificationRepository
       .createQueryBuilder("n")
       .select("COUNT(DISTINCT n.metadata->>'broadcast_ref')", "count")
@@ -378,7 +376,6 @@ export class NotificationsService {
     return { released: due.length, delivered };
   }
 
-  /** Writes one claimed broadcast's rows and pushes it. Returns devices reached. */
   private async fanOutBroadcast(
     row: {
       id: number;
@@ -523,46 +520,14 @@ export class NotificationsService {
     };
   }
 
-  /**
-   * Cancels a scheduled broadcast. The rows are kept and marked cancelled
-   * rather than deleted, so the broadcast stays visible in the admin list —
-   * and `status = 'pending'` in the cron query excludes them on its own.
-   */
-  async cancelScheduledBroadcast(ref: string) {
-    await this.assertPendingBroadcast(ref);
-
-    const result = await this.notificationRepository
-      .createQueryBuilder()
-      .update(Notification)
-      .set({ status: NotificationStatus.cancelled })
-      .where("metadata->>'broadcast_ref' = :ref", { ref })
-      .andWhere("status = :pending", { pending: NotificationStatus.pending })
-      .execute();
+  async cancelScheduledBroadcast(id: number) {
+    const result = await this.notificationRepository.delete({
+      id,
+      status: NotificationStatus.pending,
+    });
 
     return {
-      message: `Scheduled notification cancelled for ${result.affected ?? 0} user(s).`,
+      message: `Scheduled notification cancelled successfully`,
     };
-  }
-
-  /** A broadcast can only be changed while every one of its rows is pending. */
-  private async assertPendingBroadcast(ref: string) {
-    const rows = await this.notificationRepository
-      .createQueryBuilder("n")
-      .select("n.status", "status")
-      .where("n.metadata->>'broadcast_ref' = :ref", { ref })
-      .groupBy("n.status")
-      .getRawMany<{ status: NotificationStatus }>();
-
-    if (!rows.length)
-      throw new NotFoundException("Scheduled notification not found");
-
-    const blocking = rows
-      .map((row) => row.status)
-      .find((status) => status !== NotificationStatus.pending);
-
-    if (blocking)
-      throw new BadRequestException(
-        `This notification has already been ${blocking} and can no longer be changed`,
-      );
   }
 }
