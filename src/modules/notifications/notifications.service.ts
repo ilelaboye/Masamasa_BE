@@ -152,7 +152,7 @@ export class NotificationsService {
     const broadcastRef = generateMasamasaRef();
 
     if (scheduledFor) {
-      this.notificationRepository.create({
+      this.notificationRepository.save({
         user_id: 1,
         message,
         tag: notificationTag,
