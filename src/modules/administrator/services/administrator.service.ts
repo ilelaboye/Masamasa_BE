@@ -16,6 +16,7 @@ import {
   CreateExchangeRateDto,
   CreateStaffDto,
   DeclineKycDto,
+  EditBulkRateDto,
   ReprocessTransactionDto,
   UpdateAdminProfileDto,
   UpdateStaffStatusDto,
@@ -183,6 +184,39 @@ export class AdministratorService {
     const msg = `${req.admin.first_name} ${req.admin.last_name} changed ${createExchangeRateDto.currency} exchange rate to ${createExchangeRateDto.rate}`;
     this.createAdminLog(null, req.admin, AdminLogEntities.EXCHANGE_RATE, msg);
     return save;
+  }
+
+  async editBulkRate(editBulkRateDto: EditBulkRateDto, req: AdminRequest) {
+    if (
+      !editBulkRateDto.rate ||
+      isNaN(Number(editBulkRateDto.rate)) ||
+      Number(editBulkRateDto.rate) < 1
+    ) {
+      throw new BadRequestException("Rate is required");
+    }
+
+    if (!editBulkRateDto.currencies?.length) {
+      throw new BadRequestException("Currency is required");
+    }
+
+    const rate = Number(editBulkRateDto.rate);
+
+    const saved = await Promise.all(
+      editBulkRateDto.currencies.map((currency) =>
+        this.exchangeRateService.saveNewRate(req.admin.id, currency, rate),
+      ),
+    );
+
+    const msg = `${req.admin.first_name} ${req.admin.last_name} changed ${editBulkRateDto.currencies.join(", ")} exchange rate to ${rate}`;
+
+    await this.createAdminLog(
+      null,
+      req.admin,
+      AdminLogEntities.EXCHANGE_RATE,
+      msg,
+    );
+
+    return saved;
   }
 
   async getDashboardKPI(req: AdminRequest) {

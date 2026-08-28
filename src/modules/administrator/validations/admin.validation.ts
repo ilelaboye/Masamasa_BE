@@ -12,6 +12,16 @@ export const CreateUpdateExchangeRateValidation = Joi.object().keys({
     .required(),
 });
 
+export const EditBulkRateValidation = Joi.object().keys({
+  rate: Joi.number().greater(0).required().label("Rate"),
+  currencies: Joi.array()
+    .items(Joi.string().valid(...Object.values(CurrencyCoin)))
+    .min(1)
+    .unique()
+    .required()
+    .label("Currencies"),
+});
+
 // Absent means send now. The cron releases on the hour, so an off-the-hour
 // time is rejected rather than silently shifted to the next one.
 const scheduledFor = Joi.string()
