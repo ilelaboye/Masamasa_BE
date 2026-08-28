@@ -285,7 +285,9 @@ export class UsersService extends BaseService {
       );
     }
 
-    if (changeUserPasswordDto.new_password === changeUserPasswordDto.old_password) {
+    if (
+      changeUserPasswordDto.new_password === changeUserPasswordDto.old_password
+    ) {
       throw new BadRequestException(
         "New password must be different from your current password",
       );

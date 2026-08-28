@@ -37,10 +37,19 @@ export class PushService {
     }
   }
 
+  /** FCM multicast is capped at 500 tokens per request. */
+  private static readonly CHUNK_SIZE = 500;
+
   /**
-   * Sends the same notification to many device tokens. FCM multicast is
-   * capped at 500 tokens per request, so the list is chunked. Returns the
-   * number of successful deliveries. Never throws — push is best-effort.
+   * Requests in flight at once. A broadcast to a large audience is dominated by
+   * round-trip latency, not by FCM's own limits, so the chunks go out in
+   * batches instead of one after another.
+   */
+  private static readonly CONCURRENCY = 5;
+
+  /**
+   * Sends the same notification to many device tokens. Returns the number of
+   * successful deliveries. Never throws — push is best-effort.
    */
   async sendToTokens(
     tokens: string[],
@@ -51,29 +60,47 @@ export class PushService {
     const valid = tokens.filter(Boolean);
     if (!this.enabled || valid.length === 0) return 0;
 
+    const chunks: string[][] = [];
+    for (let i = 0; i < valid.length; i += PushService.CHUNK_SIZE) {
+      chunks.push(valid.slice(i, i + PushService.CHUNK_SIZE));
+    }
+
     let delivered = 0;
-    const chunkSize = 500;
-    for (let i = 0; i < valid.length; i += chunkSize) {
-      const chunk = valid.slice(i, i + chunkSize);
-      try {
-        const result = await getMessaging().sendEach(
-          chunk.map((token) => ({
-            token,
-            notification: { title, body },
-            data: data ?? {},
-            android: { priority: "high" as const },
-            apns: {
-              payload: { aps: { sound: "default", badge: 1 } },
-            },
-          })),
-        );
-        delivered += result.successCount;
-      } catch (err) {
-        this.logger.error(
-          `FCM multicast failed for ${chunk.length} token(s): ${(err as Error).message}`,
-        );
-      }
+    for (let i = 0; i < chunks.length; i += PushService.CONCURRENCY) {
+      const batch = chunks.slice(i, i + PushService.CONCURRENCY);
+      const counts = await Promise.all(
+        batch.map((chunk) => this.sendChunk(chunk, title, body, data)),
+      );
+      delivered += counts.reduce((sum, count) => sum + count, 0);
     }
     return delivered;
+  }
+
+  /** One multicast request. Swallows its own failure — see sendToTokens. */
+  private async sendChunk(
+    chunk: string[],
+    title: string,
+    body: string,
+    data?: Record<string, string>,
+  ): Promise<number> {
+    try {
+      const result = await getMessaging().sendEach(
+        chunk.map((token) => ({
+          token,
+          notification: { title, body },
+          data: data ?? {},
+          android: { priority: "high" as const },
+          apns: {
+            payload: { aps: { sound: "default", badge: 1 } },
+          },
+        })),
+      );
+      return result.successCount;
+    } catch (err) {
+      this.logger.error(
+        `FCM multicast failed for ${chunk.length} token(s): ${(err as Error).message}`,
+      );
+      return 0;
+    }
   }
 }

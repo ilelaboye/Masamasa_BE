@@ -22,15 +22,33 @@ export const EditBulkRateValidation = Joi.object().keys({
     .label("Currencies"),
 });
 
+// Absent means send now. The cron releases on the hour, so an off-the-hour
+// time is rejected rather than silently shifted to the next one.
+const scheduledFor = Joi.string()
+  .isoDate()
+  .custom((value, helpers) => {
+    const date = new Date(value);
+    if (date.getUTCMinutes() !== 0 || date.getUTCSeconds() !== 0)
+      return helpers.error("date.notOnTheHour");
+    if (date.getTime() <= Date.now()) return helpers.error("date.inThePast");
+    return value;
+  })
+  .messages({
+    "string.isoDate": "Please select a valid date and time",
+    "date.notOnTheHour":
+      "Notifications can only be scheduled on the hour, like 2:00 PM or 3:00 PM",
+    "date.inThePast": "Please select a date and time in the future",
+  })
+  .label("Scheduled for");
+
 export const BroadcastNotificationValidation = Joi.object().keys({
   message: Joi.string().trim().min(1).max(500).required().label("Message"),
-  // Optional so clients that only send a message keep working. The fallback
-  // lives in broadcastToAll — JoiValidationPipe returns the raw body, so a
-  // Joi .default() here would never reach the service.
+
   tag: Joi.string().trim().min(1).max(255).label("Tag"),
   audience: Joi.string()
     .valid("all", "verified", "unverified")
     .label("Audience"),
+  scheduled_for: scheduledFor,
 });
 
 export const ReprocessTransactionValidation = Joi.object().keys({
@@ -43,6 +61,21 @@ export const ReprocessTransactionValidation = Joi.object().keys({
     .unique()
     .required()
     .label("Transaction ids"),
+});
+
+// Audience is deliberately absent: changing it would mean adding or removing
+// per-user rows, not editing the ones that exist. Cancel and recreate instead.
+export const UpdateScheduledBroadcastValidation = Joi.object().keys({
+  id: Joi.number().integer().positive().required().label("Id"),
+  message: Joi.string().trim().min(1).max(500).label("Message"),
+  tag: Joi.string().trim().min(1).max(255).label("Tag"),
+  scheduled_for: scheduledFor,
+});
+
+// Only cancelling is a manual transition — "sent" is set by the cron when it
+// releases the broadcast, never by an admin.
+export const UpdateBroadcastStatusValidation = Joi.object().keys({
+  status: Joi.string().valid("cancelled").required().label("Status"),
 });
 
 export const UpdateUserStatusValidation = Joi.object().keys({

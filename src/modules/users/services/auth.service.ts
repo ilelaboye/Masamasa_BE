@@ -76,7 +76,10 @@ export class AuthService extends BaseService {
    * Security alert on every successful sign-in — email plus an in-app
    * notification. Fire-and-forget: never block or fail a login.
    */
-  private notifyLogin(user: { id: number; first_name: string; last_name: string; email: string }, req?: UserRequest) {
+  private notifyLogin(
+    user: { id: number; first_name: string; last_name: string; email: string },
+    req?: UserRequest,
+  ) {
     const client = req ? getClientInfo(req) : undefined;
 
     sendLoginAlertEmail(user, {
@@ -90,7 +93,8 @@ export class AuthService extends BaseService {
     this.notificationsService
       .create({
         userId: user.id,
-        message: "New login to your account. If this wasn't you, secure your account immediately.",
+        message:
+          "New login to your account. If this wasn't you, secure your account immediately.",
         tag: NotificationTag.login,
         metadata: client ? { client } : {},
       })

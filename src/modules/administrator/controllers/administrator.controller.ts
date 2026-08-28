@@ -32,6 +32,7 @@ import { CacheService } from "@/modules/global/cache-container/cache-container.s
 import { ExchangeRateService } from "@/modules/exchange-rates/exchange-rates.service";
 import {
   BroadcastNotificationDto,
+  UpdateScheduledBroadcastDto,
   ChangeAdminPasswordDto,
   CreateExchangeRateDto,
   CreateStaffDto,
@@ -42,7 +43,11 @@ import {
   UpdateStaffStatusDto,
 } from "../dto/admin.dto";
 import { NotificationsService } from "@/modules/notifications/notifications.service";
-import { BroadcastNotificationValidation } from "../validations/admin.validation";
+import {
+  BroadcastNotificationValidation,
+  UpdateBroadcastStatusValidation,
+  UpdateScheduledBroadcastValidation,
+} from "../validations/admin.validation";
 import { PublicService } from "@/modules/global/public/public.service";
 import { JoiValidationPipe } from "@/pipes/joi.validation.pipe";
 import {
@@ -172,7 +177,6 @@ export class AdministratorController {
   async users(@Req() req: AdminRequest) {
     return this.administratorService.getUsers(req);
   }
-
   @ApiOperation({ summary: "List all Quidax sub-accounts" })
   @ApiQuery({ name: "page", required: false, type: Number })
   @ApiQuery({ name: "per_page", required: false, type: Number })
@@ -422,10 +426,18 @@ export class AdministratorController {
   }
 
   @ApiOperation({ summary: "List notifications broadcast to users" })
+  @ApiQuery({
+    name: "status",
+    required: false,
+    enum: ["pending", "sent", "cancelled"],
+    description: "Pending means scheduled and not yet released.",
+  })
+  @ApiQuery({ name: "page", required: false, type: Number })
+  @ApiQuery({ name: "limit", required: false, type: Number })
   @AllowRoles(AdministratorRoles.marketer)
   @Get("notifications")
-  async listBroadcastNotifications() {
-    return await this.notificationsService.listBroadcasts();
+  async listBroadcastNotifications(@Req() req: AdminRequest) {
+    return await this.notificationsService.listBroadcasts(req);
   }
 
   @ApiOperation({ summary: "Send a custom notification to all users" })
@@ -441,7 +453,30 @@ export class AdministratorController {
       req.admin.id,
       body.tag,
       body.audience,
+      body.scheduled_for ? new Date(body.scheduled_for) : null,
     );
+  }
+
+  @ApiOperation({ summary: "Edit a scheduled broadcast before it goes out" })
+  @AllowRoles(AdministratorRoles.marketer)
+  @Patch("notifications/broadcast")
+  async updateScheduledBroadcast(
+    @Body(new JoiValidationPipe(UpdateScheduledBroadcastValidation))
+    body: UpdateScheduledBroadcastDto,
+    @Req() req: AdminRequest,
+  ) {
+    return await this.notificationsService.updateScheduledBroadcast(body, req);
+  }
+
+  @ApiOperation({ summary: "Cancel a scheduled broadcast before it goes out" })
+  @AllowRoles(AdministratorRoles.marketer)
+  @Patch("notifications/broadcast/:id/status")
+  async updateScheduledBroadcastStatus(
+    @Param("id") id: number,
+    @Body(new JoiValidationPipe(UpdateBroadcastStatusValidation))
+    body: { status: "cancelled" },
+  ) {
+    return await this.notificationsService.cancelScheduledBroadcast(id);
   }
 
   @ApiOperation({ summary: "Get a single transaction details" })
