@@ -257,6 +257,45 @@ export class AdministratorController {
     );
   }
 
+  @ApiOperation({
+    summary: "Analytics: leaderboard — top 10 users by deposit volume",
+  })
+  @ApiQuery({
+    name: "date_from",
+    required: false,
+    type: String,
+    description: "Start of the range. Omit both dates for all time.",
+  })
+  @ApiQuery({ name: "date_to", required: false, type: String })
+  @AllowRoles(AdministratorRoles.marketer, AdministratorRoles.support)
+  @Get("analytics/leaderboard/transaction")
+  async analyticsTransactionLeaderboard(
+    @Query("date_from") dateFrom?: string,
+    @Query("date_to") dateTo?: string,
+  ) {
+    return await this.analyticsService.transactionLeaderboard(dateFrom, dateTo);
+  }
+
+  @ApiOperation({
+    summary: "Analytics: leaderboard — top 10 users by referrals",
+  })
+  @ApiQuery({
+    name: "date_from",
+    required: false,
+    type: String,
+    description:
+      "Start of the range, by referee signup date. Omit both dates for all time.",
+  })
+  @ApiQuery({ name: "date_to", required: false, type: String })
+  @AllowRoles(AdministratorRoles.marketer, AdministratorRoles.support)
+  @Get("analytics/leaderboard/referral")
+  async analyticsReferralLeaderboard(
+    @Query("date_from") dateFrom?: string,
+    @Query("date_to") dateTo?: string,
+  ) {
+    return await this.analyticsService.referralLeaderboard(dateFrom, dateTo);
+  }
+
   @ApiOperation({ summary: "Analytics: transaction volume time series" })
   @ApiQuery({
     name: "granularity",

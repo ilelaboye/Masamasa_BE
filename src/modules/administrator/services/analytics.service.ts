@@ -9,7 +9,9 @@ import {
   TransactionStatusType,
 } from "@/modules/transactions/transactions.entity";
 import { PurchaseRequest } from "@/modules/purchases/entities/purchases.entity";
+import { ReferralEarning } from "@/modules/referrals/entities/referral-earning.entity";
 import { paginate } from "@/core/helpers";
+import { endOfDay, startOfDay } from "@/core/utils";
 
 export type AnalyticsPeriod = "today" | "week" | "month" | "year";
 export type VolumeGranularity = "daily" | "weekly" | "monthly" | "yearly";
@@ -415,6 +417,127 @@ export class AnalyticsService {
         volume: Number(r.volume) || 0,
       })),
       metadata: paginate(count, page, limit),
+    };
+  }
+
+  /**
+   * Whole-day bounds for a leaderboard range — the start day from 00:00, the
+   * end day through 23:59:59.999 so it is included. Null means unbounded.
+   */
+  private resolveDateRange(dateFrom?: string, dateTo?: string) {
+    const parse = (value: string) => {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        throw new BadRequestException("Please provide a valid date range");
+      }
+      return date;
+    };
+
+    const from = dateFrom ? parse(dateFrom) : null;
+    const to = dateTo ? parse(dateTo) : null;
+
+    const start = from ? startOfDay(from) : null;
+    const end = to ? endOfDay(to) : null;
+
+    if (start && to && start > startOfDay(to)!) {
+      throw new BadRequestException("Start date cannot be after the end date");
+    }
+
+    return { start, end };
+  }
+
+  async transactionLeaderboard(dateFrom?: string, dateTo?: string) {
+    const { start, end } = this.resolveDateRange(dateFrom, dateTo);
+
+    const qb = this.transactionsRepository
+      .createQueryBuilder("t")
+      .innerJoin("t.user", "u")
+      .select("u.id", "user_id")
+      .addSelect("u.first_name", "first_name")
+      .addSelect("u.last_name", "last_name")
+      .addSelect("u.email", "email")
+      .addSelect("COUNT(*)", "deposit_count")
+      .addSelect("COALESCE(SUM(t.dollar_amount), 0)", "volume")
+      .addSelect("COALESCE(SUM(t.amount), 0)", "naira_volume")
+      .where("t.entity_type = :type", {
+        type: TransactionEntityType.deposit,
+      })
+      .andWhere("t.mode = :mode", { mode: TransactionModeType.credit })
+      .andWhere("t.status = :status", {
+        status: TransactionStatusType.success,
+      })
+      .groupBy("u.id")
+      .addGroupBy("u.first_name")
+      .addGroupBy("u.last_name")
+      .addGroupBy("u.email")
+      .orderBy("volume", "DESC")
+      .addOrderBy("u.id", "ASC")
+      .limit(10);
+
+    if (start) qb.andWhere("t.created_at >= :start", { start });
+    if (end) qb.andWhere("t.created_at <= :end", { end });
+
+    const rows = await qb.getRawMany();
+
+    return {
+      leaderboard: rows.map((r, index) => ({
+        rank: index + 1,
+        user_id: Number(r.user_id),
+        first_name: r.first_name,
+        last_name: r.last_name,
+        email: r.email,
+        deposit_count: Number(r.deposit_count) || 0,
+        volume: Number(r.volume) || 0,
+        naira_volume: Number(r.naira_volume) || 0,
+      })),
+    };
+  }
+
+  async referralLeaderboard(dateFrom?: string, dateTo?: string) {
+    const { start, end } = this.resolveDateRange(dateFrom, dateTo);
+
+    const qb = this.userRepository
+      .createQueryBuilder("u")
+      .innerJoin(
+        User,
+        "referee",
+        "referee.referred_by_id = u.id AND referee.deleted_at IS NULL",
+      )
+      .leftJoin(
+        ReferralEarning,
+        "e",
+        "e.user_id = u.id AND e.referee_id = referee.id",
+      )
+      .select("u.id", "user_id")
+      .addSelect("u.first_name", "first_name")
+      .addSelect("u.last_name", "last_name")
+      .addSelect("u.email", "email")
+      .addSelect("COUNT(DISTINCT referee.id)", "referral_count")
+      .addSelect("COALESCE(SUM(e.amount), 0)", "total_earned")
+      .groupBy("u.id")
+      .addGroupBy("u.first_name")
+      .addGroupBy("u.last_name")
+      .addGroupBy("u.email")
+      .orderBy("referral_count", "DESC")
+      .addOrderBy("total_earned", "DESC")
+      .addOrderBy("u.id", "ASC")
+      .limit(10);
+
+    if (start) qb.andWhere("referee.created_at >= :start", { start });
+    if (end) qb.andWhere("referee.created_at <= :end", { end });
+
+    const rows = await qb.getRawMany();
+
+    return {
+      leaderboard: rows.map((r, index) => ({
+        rank: index + 1,
+        user_id: Number(r.user_id),
+        first_name: r.first_name,
+        last_name: r.last_name,
+        email: r.email,
+        referral_count: Number(r.referral_count) || 0,
+        total_earned: Number(r.total_earned) || 0,
+      })),
     };
   }
 
