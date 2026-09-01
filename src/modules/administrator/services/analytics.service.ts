@@ -517,18 +517,10 @@ export class AnalyticsService {
     if (start) qb.andWhere("referee.created_at >= :start", { start });
     if (end) qb.andWhere("referee.created_at <= :end", { end });
 
-    const rows = await qb.getRawMany();
+    const leaderboard = await qb.getRawMany();
 
     return {
-      leaderboard: rows.map((r, index) => ({
-        rank: index + 1,
-        user_id: Number(r.user_id),
-        first_name: r.first_name,
-        last_name: r.last_name,
-        email: r.email,
-        referral_count: Number(r.referral_count) || 0,
-        total_earned: Number(r.total_earned) || 0,
-      })),
+      leaderboard,
     };
   }
 
