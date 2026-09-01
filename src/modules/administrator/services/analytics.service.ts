@@ -477,19 +477,10 @@ export class AnalyticsService {
     if (start) qb.andWhere("t.created_at >= :start", { start });
     if (end) qb.andWhere("t.created_at <= :end", { end });
 
-    const rows = await qb.getRawMany();
+    const leaderboard = await qb.getRawMany();
 
     return {
-      leaderboard: rows.map((r, index) => ({
-        rank: index + 1,
-        user_id: Number(r.user_id),
-        first_name: r.first_name,
-        last_name: r.last_name,
-        email: r.email,
-        deposit_count: Number(r.deposit_count) || 0,
-        volume: Number(r.volume) || 0,
-        naira_volume: Number(r.naira_volume) || 0,
-      })),
+      leaderboard,
     };
   }
 
