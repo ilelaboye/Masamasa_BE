@@ -420,10 +420,6 @@ export class AnalyticsService {
     };
   }
 
-  /**
-   * Whole-day bounds for a leaderboard range — the start day from 00:00, the
-   * end day through 23:59:59.999 so it is included. Null means unbounded.
-   */
   private resolveDateRange(dateFrom?: string, dateTo?: string) {
     const parse = (value: string) => {
       const date = new Date(value);
