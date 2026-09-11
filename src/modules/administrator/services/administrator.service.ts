@@ -164,14 +164,6 @@ export class AdministratorService {
     createExchangeRateDto: CreateExchangeRateDto,
     req: AdminRequest,
   ) {
-    if (
-      !createExchangeRateDto.rate ||
-      !!isNaN(createExchangeRateDto.rate) ||
-      createExchangeRateDto.rate < 1
-    ) {
-      throw new BadRequestException("Rate is required");
-    }
-
     if (!createExchangeRateDto.currency) {
       throw new BadRequestException("Currency is required");
     }
@@ -187,14 +179,6 @@ export class AdministratorService {
   }
 
   async editBulkRate(editBulkRateDto: EditBulkRateDto, req: AdminRequest) {
-    if (
-      !editBulkRateDto.rate ||
-      isNaN(Number(editBulkRateDto.rate)) ||
-      Number(editBulkRateDto.rate) < 1
-    ) {
-      throw new BadRequestException("Rate is required");
-    }
-
     if (!editBulkRateDto.currencies?.length) {
       throw new BadRequestException("Currency is required");
     }

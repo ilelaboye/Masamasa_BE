@@ -5,15 +5,24 @@ import {
   AdminStatus,
 } from "../entities/administrator.entity";
 
+// Any positive rate is allowed, decimals included — a naira-pegged coin sits
+// near 1 and can fall below it. Zero and negatives stay out because the
+// deposit pricing path divides by the rate.
+const rate = Joi.number().greater(0).required().label("Rate").messages({
+  "number.base": "Please enter a rate as a number",
+  "number.greater": "Please enter a rate greater than zero",
+  "any.required": "Please enter a rate",
+});
+
 export const CreateUpdateExchangeRateValidation = Joi.object().keys({
-  rate: Joi.number().required(),
+  rate,
   currency: Joi.string()
     .valid(...Object.values(CurrencyCoin))
     .required(),
 });
 
 export const EditBulkRateValidation = Joi.object().keys({
-  rate: Joi.number().greater(0).required().label("Rate"),
+  rate,
   currencies: Joi.array()
     .items(Joi.string().valid(...Object.values(CurrencyCoin)))
     .min(1)
