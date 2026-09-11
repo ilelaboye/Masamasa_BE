@@ -83,7 +83,7 @@ export const renderReferralLanding = (
 <title>${heading}</title>
 <meta name="robots" content="noindex">
 <meta property="og:title" content="${heading}">
-<meta property="og:description" content="Buy crypto, pay bills and send money in Nigeria. Sign up with referral code ${safeCode} and you both earn.">
+<meta property="og:description" content="Sell crypto, pay bills and send money in Nigeria. Sign up with referral code ${safeCode} and you both earn.">
 <style nonce="${nonce}">
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -116,7 +116,7 @@ export const renderReferralLanding = (
   <div class="card">
     <div class="logo"></div>
     <h1>${heading}</h1>
-    <p>Buy crypto, pay bills and send money — all in one app.</p>
+    <p>Sell crypto, pay bills and send money — all in one app.</p>
     ${
       safeCode
         ? `<div class="code-label">Your referral code</div>

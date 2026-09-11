@@ -154,10 +154,6 @@ export class QuidaxService {
     );
   }
 
-  // Creates addresses for all accepted currencies in batches of 10 (Quidax
-  // rate limit: 10 requests/second). Returns successful Quidax addresses and
-  // a separate list of pairs Quidax doesn't support (so callers can fall back
-  // to the self-custodian HD wallet for those).
   async createAllPaymentAddresses(quidaxUserId: string): Promise<{
     addresses: QuidaxPaymentAddress[];
     unsupported: Array<{ currency: string; network?: string }>;

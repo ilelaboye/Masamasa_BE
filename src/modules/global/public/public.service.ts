@@ -58,6 +58,10 @@ const NOMBA_BANKS_CACHE_KEY = "NOMBA_BANKS_LIST";
 // Coins pegged 1:1 to the US dollar — priced locally instead of via CoinGecko.
 const STABLECOINS_USD = new Set(["usdt", "usdc"]);
 
+// Naira-pegged coins — one unit is worth exactly ₦1, so their value is derived
+// from the NGN/USD rate rather than the market price feed.
+const NAIRA_PEGGED_COINS = new Set(["cngn"]);
+
 @Injectable()
 export class PublicService {
   private readonly logger = new Logger(PublicService.name);
@@ -335,7 +339,7 @@ export class PublicService {
         {
           params: {
             vs_currency: "usd",
-            ids: "bitcoin,ethereum,binancecoin,solana,tether,usd-coin,cardano,dogecoin,ripple,polygon-ecosystem-token",
+            ids: "bitcoin,ethereum,binancecoin,solana,tether,usd-coin,cardano,dogecoin,ripple,polygon-ecosystem-token,compliant-naira",
             order: "market_cap_desc",
             per_page: 100,
             page: 1,
@@ -350,6 +354,7 @@ export class PublicService {
         let id = coin.id;
         if (coin.id === "dogecoin") id = "doge";
         if (coin.id === "polygon-ecosystem-token") id = "pol";
+        if (coin.id === "compliant-naira") id = "cngn";
         data[id] = {
           usd: coin.current_price,
           change_24h: coin.price_change_percentage_24h,
@@ -941,8 +946,18 @@ export class PublicService {
       currency.toLowerCase(),
     );
     const exchange = rate?.rate ?? 0;
-    const priceResult = await this.getPrice(currency);
-    const coinPrice = priceResult.status ? (priceResult.price ?? 0) : 0;
+    let coinPrice: number;
+    if (NAIRA_PEGGED_COINS.has(currency.toLowerCase())) {
+      // cNGN is naira-pegged: 1 cNGN is ₦1 by definition, so its dollar price
+      // is the inverse of the NGN/USD rate — that makes the credited
+      // `dollar_amount * exchange` land exactly on the coin amount. Taking the
+      // market feed price instead would credit a little over or under ₦1 a
+      // coin whenever the peg drifts.
+      coinPrice = exchange > 0 ? 1 / exchange : 0;
+    } else {
+      const priceResult = await this.getPrice(currency);
+      coinPrice = priceResult.status ? (priceResult.price ?? 0) : 0;
+    }
     const coinAmount = parseFloat(amount) || 0;
     const dollarAmount = coinPrice * coinAmount;
 

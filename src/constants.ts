@@ -30,7 +30,7 @@ export const ClearCookieOptions = {
 
 // Flat fee (in USD) charged on every crypto deposit except the exempt coins.
 export const DEPOSIT_FEE_USD = 1;
-export const DEPOSIT_FEE_EXEMPT_CURRENCIES = new Set(["usdt"]);
+export const DEPOSIT_FEE_EXEMPT_CURRENCIES = new Set(["usdt", "cngn"]);
 
 // Withdrawal ceiling for verified (KYC-approved) accounts, in NGN. There is no
 // separate per-transaction cap — a single withdrawal may be as large as the

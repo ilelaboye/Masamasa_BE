@@ -126,6 +126,10 @@ export const QUIDAX_CURRENCIES: Array<{ currency: string; network?: string }> =
     // ── SOL: SOLANA (native), BEP20 ──────────────────────────────────────────
     { currency: "sol" },
     { currency: "sol", network: "bep20" },
+
+    // ── cNGN: BEP20, BASE (the only two chains Quidax enables for it) ────────
+    { currency: "cngn", network: "bep20" },
+    { currency: "cngn", network: "base" },
   ];
 
 // Set of "CURRENCY|APP_NETWORK" pairs (both uppercased) accepted via Quidax.

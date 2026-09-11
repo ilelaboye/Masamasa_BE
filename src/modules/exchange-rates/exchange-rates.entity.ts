@@ -26,6 +26,7 @@ export enum CurrencyCoin {
   xrp = "xrp",
   ada = "ada",
   pol = "pol",
+  cngn = "cngn",
 }
 
 @Entity({ name: "exchange_rates" })
