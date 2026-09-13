@@ -59,6 +59,7 @@ import {
   UpdateAdminProfileValidation,
   UpdateStaffStatusValidation,
   UpdateUserStatusValidation,
+  UpdateWithdrawalLimitValidation,
 } from "../validations/admin.validation";
 import { Status } from "@/modules/users/entities/user.entity";
 import { Web3Service } from "@/modules/web3/web3.service";
@@ -460,6 +461,25 @@ export class AdministratorController {
     return await this.administratorService.updateUserStatus(
       +id,
       body.status as Status.active | Status.deactivated,
+      req,
+    );
+  }
+
+  @ApiOperation({ summary: "Set a user's daily withdrawal limit" })
+  // Deliberately no @AllowRoles — raising a withdrawal ceiling moves money, so
+  // it stays with super_admin rather than support staff.
+  @Patch("user/:id/withdrawal-limit")
+  async updateUserWithdrawalLimit(
+    // Body-scoped pipe, same reason as updateUserStatus above: a method-level
+    // one would run the object schema against the :id param.
+    @Param("id") id: string,
+    @Body(new JoiValidationPipe(UpdateWithdrawalLimitValidation))
+    body: { withdrawal_limit: number },
+    @Req() req: AdminRequest,
+  ) {
+    return await this.administratorService.updateUserWithdrawalLimit(
+      +id,
+      body.withdrawal_limit,
       req,
     );
   }

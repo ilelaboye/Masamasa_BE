@@ -194,10 +194,9 @@ export class BackfillCngnWallets1777000000000 implements Seeder {
   }
 
   /**
-   * cNGN deposits are credited as `dollar_amount * rate`, so a missing rate
-   * row would credit ₦0. The naira figure is peg-invariant (the dollar price
-   * used is 1/rate), so the USDT rate is the right seed value — it only has
-   * to make `dollar_amount` correct.
+   * The cNGN row holds the naira price of one coin, and deposits are credited
+   * as `coin_amount * rate` — a missing row would credit ₦0. It seeds at the
+   * old ₦1 peg; the live price is the admin's to set in the dashboard.
    */
   private async ensureCngnRate(dataSource: DataSource): Promise<void> {
     const repo = dataSource.getRepository(ExchangeRate);
@@ -229,6 +228,6 @@ export class BackfillCngnWallets1777000000000 implements Seeder {
       rate: 1,
       status: ExchangeRateStatus.active,
     });
-    console.log(`[CngnBackfill] Seeded cNGN exchange rate at ${usdt.rate}.`);
+    console.log("[CngnBackfill] Seeded cNGN exchange rate at ₦1 per coin.");
   }
 }

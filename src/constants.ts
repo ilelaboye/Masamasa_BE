@@ -32,8 +32,10 @@ export const ClearCookieOptions = {
 export const DEPOSIT_FEE_USD = 1;
 export const DEPOSIT_FEE_EXEMPT_CURRENCIES = new Set(["usdt", "cngn"]);
 
-// Withdrawal ceiling for verified (KYC-approved) accounts, in NGN. There is no
-// separate per-transaction cap — a single withdrawal may be as large as the
+// The highest daily withdrawal ceiling any account may hold, in NGN. Each
+// account carries its own limit in users.withdrawal_limit — this is the value
+// KYC approval raises it to, and the maximum an admin may set it to. There is
+// no separate per-transaction cap: a single withdrawal may be as large as the
 // day's remaining allowance.
 // The day is a calendar day in the app timezone (Africa/Lagos).
 export const WITHDRAWAL_MAX_PER_DAY = 5000000;
@@ -41,10 +43,12 @@ export const WITHDRAWAL_MAX_PER_DAY = 5000000;
 // Smallest withdrawal accepted, for any account.
 export const WITHDRAWAL_MIN_PER_TRANSACTION = 1000;
 
-// Accounts that have not completed KYC can still withdraw, but only up to
-// this ceiling. It caps both a single transaction and the running day total —
-// capping only the transaction would be no cap at all, since the same amount
-// could simply be withdrawn again.
+// The ceiling every account starts on — the default for users.withdrawal_limit
+// until KYC is approved or an admin changes it. It caps both a single
+// transaction and the running day total — capping only the transaction would be
+// no cap at all, since the same amount could simply be withdrawn again.
+// Changing this only affects accounts created afterwards; the column default in
+// migration 1783400000000 has to move with it.
 export const WITHDRAWAL_MAX_UNVERIFIED = 50000;
 
 // ─── Referrals ───────────────────────────────────────────────────────────────

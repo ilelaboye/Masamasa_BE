@@ -1,3 +1,4 @@
+import { WITHDRAWAL_MAX_UNVERIFIED } from "@/constants";
 import { Notification } from "@/modules/notifications/entities/notification.entity";
 import { Wallet } from "@/modules/wallet/wallet.entity";
 import {
@@ -120,6 +121,26 @@ export class User {
 
   @Column({ nullable: true })
   referred_by_id?: number | null;
+
+  /**
+   * This account's own daily withdrawal ceiling, in NGN. Starts at
+   * WITHDRAWAL_MAX_UNVERIFIED, is raised to WITHDRAWAL_MAX_PER_DAY the moment
+   * KYC is approved, and an admin can set it to anything up to that maximum.
+   *
+   * pg hands back `numeric` as a string; the transformer parses it here so
+   * every caller can do arithmetic on it without remembering to.
+   */
+  @Column({
+    type: "numeric",
+    precision: 20,
+    scale: 2,
+    default: WITHDRAWAL_MAX_UNVERIFIED,
+    transformer: {
+      to: (value: number) => value,
+      from: (value: string) => parseFloat(value),
+    },
+  })
+  withdrawal_limit: number;
 
   @Column({ nullable: true })
   quidax_id?: string;

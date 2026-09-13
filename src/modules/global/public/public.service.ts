@@ -58,9 +58,10 @@ const NOMBA_BANKS_CACHE_KEY = "NOMBA_BANKS_LIST";
 // Coins pegged 1:1 to the US dollar — priced locally instead of via CoinGecko.
 const STABLECOINS_USD = new Set(["usdt", "usdc"]);
 
-// Naira-pegged coins — one unit is worth exactly ₦1, so their value is derived
-// from the NGN/USD rate rather than the market price feed.
-const NAIRA_PEGGED_COINS = new Set(["cngn"]);
+// Naira-quoted coins. Their `exchange_rates` row holds the naira price of one
+// coin — not the naira-per-dollar rate every other row holds — so their value
+// is read straight off that row instead of the market price feed.
+const NAIRA_QUOTED_COINS = new Set(["cngn"]);
 
 @Injectable()
 export class PublicService {
@@ -119,14 +120,11 @@ export class PublicService {
       exchange = rate.rate;
     }
     console.log("exchange", exchange);
-    let coin_price = 0;
-    const price: { status: boolean; price: any } = await this.getPrice(
-      `${token_symbol}`,
+    const { coinPrice: coin_price, nairaPerCoin } = await this.getCoinPricing(
+      token_symbol,
+      exchange,
     );
-    console.log("price", price);
-    if (price.status) {
-      coin_price = price.price;
-    }
+    const naira_amount = nairaPerCoin * (parseFloat(`${amount}`) || 0);
 
     const trans = await this.transactionsRepository.save({
       user_id: wallet.user_id,
@@ -140,7 +138,7 @@ export class PublicService {
       currency: token_symbol,
       entity_id: wb.id,
       dollar_amount: coin_price * amount,
-      amount: coin_price * amount * exchange,
+      amount: naira_amount,
       coin_exchange_rate: coin_price,
     } as unknown as Transactions);
 
@@ -158,7 +156,7 @@ export class PublicService {
           firstName: capitalizeString(wallet.user.first_name),
           coin: `${amount} ${token_symbol}`,
           network: network,
-          amount: `NGN ${coin_price * amount * exchange}`,
+          amount: `NGN ${naira_amount}`,
           address: address,
         },
       },
@@ -308,6 +306,36 @@ export class PublicService {
       console.log(error);
       return { status: false, price: null };
     }
+  }
+
+  /**
+   * What one unit of `currency` is worth, given `rate` — the coin's own
+   * `exchange_rates` value.
+   *
+   * A naira-quoted coin (cNGN) carries its naira price per coin in that row, so
+   * the credited naira comes off the row directly — no dollar round trip, which
+   * would lose value to rounding. Its `coinPrice` is derived from the USDT rate
+   * for reporting only (`dollar_amount` feeds referral qualification and admin
+   * volume); it never touches the naira credited.
+   *
+   * Every other coin prices in dollars off the feed and converts at its own rate.
+   */
+  private async getCoinPricing(
+    currency: string,
+    rate: number,
+  ): Promise<{ coinPrice: number; nairaPerCoin: number }> {
+    if (!NAIRA_QUOTED_COINS.has(String(currency ?? "").toLowerCase())) {
+      const price = await this.getPrice(currency);
+      const coinPrice = price.status ? (price.price ?? 0) : 0;
+      return { coinPrice, nairaPerCoin: coinPrice * rate };
+    }
+
+    const usdt = await this.exchangeRateService.getCurrencyActiveRate("usdt");
+    const usdtRate = usdt?.rate ?? 0;
+    return {
+      coinPrice: usdtRate > 0 ? rate / usdtRate : 0,
+      nairaPerCoin: rate,
+    };
   }
 
   async getPrices() {
@@ -946,20 +974,13 @@ export class PublicService {
       currency.toLowerCase(),
     );
     const exchange = rate?.rate ?? 0;
-    let coinPrice: number;
-    if (NAIRA_PEGGED_COINS.has(currency.toLowerCase())) {
-      // cNGN is naira-pegged: 1 cNGN is ₦1 by definition, so its dollar price
-      // is the inverse of the NGN/USD rate — that makes the credited
-      // `dollar_amount * exchange` land exactly on the coin amount. Taking the
-      // market feed price instead would credit a little over or under ₦1 a
-      // coin whenever the peg drifts.
-      coinPrice = exchange > 0 ? 1 / exchange : 0;
-    } else {
-      const priceResult = await this.getPrice(currency);
-      coinPrice = priceResult.status ? (priceResult.price ?? 0) : 0;
-    }
+    const { coinPrice, nairaPerCoin } = await this.getCoinPricing(
+      currency,
+      exchange,
+    );
     const coinAmount = parseFloat(amount) || 0;
     const dollarAmount = coinPrice * coinAmount;
+    const nairaAmount = nairaPerCoin * coinAmount;
 
     const existingWebhook = await this.webhookRepository.findOne({
       where: { hash: depositId },
@@ -977,7 +998,7 @@ export class PublicService {
           status: TransactionStatusType.success,
           network: depositNetwork,
           dollar_amount: dollarAmount,
-          amount: dollarAmount * exchange,
+          amount: nairaAmount,
           coin_exchange_rate: coinPrice,
           exchange_rate_id: rate ? rate.id : null,
           metadata: data,
@@ -1012,7 +1033,7 @@ export class PublicService {
         currency,
         entity_id: wb.id,
         dollar_amount: dollarAmount,
-        amount: dollarAmount * exchange,
+        amount: nairaAmount,
         coin_exchange_rate: coinPrice,
         status: TransactionStatusType.success,
       } as unknown as Transactions);
@@ -1061,7 +1082,7 @@ export class PublicService {
           firstName: capitalizeString(wallet.user.first_name),
           coin: `${currencyFormatter(coinAmount, "NGN", 2, false)} ${currency}`,
           network: depositNetwork,
-          amount: `NGN ${currencyFormatter(dollarAmount * exchange, "NGN", 2, false)}`,
+          amount: `NGN ${currencyFormatter(nairaAmount, "NGN", 2, false)}`,
           address: address,
           subject: `${wallet.currency} Deposit Confirmed`,
         },
