@@ -1,3 +1,4 @@
+import { WITHDRAWAL_MAX_PER_DAY } from "@/constants";
 import { CacheService } from "@/modules/global/cache-container/cache-container.service";
 import { MixpanelService } from "@/modules/global/mixpanel/mixpanel.service";
 import { BadRequestException, Injectable } from "@nestjs/common";
@@ -348,9 +349,15 @@ export class AdministratorService {
       throw new BadRequestException("This user does not have a pending kyc");
     }
 
+    // Approval raises the account's withdrawal ceiling. Guarded above to the
+    // pending → success transition only, so it cannot reset a limit an admin
+    // set by hand on an already-verified account.
     const update = await this.userRepository.update(
       { id: user_id },
-      { kyc_status: KycStatus.success },
+      {
+        kyc_status: KycStatus.success,
+        withdrawal_limit: WITHDRAWAL_MAX_PER_DAY,
+      },
     );
 
     const msg = `${req.admin.first_name} ${req.admin.last_name} verified ${user.first_name} ${user.last_name} kyc`;
@@ -567,6 +574,40 @@ export class AdministratorService {
 
     return {
       message: `User ${activated ? "activated" : "deactivated"} successfully`,
+    };
+  }
+
+  // Sets one account's daily withdrawal ceiling. The upper bound is enforced by
+  // UpdateWithdrawalLimitValidation before this runs; nothing is re-derived
+  // from KYC status, so a limit set here survives until it is set again.
+  async updateUserWithdrawalLimit(
+    id: number,
+    withdrawal_limit: number,
+    req: AdminRequest,
+  ) {
+    const user = await this.userRepository.findOne({ where: { id } });
+    if (!user) throw new BadRequestException("User not found");
+
+    const previous = user.withdrawal_limit;
+    if (previous === withdrawal_limit) {
+      throw new BadRequestException(
+        `User's withdrawal limit is already NGN ${withdrawal_limit.toLocaleString("en-NG")}`,
+      );
+    }
+
+    await this.userRepository.update({ id: user.id }, { withdrawal_limit });
+
+    const msg = `${req.admin.first_name} ${req.admin.last_name} changed ${user.first_name} ${user.last_name}'s daily withdrawal limit from NGN ${previous.toLocaleString("en-NG")} to NGN ${withdrawal_limit.toLocaleString("en-NG")}`;
+    this.createAdminLog(
+      user.id,
+      req.admin,
+      AdminLogEntities.WITHDRAWAL_LIMIT,
+      msg,
+    );
+
+    return {
+      withdrawal_limit,
+      message: "Withdrawal limit updated successfully",
     };
   }
 

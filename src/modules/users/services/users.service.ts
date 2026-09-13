@@ -34,7 +34,6 @@ import {
 } from "@/core/utils";
 import {
   WITHDRAWAL_MAX_PER_DAY,
-  WITHDRAWAL_MAX_UNVERIFIED,
   WITHDRAWAL_MIN_PER_TRANSACTION,
   ZohoMailTemplates,
 } from "@/constants";
@@ -474,9 +473,7 @@ export class UsersService extends BaseService {
     }
 
     const kycVerified = user.kyc_status == KycStatus.success;
-    const maxPerDay = kycVerified
-      ? WITHDRAWAL_MAX_PER_DAY
-      : WITHDRAWAL_MAX_UNVERIFIED;
+    const maxPerDay = user.withdrawal_limit;
 
     const withdrawnToday = await this.getWithdrawnToday(
       this.dataSource.manager,
@@ -712,10 +709,12 @@ export class UsersService extends BaseService {
     // against a lower ceiling until KYC is approved. There is no per-transaction
     // cap on top of this: a single withdrawal may use up the whole day's
     // allowance, and the daily check below is what bounds it.
+    //
+    // The ceiling lives on the account (raised automatically when KYC passes,
+    // and adjustable per user by an admin) rather than being derived from KYC
+    // status here.
     const kycVerified = user.kyc_status == KycStatus.success;
-    const maxPerDay = kycVerified
-      ? WITHDRAWAL_MAX_PER_DAY
-      : WITHDRAWAL_MAX_UNVERIFIED;
+    const maxPerDay = user.withdrawal_limit;
 
     // Lock the user row for the duration of the balance check + transaction insert
     // to prevent concurrent withdrawals from racing past the balance check.
@@ -960,9 +959,16 @@ export class UsersService extends BaseService {
         );
       }
 
+      // Approval raises the account's ceiling. Only ever runs on the
+      // none/failed → success transition (the guard above returns early for an
+      // already-verified account), so it cannot undo a limit an admin set by
+      // hand afterwards.
       const save = await this.userRepository.update(
         { id: req.user.id },
-        { kyc_status: KycStatus.success },
+        {
+          kyc_status: KycStatus.success,
+          withdrawal_limit: WITHDRAWAL_MAX_PER_DAY,
+        },
       );
 
       this.mixpanel.track("kyc result", req.user.id, {
