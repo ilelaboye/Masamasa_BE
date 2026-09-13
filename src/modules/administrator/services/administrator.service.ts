@@ -185,7 +185,6 @@ export class AdministratorService {
     }
 
     const rate = Number(editBulkRateDto.rate);
-
     const saved = await Promise.all(
       editBulkRateDto.currencies.map((currency) =>
         this.exchangeRateService.saveNewRate(req.admin.id, currency, rate),
