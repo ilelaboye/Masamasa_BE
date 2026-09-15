@@ -383,10 +383,13 @@ export class PublicService {
         if (coin.id === "dogecoin") id = "doge";
         if (coin.id === "polygon-ecosystem-token") id = "pol";
         if (coin.id === "compliant-naira") id = "cngn";
+        // CoinGecko sends null for coins without 24h data (cNGN today). Shipped
+        // apps hard-cast these to num, so a null crashes their login.
+        const change = coin.price_change_percentage_24h ?? 0;
         data[id] = {
-          usd: coin.current_price,
-          change_24h: coin.price_change_percentage_24h,
-          direction: coin.price_change_percentage_24h >= 0 ? "up" : "down",
+          usd: coin.current_price ?? 0,
+          change_24h: change,
+          direction: change >= 0 ? "up" : "down",
         };
       });
 
