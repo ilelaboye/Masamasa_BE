@@ -42,12 +42,19 @@ export class AuthGuard implements CanActivate {
     // plus the 401 forces the app to log them out.
     const dbUser = await this.dataSource.getRepository(User).findOne({
       where: { id: req.user.id },
-      select: ["id", "status", "last_seen_at"],
+      select: ["id", "status", "last_seen_at", "email_verified_at"],
     });
     if (!dbUser || dbUser.status === Status.deactivated) {
       res.clearCookie(_AUTH_COOKIE_NAME_);
       throw new UnauthorizedException(
         "Your account has been deactivated. Please reach out to the admin to be activated.",
+      );
+    }
+    // Catches sessions issued before login enforced verification ahead of MFA.
+    if (!dbUser.email_verified_at) {
+      res.clearCookie(_AUTH_COOKIE_NAME_);
+      throw new UnauthorizedException(
+        "Email address not verified. Please verify your email to proceed.",
       );
     }
 

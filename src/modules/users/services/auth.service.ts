@@ -162,8 +162,18 @@ export class AuthService extends BaseService {
         throw new NotAcceptableException(
           "Incorrect details given, please try again",
         );
+    }
 
-      // MFA only applies to email+password logins, not Google sign-in
+    // Before MFA: the MFA branch hands out a session via verify-mfa, so an
+    // unverified account must be stopped here or it never is.
+    if (!fetch.email_verified_at) {
+      throw new BadRequestException(
+        "Email address not verified. Please verify your email to proceed.",
+      );
+    }
+
+    // MFA only applies to email+password logins, not Google sign-in
+    if (!loginStaffDto.google_id) {
       if (fetch.mfa) {
         const otp = generateRandomNumberString(6);
         // Password is verified at this point — safe to record device info,
@@ -222,12 +232,6 @@ export class AuthService extends BaseService {
       analytics_id: this.mixpanel.hashUserId(fetch.id),
     };
     delete user.pin;
-
-    if (!user.email_verified_at) {
-      throw new BadRequestException(
-        "Email address not verified. Please verify your email to proceed.",
-      );
-    }
 
     console.log("User login", user);
 
@@ -290,6 +294,23 @@ export class AuthService extends BaseService {
     await this.userRepository.update(
       { email },
       { remember_token: rememberToken },
+    );
+
+    sendZohoMailWithTemplate(
+      {
+        to: {
+          name: `${capitalizeString(user.first_name)} ${capitalizeString(user.last_name)}`,
+          email,
+        },
+      },
+      {
+        subject: "Verification Code",
+        templateId: ZohoMailTemplates.verify_email,
+        variables: {
+          firstName: capitalizeString(user.first_name),
+          token: rememberToken,
+        },
+      },
     );
 
     return { message: "Verification token sent successful." };
@@ -429,11 +450,16 @@ export class AuthService extends BaseService {
         "Email provided is not recognized, please try again",
       );
 
-    //Check if sent less than 5mins ago
-    // if (await this.cacheService.get(`${user.email}_forgot_password`))
-    //   throw new BadRequestException(
-    //     "Please wait for about 5 minutes to request for another code"
-    //   );
+    // Compared against a stored timestamp rather than relying on key expiry:
+    // cache-manager-redis-store v2 ignores a numeric ttl and falls back to
+    // the 20-minute store default.
+    const sentAt = await this.cacheService.get<number>(
+      `${user.email}_forgot_password`,
+    );
+    if (sentAt && Date.now() - sentAt < _THROTTLE_TTL_ * 1000)
+      throw new BadRequestException(
+        "Please wait for about 5 minutes to request for another code",
+      );
 
     const remember_token = generateRandomNumberString(6);
     this.userRepository.update(
@@ -478,7 +504,7 @@ export class AuthService extends BaseService {
     //Save in redis
     this.cacheService.set(
       `${user.email}_forgot_password`,
-      remember_token,
+      Date.now(),
       _THROTTLE_TTL_,
     );
 

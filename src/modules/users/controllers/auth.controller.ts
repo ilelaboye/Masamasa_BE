@@ -115,6 +115,12 @@ export class AuthController {
     return await this.authService.verifyToken(VerifyTokenDto);
   }
 
+  @Post("resend-account")
+  @UsePipes(new JoiValidationPipe(ForgotPasswordValidation))
+  async resendAccountVerification(@Body() { email }: ForgotPasswordDto) {
+    return await this.authService.resendVerificationToken(email);
+  }
+
   @Post("forgot-password")
   @UsePipes(new JoiValidationPipe(ForgotPasswordValidation))
   async forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
