@@ -746,6 +746,22 @@ export class AdministratorService {
       );
     }
 
+    // Several types at once, comma-separated — the dashboard's "Purchase
+    // commission today" opens every bill payment (airtime, data, …).
+    const entityTypes = ((req.query.entity_types as string) ?? "")
+      .split(",")
+      .filter((type) =>
+        Object.values(TransactionEntityType).includes(
+          type as TransactionEntityType,
+        ),
+      );
+    if (entityTypes.length) {
+      queryRunner = queryRunner.andWhere(
+        "trans.entity_type IN (:...entityTypes)",
+        { entityTypes },
+      );
+    }
+
     if (
       status &&
       Object.values(TransactionStatusType).includes(
