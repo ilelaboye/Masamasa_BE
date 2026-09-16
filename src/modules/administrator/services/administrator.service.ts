@@ -46,6 +46,16 @@ import {
 import { WithdrawalWallet } from "@/modules/web3/entity/withdrawal-wallet.entity";
 import { CronJob } from "@/modules/global/jobs/cron/cron.job";
 
+/**
+ * Local midnight of the day a `YYYY-MM-DD` filter names — where the analytics
+ * "today" cards start counting, so a card and the list it opens agree.
+ */
+function startOfLocalDay(date: string): Date {
+  const day = new Date(date);
+  day.setHours(0, 0, 0, 0);
+  return day;
+}
+
 @Injectable()
 export class AdministratorService {
   constructor(
@@ -686,7 +696,8 @@ export class AdministratorService {
       queryRunner = queryRunner.andWhere(
         "trans.created_at BETWEEN :startDate AND :endDate",
         {
-          startDate: new Date(date_from).toISOString(),
+          // startDate: new Date(date_from).toISOString(),
+          startDate: startOfLocalDay(date_from),
           endDate: new Date().toISOString(),
         },
       );
@@ -704,7 +715,8 @@ export class AdministratorService {
       queryRunner = queryRunner.andWhere(
         "trans.created_at BETWEEN :startDate AND :endDate",
         {
-          startDate: new Date(date_from).toISOString(),
+          // startDate: new Date(date_from).toISOString(),
+          startDate: startOfLocalDay(date_from),
           endDate: endOfDay(new Date(date_to)),
         },
       );
@@ -718,6 +730,20 @@ export class AdministratorService {
       queryRunner = queryRunner.andWhere("trans.entity_type = :entity_type", {
         entity_type: entity_type,
       });
+    }
+
+    // The dashboard's "Transactions today" leaves deposit fees out.
+    const excludeEntityType = req.query.exclude_entity_type as string;
+    if (
+      excludeEntityType &&
+      Object.values(TransactionEntityType).includes(
+        excludeEntityType as TransactionEntityType,
+      )
+    ) {
+      queryRunner = queryRunner.andWhere(
+        "trans.entity_type != :excludeEntityType",
+        { excludeEntityType },
+      );
     }
 
     if (
@@ -776,8 +802,29 @@ export class AdministratorService {
     // both work; date_to covers the whole day, not midnight.
     if (date_from) {
       queryRunner.andWhere("users.created_at >= :dateFrom", {
-        dateFrom: new Date(date_from),
+        // dateFrom: new Date(date_from),
+        dateFrom: startOfLocalDay(date_from),
       });
+    }
+
+    // Behind the dashboard's "Active users today" and "Transacting users
+    // today" cards. Transacting counts any transaction, whatever its status,
+    // as that card does.
+    const lastSeenFrom = req.query.last_seen_from as string;
+    if (lastSeenFrom) {
+      queryRunner.andWhere("users.last_seen_at >= :lastSeenFrom", {
+        lastSeenFrom: startOfLocalDay(lastSeenFrom),
+      });
+    }
+    const transactedFrom = req.query.transacted_from as string;
+    if (transactedFrom) {
+      queryRunner.andWhere(
+        `EXISTS (
+           SELECT 1 FROM transactions t
+           WHERE t.user_id = users.id AND t.created_at >= :transactedFrom
+         )`,
+        { transactedFrom: startOfLocalDay(transactedFrom) },
+      );
     }
     if (date_to) {
       queryRunner.andWhere("users.created_at <= :dateTo", {
@@ -791,6 +838,12 @@ export class AdministratorService {
     if (kycStatus) {
       if (kycStatus === "none") {
         queryRunner.andWhere("users.kyc_status IS NULL");
+      } else if (kycStatus === "unverified") {
+        // Everyone short of verified — what the dashboard's "Pending KYC" counts.
+        queryRunner.andWhere(
+          "(users.kyc_status IS NULL OR users.kyc_status != :verified)",
+          { verified: KycStatus.success },
+        );
       } else {
         queryRunner.andWhere("users.kyc_status = :kycStatus", { kycStatus });
       }
