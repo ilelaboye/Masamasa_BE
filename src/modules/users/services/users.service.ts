@@ -852,7 +852,8 @@ export class UsersService extends BaseService {
       console.log("Nomba bank transfer", res.data);
       if (
         res.data.status == "SUCCESS" ||
-        res.data.status == "PENDING_BILLING"
+        res.data.status == "PENDING_BILLING" ||
+        res.data.status == "NEW"
       ) {
         console.log("Nomba transfer initiated successfully");
         await this.transactionsRepository.update(
