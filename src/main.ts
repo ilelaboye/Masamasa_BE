@@ -21,6 +21,13 @@ async function bootstrap() {
   app.use(helmet());
   app.use(compression());
 
+  // KYC sends ID photos and selfies as base64 JSON — Prembly reads the image
+  // before anything is stored, so it has to arrive in the body. Express
+  // defaults to 100kb, which no photograph fits inside. The KYC route's own
+  // Joi schema caps each image well below this.
+  app.useBodyParser("json", { limit: "12mb" });
+  app.useBodyParser("urlencoded", { limit: "12mb", extended: true });
+
   app.enableCors({
     origin: appConfig.ALLOWED_ORIGINS?.split(", "),
     methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE"],

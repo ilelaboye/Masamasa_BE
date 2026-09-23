@@ -34,6 +34,11 @@ import { DisposableWalletService } from "./services/disposable-wallet.service";
     WalletTrackingCron,
     DisposableWalletService,
   ],
-  exports: [WalletService, TransactionService, Web3Service, DisposableWalletService],
+  exports: [
+    WalletService,
+    TransactionService,
+    Web3Service,
+    DisposableWalletService,
+  ],
 })
 export class Web3Module {}

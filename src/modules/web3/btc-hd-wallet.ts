@@ -278,7 +278,7 @@ export class BtcHDWallet {
       const history = txs.slice(0, limit).map((tx: any) => {
         let totalIn = 0;
         let totalOut = 0;
-        
+
         // Check outputs (vout) - money received
         tx.vout.forEach((output: any) => {
           if (output.scriptpubkey_address === address) {

@@ -36,7 +36,10 @@ export class TransactionWebhookDto {
   @ApiProperty({ example: "0x..." })
   hash?: string;
 
-  @ApiProperty({ example: "0.000005", description: "Gas fee paid for the transaction" })
+  @ApiProperty({
+    example: "0.000005",
+    description: "Gas fee paid for the transaction",
+  })
   fee?: any;
 }
 

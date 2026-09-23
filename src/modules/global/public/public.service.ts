@@ -549,7 +549,7 @@ export class PublicService {
   // }
 
   async verifyAccountNumberFromNomba(accountNumber, bankCode, bankName) {
-    var accessToken = await this.accessTokenRepository.findOne({
+    let accessToken = await this.accessTokenRepository.findOne({
       where: { type: AccessTokenType.nomba },
     });
 
@@ -626,7 +626,7 @@ export class PublicService {
 
   async test(req: Request) {
     const { search } = getRequestQuery(req);
-    var accessToken = await this.accessTokenRepository.findOne({
+    let accessToken = await this.accessTokenRepository.findOne({
       where: { type: AccessTokenType.nomba },
     });
 

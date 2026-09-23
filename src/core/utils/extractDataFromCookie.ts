@@ -91,7 +91,9 @@ export function extractAdminDataFromCookie(request: Request): iAdminCookieData {
   const cookieData: string = request.cookies[_ADMIN_AUTH_COOKIE_NAME_];
 
   if (!cookieData) throw new UnauthorizedException("You are unauthenticated");
-  const { token, admin } = decryptData(cookieData) as unknown as iAdminCookieData;
+  const { token, admin } = decryptData(
+    cookieData,
+  ) as unknown as iAdminCookieData;
 
   if (!token) throw new NotAcceptableException("You are not logged in!");
   if (!admin)

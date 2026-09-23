@@ -40,6 +40,10 @@ export const DEPOSIT_FEE_EXEMPT_CURRENCIES = new Set(["usdt", "cngn"]);
 // The day is a calendar day in the app timezone (Africa/Lagos).
 export const WITHDRAWAL_MAX_PER_DAY = 5000000;
 
+// Verification tier reached once identity is verified. Tier 1 is every
+// registered account; tier 3 (address verification) is not built yet.
+export const KYC_TIER_IDENTITY = 2;
+
 // Smallest withdrawal accepted, for any account.
 export const WITHDRAWAL_MIN_PER_TRANSACTION = 1000;
 

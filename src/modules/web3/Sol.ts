@@ -31,8 +31,6 @@ export async function sweepSPLToken(
   const mint = new PublicKey(tokenMintAddress);
 
   try {
-
-
     const childATA = await getAssociatedTokenAddress(mint, childPubkey);
     const masterATA = await getAssociatedTokenAddress(mint, masterPubkey);
 
@@ -127,7 +125,6 @@ export async function sweepSPLToken(
       maxRetries: 3,
     });
     await connection.confirmTransaction(signature, "confirmed");
-
 
     if (uiAmount > 0.01) {
       await _transactionWebhook(

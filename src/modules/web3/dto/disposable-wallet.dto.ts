@@ -1,37 +1,48 @@
 import { ApiProperty } from "@nestjs/swagger";
 
 export class CreateDisposableWalletDto {
-  @ApiProperty({ 
+  @ApiProperty({
     description: "Network to create wallet on",
-    enum: ["BASE", "ETH", "BSC", "POLYGON", "SOLANA", "TRON", "BITCOIN", "CARDANO", "RIPPLE", "DOGE"],
-    example: "BASE"
+    enum: [
+      "BASE",
+      "ETH",
+      "BSC",
+      "POLYGON",
+      "SOLANA",
+      "TRON",
+      "BITCOIN",
+      "CARDANO",
+      "RIPPLE",
+      "DOGE",
+    ],
+    example: "BASE",
   })
   network: string;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: "Expected amount to receive (optional, for validation)",
     required: false,
-    example: 100
+    example: 100,
   })
   expectedAmount?: number;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: "Token symbol (for ERC20/TRC20 tokens)",
     required: false,
-    example: "USDT"
+    example: "USDT",
   })
   tokenSymbol?: string;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: "Expiration time in minutes (default: 60)",
     required: false,
-    example: 60
+    example: 60,
   })
   expirationMinutes?: number;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: "Metadata for tracking",
-    required: false
+    required: false,
   })
   metadata?: Record<string, any>;
 }
@@ -69,9 +80,9 @@ export class CheckDisposableWalletDto {
   @ApiProperty({ description: "Network" })
   network: string;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: "Destination tag (for XRP)",
-    required: false
+    required: false,
   })
   destinationTag?: number;
 }
@@ -83,15 +94,15 @@ export class SweepDisposableWalletDto {
   @ApiProperty({ description: "Network" })
   network: string;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: "Token symbol (for ERC20/TRC20 tokens)",
-    required: false
+    required: false,
   })
   tokenSymbol?: string;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: "Destination tag (for XRP)",
-    required: false
+    required: false,
   })
   destinationTag?: number;
 }

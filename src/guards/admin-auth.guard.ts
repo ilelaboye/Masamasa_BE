@@ -29,8 +29,11 @@ export class AdminAuthGuard implements CanActivate {
         secret: appConfig.JWT_SECRET,
       });
 
-      const details = await this.administratorService.getWithId(`${payload.id}`);
-      if (!details) throw new UnauthorizedException("This account is not found!");
+      const details = await this.administratorService.getWithId(
+        `${payload.id}`,
+      );
+      if (!details)
+        throw new UnauthorizedException("This account is not found!");
       // Anything other than active loses the session — covers suspended
       // accounts and any status added later, rather than only `suspend`.
       if (details.status !== AdminStatus.active)

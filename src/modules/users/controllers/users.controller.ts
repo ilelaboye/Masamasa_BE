@@ -23,6 +23,7 @@ import {
   CreatePinDto,
   DeleteAccountDto,
   EditUserDto,
+  KycDto,
   TransferDto,
   UpdateAccountDto,
   UploadImageDto,
@@ -32,6 +33,7 @@ import {
 import { UsersService } from "../services/users.service";
 import {
   ChangeUserPasswordValidation,
+  KycValidation,
   VerifyPasswordChangeValidation,
   EditUserValidation,
   TransferValidation,
@@ -39,8 +41,6 @@ import {
   UploadImageValidation,
   WithdrawalValidation,
 } from "../validations";
-import { BVNVerificationValidation } from "@/modules/global/bank-verification/validations/bvn-verification.validation";
-import { BVNVerificationDto } from "@/modules/global/bank-verification/dto/bvn-verification.dto";
 
 @ApiCookieAuth(_AUTH_COOKIE_NAME_)
 @UseGuards(AuthGuard)
@@ -50,7 +50,7 @@ export class UsersController {
   constructor(
     private readonly usersService: UsersService,
     private readonly cacheService: CacheService,
-  ) { }
+  ) {}
 
   @Get("profile")
   async auth(@Req() req: UserRequest) {
@@ -144,12 +144,9 @@ export class UsersController {
   }
 
   @Post("kyc")
-  @UsePipes(new JoiValidationPipe(BVNVerificationValidation))
-  async kyc(
-    @Body() bVNVerificationDto: BVNVerificationDto,
-    @Req() req: UserRequest,
-  ) {
-    return await this.usersService.userKyc(bVNVerificationDto, req);
+  @UsePipes(new JoiValidationPipe(KycValidation))
+  async kyc(@Body() kycDto: KycDto, @Req() req: UserRequest) {
+    return await this.usersService.userKyc(kycDto, req);
   }
 
   // @Post("email-verification")
@@ -181,7 +178,9 @@ export class UsersController {
   // ====================================
 
   @Post("request-account-deletion")
-  @UsePipes(new JoiValidationPipe(require("../validations").DeleteAccountValidation))
+  @UsePipes(
+    new JoiValidationPipe(require("../validations").DeleteAccountValidation),
+  )
   async requestAccountDeletion(
     @Body() body: DeleteAccountDto,
     @Req() req: UserRequest,
@@ -194,7 +193,11 @@ export class UsersController {
   }
 
   @Post("confirm-account-deletion")
-  @UsePipes(new JoiValidationPipe(require("../validations").ConfirmDeleteAccountValidation))
+  @UsePipes(
+    new JoiValidationPipe(
+      require("../validations").ConfirmDeleteAccountValidation,
+    ),
+  )
   async confirmAccountDeletion(
     @Body() body: ConfirmDeleteAccountDto,
     @Req() req: UserRequest,

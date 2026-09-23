@@ -179,7 +179,7 @@ export class CardanoHDWallet {
     let currentSlot = 1250000000;
     try {
       currentSlot = await this.getCurrentSlot(network, blockfrostApiKey);
-    } catch { }
+    } catch {}
 
     txBuilder.set_ttl(currentSlot + 1000);
 
@@ -249,12 +249,15 @@ export class CardanoHDWallet {
       );
 
       if (utxos.length === 0) throw new Error("No funds in master wallet");
-     
+
       const pp = await this.fetchProtocolParams(network, blockfrostApiKey);
 
       const config = TransactionBuilderConfigBuilder.new()
         .fee_algo(
-          LinearFee.new(BigNum.from_str(pp.minFeeA), BigNum.from_str(pp.minFeeB)),
+          LinearFee.new(
+            BigNum.from_str(pp.minFeeA),
+            BigNum.from_str(pp.minFeeB),
+          ),
         )
         .coins_per_utxo_byte(BigNum.from_str(pp.coinsPerUtxoByte))
         .pool_deposit(BigNum.from_str(pp.poolDeposit))
@@ -264,7 +267,10 @@ export class CardanoHDWallet {
         .ex_unit_prices(
           ExUnitPrices.new(
             UnitInterval.new(BigNum.from_str("577"), BigNum.from_str("10000")),
-            UnitInterval.new(BigNum.from_str("721"), BigNum.from_str("10000000")),
+            UnitInterval.new(
+              BigNum.from_str("721"),
+              BigNum.from_str("10000000"),
+            ),
           ),
         )
         .build();
@@ -300,13 +306,15 @@ export class CardanoHDWallet {
       }
 
       if (accumulated < amountLovelace)
-        throw new Error(`Insufficient ADA. Have: ${Number(accumulated) / 1_000_000}, Need: ${amountADA}`);
+        throw new Error(
+          `Insufficient ADA. Have: ${Number(accumulated) / 1_000_000}, Need: ${amountADA}`,
+        );
 
       // Set TTL
       let currentSlot = 1250000000;
       try {
         currentSlot = await this.getCurrentSlot(network, blockfrostApiKey);
-      } catch { }
+      } catch {}
       txBuilder.set_ttl(currentSlot + 1000);
 
       // Add change
@@ -520,7 +528,6 @@ export class CardanoHDWallet {
 
         const fees = Number(BigInt(txDetails.fees) / 1_000_000n);
 
-
         results.push({
           hash: tx.tx_hash,
           block: txDetails.block_height,
@@ -536,7 +543,7 @@ export class CardanoHDWallet {
       }
       return results;
     } catch (error: any) {
-      return []
+      return [];
     }
   }
 
@@ -597,19 +604,19 @@ export class CardanoHDWallet {
         let outputToOthers = 0n;
 
         // 🔴 Check if user is sender (OUT)
-        const isSender = inputs.some(i => i.address === address);
+        const isSender = inputs.some((i) => i.address === address);
 
         // Sum inputs from user
         for (const input of inputs) {
           if (input.address === address) {
-            const lovelace = input.amount.find(a => a.unit === "lovelace");
+            const lovelace = input.amount.find((a) => a.unit === "lovelace");
             if (lovelace) inputTotal += BigInt(lovelace.quantity);
           }
         }
 
         // Sum outputs
         for (const output of outputs) {
-          const lovelace = output.amount.find(a => a.unit === "lovelace");
+          const lovelace = output.amount.find((a) => a.unit === "lovelace");
           if (!lovelace) continue;
 
           if (output.address === address) {
@@ -652,13 +659,13 @@ export class CardanoHDWallet {
             network: "CARDANO",
             status: "success",
             type,
-            outputs: outputs.flatMap(o => o.amount),
+            outputs: outputs.flatMap((o) => o.amount),
           });
         }
       }
       return results;
     } catch (error: any) {
-      return []
+      return [];
     }
   }
 
@@ -674,9 +681,7 @@ export class CardanoHDWallet {
         ...transaction,
         amount: Number(transaction.amount),
       });
-    } catch (error: any) {
-
-    }
+    } catch (error: any) {}
   }
 
   private async transferADA(

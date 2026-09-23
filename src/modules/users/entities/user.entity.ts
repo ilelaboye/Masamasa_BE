@@ -62,14 +62,32 @@ export class User {
   @Column({ nullable: true })
   kyc_image?: string;
 
-  @Column({ nullable: true })
-  kyc_error?: string;
+  /** Why the last submission was rejected. Cleared on a fresh attempt. */
+  @Column({ type: "varchar", nullable: true })
+  kyc_error?: string | null;
 
   @Column({ nullable: true })
   profile_image?: string;
 
   @Column({ nullable: true })
   kyc_type?: string;
+
+  /** Back of the ID document, where the type has one. */
+  @Column({ nullable: true })
+  kyc_image_back?: string;
+
+  /** The selfie taken during the KYC flow. */
+  @Column({ nullable: true })
+  kyc_selfie?: string;
+
+  /**
+   * Verification tier reached. 1 is every registered account; 2 is identity
+   * verified; 3 (address verified) is not built yet. The tier is what the user
+   * is shown — `withdrawal_limit` is what a withdrawal is actually held to,
+   * because an admin can adjust that per account.
+   */
+  @Column({ type: "smallint", default: 1 })
+  kyc_tier: number;
 
   @Column({ unique: true })
   email: string;

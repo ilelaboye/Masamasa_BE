@@ -12,7 +12,10 @@ function withTimeout<T>(promise: Promise<T>, ms = TRON_TIMEOUT_MS): Promise<T> {
   return Promise.race([
     promise,
     new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(`Tron call timed out after ${ms}ms`)), ms),
+      setTimeout(
+        () => reject(new Error(`Tron call timed out after ${ms}ms`)),
+        ms,
+      ),
     ),
   ]);
 }
@@ -29,7 +32,7 @@ export class TronHDWallet {
   ) {
     if (!bip39.validateMnemonic(mnemonic)) throw new Error("Invalid mnemonic");
     this.masterSeed = bip39.mnemonicToSeedSync(mnemonic);
-    
+
     // Proper TronWeb instance
     this.tronWeb = new TronWeb({
       fullHost: fullNode,
@@ -50,7 +53,7 @@ export class TronHDWallet {
 
     // Generate TRON address
     const address = this.tronWeb.address.fromPrivateKey(privateKeyHex);
-    console.log(privateKeyHex)
+    console.log(privateKeyHex);
     return { privateKey: privateKeyHex, address };
   }
 
@@ -85,7 +88,7 @@ export class TronHDWallet {
     const address = child.address;
 
     // 1. Get TRX balance
-    const balance = await withTimeout(tronWeb.trx.getBalance(address)) as any;
+    const balance = (await withTimeout(tronWeb.trx.getBalance(address))) as any;
     if (balance <= 0) return null;
 
     // TRON transfer fee is always ~15 TRX bandwidth/energy if not frozen
@@ -99,12 +102,20 @@ export class TronHDWallet {
     const sendAmount = balance - FEE;
 
     // 2. Send TRX sweep
-    const tx = await withTimeout(
-      tronWeb.transactionBuilder.sendTrx(masterAddressBase58, sendAmount, address),
-    ) as any;
+    const tx = (await withTimeout(
+      tronWeb.transactionBuilder.sendTrx(
+        masterAddressBase58,
+        sendAmount,
+        address,
+      ),
+    )) as any;
 
-    const signedTx = await withTimeout(tronWeb.trx.sign(tx, child.privateKey)) as any;
-    const receipt = await withTimeout(tronWeb.trx.sendRawTransaction(signedTx)) as any;
+    const signedTx = (await withTimeout(
+      tronWeb.trx.sign(tx, child.privateKey),
+    )) as any;
+    const receipt = (await withTimeout(
+      tronWeb.trx.sendRawTransaction(signedTx),
+    )) as any;
 
     console.log("TRX Sweep Tx:", receipt);
 
@@ -163,7 +174,9 @@ export class TronHDWallet {
 
     if (tokenBalance === 0) return null;
     // 4. Check TRX balance to pay fees
-    const trxBalance = await withTimeout(tronWebChild.trx.getBalance(childAddress)) as any;
+    const trxBalance = (await withTimeout(
+      tronWebChild.trx.getBalance(childAddress),
+    )) as any;
 
     // Estimate needed fee for TRC20 transfer
     const FEE_ESTIMATE = 30 * 1_000_000; // 30 TRX in SUN as buffer
@@ -198,14 +211,20 @@ export class TronHDWallet {
     const master = this.getMasterWallet();
     const amountSun = Math.floor(amountTRX * 1_000_000);
 
-    const transaction = await withTimeout(
-      this.tronWeb.transactionBuilder.sendTrx(toAddress, amountSun, master.address),
-    ) as any;
+    const transaction = (await withTimeout(
+      this.tronWeb.transactionBuilder.sendTrx(
+        toAddress,
+        amountSun,
+        master.address,
+      ),
+    )) as any;
 
-    const signedTx = await withTimeout(
+    const signedTx = (await withTimeout(
       this.tronWeb.trx.sign(transaction, master.privateKey),
-    ) as any;
-    const receipt = await withTimeout(this.tronWeb.trx.sendRawTransaction(signedTx)) as any;
+    )) as any;
+    const receipt = (await withTimeout(
+      this.tronWeb.trx.sendRawTransaction(signedTx),
+    )) as any;
 
     if (!receipt.result) {
       throw new Error(`TRX withdrawal failed: ${JSON.stringify(receipt)}`);

@@ -64,7 +64,7 @@ export class CronJob {
       .andWhere("trans.retry = :retry", { retry: 0 })
       .getMany();
 
-    var accessToken = await this.accessTokenRepository.findOne({
+    let accessToken = await this.accessTokenRepository.findOne({
       where: { type: AccessTokenType.nomba },
     });
 

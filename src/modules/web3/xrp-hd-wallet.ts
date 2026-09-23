@@ -3,224 +3,252 @@ import { appConfig } from "@/config";
 import { PublicService } from "../global/public/public.service";
 
 export class XrpHDWallet {
-    private client: Client;
-    private currentRpcIndex: number = 0;
+  private client: Client;
+  private currentRpcIndex: number = 0;
 
-    constructor(
-        private mnemonic: string,
-        private readonly publicService: PublicService,
+  constructor(
+    private mnemonic: string,
+    private readonly publicService: PublicService,
+  ) {
+    this.client = new Client(appConfig.XRP_RPC_URL);
+  }
+
+  private async ensureConnected() {
+    if (!this.client.isConnected()) {
+      try {
+        await this.client.connect();
+      } catch (error: any) {
+        console.error(
+          `Failed to connect to ${appConfig.XRP_RPC_URL}:`,
+          error.message,
+        );
+        // Try failover to alternative RPC
+        await this.tryFailoverConnection();
+      }
+    }
+  }
+
+  private async tryFailoverConnection() {
+    const rpcUrls = appConfig.XRP_RPC_URLS || [appConfig.XRP_RPC_URL];
+
+    for (let i = 0; i < rpcUrls.length; i++) {
+      const rpcUrl = rpcUrls[i];
+      if (rpcUrl === appConfig.XRP_RPC_URL) continue; // Skip the one that already failed
+
+      try {
+        console.log(`Trying XRP RPC failover: ${rpcUrl}`);
+        this.client = new Client(rpcUrl);
+        await this.client.connect();
+        console.log(`Successfully connected to XRP RPC: ${rpcUrl}`);
+        return;
+      } catch (error: any) {
+        console.error(`Failed to connect to ${rpcUrl}:`, error.message);
+        continue;
+      }
+    }
+
+    throw new Error("All XRP RPC endpoints failed");
+  }
+
+  /**
+   * Derive XRP wallet from mnemonic and index
+   * XRP uses standard BIP44 path m/44'/144'/0'/0/index
+   */
+  async deriveWallet(index: number): Promise<Wallet> {
+    return Wallet.fromMnemonic(this.mnemonic, {
+      derivationPath: `m/44'/144'/0'/0/${index}`,
+    });
+  }
+
+  async getMasterWallet(): Promise<Wallet> {
+    return this.deriveWallet(0);
+  }
+
+  async getMasterAddress(): Promise<string> {
+    const wallet = await this.getMasterWallet();
+    return wallet.address;
+  }
+
+  async getBalance(address: string): Promise<number> {
+    await this.ensureConnected();
+    try {
+      const balance = await this.client.getXrpBalance(address);
+      return Number(balance);
+    } catch (error: any) {
+      if (error.data?.error === "actNotFound") {
+        return 0;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Withdraw XRP from master wallet to destination
+   */
+  async withdrawXRP(
+    toAddress: string,
+    amount: number,
+    destinationTag?: number,
+  ): Promise<string> {
+    await this.ensureConnected();
+    const masterWallet = await this.getMasterWallet();
+
+    const prepared = await this.client.autofill({
+      TransactionType: "Payment",
+      Account: masterWallet.address,
+      Amount: xrpToDrops(amount),
+      Destination: toAddress,
+      DestinationTag: destinationTag,
+    });
+
+    const signed = masterWallet.sign(prepared);
+    const result = await this.client.submitAndWait(signed.tx_blob);
+
+    if (
+      typeof result.result.meta !== "string" &&
+      result.result.meta?.TransactionResult === "tesSUCCESS"
     ) {
-        this.client = new Client(appConfig.XRP_RPC_URL);
+      return signed.hash;
+    } else {
+      const message =
+        typeof result.result.meta !== "string"
+          ? result.result.meta?.TransactionResult
+          : result.result.meta;
+      throw new Error(`XRP Transfer failed: ${message}`);
+    }
+  }
+
+  /**
+   * Sweep XRP (for legacy child accounts)
+   */
+  async sweepXRP(index: number, masterAddress: string): Promise<boolean> {
+    await this.ensureConnected();
+    const childWallet = await this.deriveWallet(index);
+    const balance = await this.getBalance(childWallet.address);
+
+    if (balance <= 10.001) {
+      return false;
     }
 
-    private async ensureConnected() {
-        if (!this.client.isConnected()) {
-            try {
-                await this.client.connect();
-            } catch (error: any) {
-                console.error(`Failed to connect to ${appConfig.XRP_RPC_URL}:`, error.message);
-                // Try failover to alternative RPC
-                await this.tryFailoverConnection();
-            }
-        }
+    const transferable = balance - 10 - 0.00002;
+
+    if (transferable <= 0) return false;
+
+    const prepared = await this.client.autofill({
+      TransactionType: "Payment",
+      Account: childWallet.address,
+      Amount: xrpToDrops(transferable),
+      Destination: masterAddress,
+    });
+
+    const signed = childWallet.sign(prepared);
+    const result = await this.client.submitAndWait(signed.tx_blob);
+
+    if (
+      typeof result.result.meta !== "string" &&
+      result.result.meta?.TransactionResult === "tesSUCCESS"
+    ) {
+      await this._transactionWebhook({
+        network: "RIPPLE",
+        address: childWallet.address,
+        token_symbol: "XRP",
+        amount: transferable,
+        hash: signed.hash,
+      });
+      return true;
     }
 
-    private async tryFailoverConnection() {
-        const rpcUrls = appConfig.XRP_RPC_URLS || [appConfig.XRP_RPC_URL];
-        
-        for (let i = 0; i < rpcUrls.length; i++) {
-            const rpcUrl = rpcUrls[i];
-            if (rpcUrl === appConfig.XRP_RPC_URL) continue; // Skip the one that already failed
-            
-            try {
-                console.log(`Trying XRP RPC failover: ${rpcUrl}`);
-                this.client = new Client(rpcUrl);
-                await this.client.connect();
-                console.log(`Successfully connected to XRP RPC: ${rpcUrl}`);
-                return;
-            } catch (error: any) {
-                console.error(`Failed to connect to ${rpcUrl}:`, error.message);
-                continue;
-            }
-        }
-        
-        throw new Error("All XRP RPC endpoints failed");
-    }
+    return false;
+  }
 
-    /**
-     * Derive XRP wallet from mnemonic and index
-     * XRP uses standard BIP44 path m/44'/144'/0'/0/index
-     */
-    async deriveWallet(index: number): Promise<Wallet> {
-        return Wallet.fromMnemonic(this.mnemonic, {
-            derivationPath: `m/44'/144'/0'/0/${index}`,
-        });
-    }
+  async getChildTransactionHistory(
+    address: string,
+    destinationTag: number,
+    limit: number = 3,
+  ): Promise<any[]> {
+    await this.ensureConnected();
 
-    async getMasterWallet(): Promise<Wallet> {
-        return this.deriveWallet(0);
-    }
+    try {
+      const response = await this.client.request({
+        command: "account_tx",
+        account: address,
+        limit: 50,
+      });
 
-    async getMasterAddress(): Promise<string> {
-        const wallet = await this.getMasterWallet();
-        return wallet.address;
-    }
+      const transactions = response.result.transactions;
+      const results: any[] = [];
 
-    async getBalance(address: string): Promise<number> {
-        await this.ensureConnected();
-        try {
-            const balance = await this.client.getXrpBalance(address);
-            return Number(balance);
-        } catch (error: any) {
-            if (error.data?.error === "actNotFound") {
-                return 0;
-            }
-            throw error;
-        }
-    }
+      for (const txObj of transactions) {
+        if (results.length >= limit) break;
 
-    /**
-     * Withdraw XRP from master wallet to destination
-     */
-    async withdrawXRP(toAddress: string, amount: number, destinationTag?: number): Promise<string> {
-        await this.ensureConnected();
-        const masterWallet = await this.getMasterWallet();
+        const tx: any = txObj.tx || txObj.tx_json;
+        const meta: any = txObj.meta;
 
-        const prepared = await this.client.autofill({
-            TransactionType: "Payment",
-            Account: masterWallet.address,
-            Amount: xrpToDrops(amount),
-            Destination: toAddress,
-            DestinationTag: destinationTag,
-        });
+        // Skip if tx or meta is missing or meta is not an object
+        if (!tx || !meta || typeof meta === "string") continue;
 
-        const signed = masterWallet.sign(prepared);
-        const result = await this.client.submitAndWait(signed.tx_blob);
+        // Skip if not a successful Payment
+        if (
+          tx.TransactionType !== "Payment" ||
+          meta.TransactionResult !== "tesSUCCESS"
+        )
+          continue;
 
-        if (typeof result.result.meta !== 'string' && result.result.meta?.TransactionResult === "tesSUCCESS") {
-            return signed.hash;
+        // Filter by Destination and DestinationTag
+        if (tx.Destination !== address || tx.DestinationTag !== destinationTag)
+          continue;
+
+        let amount = 0;
+        const rawAmount = tx.Amount || tx.DeliverMax || meta.delivered_amount;
+
+        if (typeof rawAmount === "string") {
+          amount = Number(dropsToXrp(rawAmount));
         } else {
-            const message = typeof result.result.meta !== 'string' ? result.result.meta?.TransactionResult : result.result.meta;
-            throw new Error(`XRP Transfer failed: ${message}`);
-        }
-    }
-
-    /**
-     * Sweep XRP (for legacy child accounts)
-     */
-    async sweepXRP(index: number, masterAddress: string): Promise<boolean> {
-        await this.ensureConnected();
-        const childWallet = await this.deriveWallet(index);
-        const balance = await this.getBalance(childWallet.address);
-
-        if (balance <= 10.001) {
-            return false;
+          continue;
         }
 
-        const transferable = balance - 10 - 0.00002;
-
-        if (transferable <= 0) return false;
-
-        const prepared = await this.client.autofill({
-            TransactionType: "Payment",
-            Account: childWallet.address,
-            Amount: xrpToDrops(transferable),
-            Destination: masterAddress,
+        results.push({
+          txID: txObj.hash || tx.hash,
+          type: "IN",
+          amount: amount,
+          token_symbol: "XRP",
+          network: "RIPPLE",
+          status: "success",
+          timestamp: tx.date ? (tx.date + 946684800) * 1000 : Date.now(),
+          date: tx.date ? new Date((tx.date + 946684800) * 1000) : new Date(),
         });
+      }
 
-        const signed = childWallet.sign(prepared);
-        const result = await this.client.submitAndWait(signed.tx_blob);
-
-        if (typeof result.result.meta !== 'string' && result.result.meta?.TransactionResult === "tesSUCCESS") {
-            await this._transactionWebhook({
-                network: "RIPPLE",
-                address: childWallet.address,
-                token_symbol: "XRP",
-                amount: transferable,
-                hash: signed.hash,
-            });
-            return true;
-        }
-
-        return false;
+      return results;
+    } catch (error: any) {
+      console.error("Failed to fetch XRP history:", error.message);
+      return [];
     }
+  }
 
-    async getChildTransactionHistory(address: string, destinationTag: number, limit: number = 3): Promise<any[]> {
-        await this.ensureConnected();
+  async getHistoryByUserId(
+    userId: string | number,
+    limit: number = 3,
+  ): Promise<any[]> {
+    const address = await this.getMasterAddress();
+    const destinationTag = 44011 + Number(userId);
+    return this.getChildTransactionHistory(address, destinationTag, limit);
+  }
 
-        try {
-            const response = await this.client.request({
-                command: "account_tx",
-                account: address,
-                limit: 50,
-            });
-
-            const transactions = response.result.transactions;
-            const results: any[] = [];
-
-            for (const txObj of transactions) {
-                if (results.length >= limit) break;
-
-                const tx: any = txObj.tx || txObj.tx_json;
-                const meta: any = txObj.meta;
-
-                // Skip if tx or meta is missing or meta is not an object
-                if (!tx || !meta || typeof meta === "string") continue;
-
-                // Skip if not a successful Payment
-                if (tx.TransactionType !== "Payment" || meta.TransactionResult !== "tesSUCCESS") continue;
-
-                // Filter by Destination and DestinationTag
-                if (tx.Destination !== address || tx.DestinationTag !== destinationTag) continue;
-
-                let amount = 0;
-                const rawAmount = tx.Amount || tx.DeliverMax || meta.delivered_amount;
-
-                if (typeof rawAmount === "string") {
-                    amount = Number(dropsToXrp(rawAmount));
-                } else {
-                    continue;
-                }
-
-                results.push({
-                    txID: txObj.hash || tx.hash,
-                    type: "IN",
-                    amount: amount,
-                    token_symbol: "XRP",
-                    network: "RIPPLE",
-                    status: "success",
-                    timestamp: tx.date ? (tx.date + 946684800) * 1000 : Date.now(),
-                    date: tx.date ? new Date((tx.date + 946684800) * 1000) : new Date(),
-                });
-            }
-
-            return results;
-        } catch (error: any) {
-            console.error("Failed to fetch XRP history:", error.message);
-            return [];
-        }
+  private async _transactionWebhook(transaction: {
+    network: string;
+    address: string;
+    amount: number | string;
+    token_symbol: string;
+    hash?: string;
+  }) {
+    try {
+      return await this.publicService.transactionWebhook({
+        ...transaction,
+        amount: Number(transaction.amount),
+      });
+    } catch (error: any) {
+      console.error("Transaction webhook failed:", error.message);
     }
-
-    async getHistoryByUserId(userId: string | number, limit: number = 3): Promise<any[]> {
-        const address = await this.getMasterAddress();
-        const destinationTag = 44011 + Number(userId);
-        return this.getChildTransactionHistory(address, destinationTag, limit);
-    }
-
-    private async _transactionWebhook(transaction: {
-        network: string;
-        address: string;
-        amount: number | string;
-        token_symbol: string;
-        hash?: string;
-    }) {
-        try {
-            return await this.publicService.transactionWebhook({
-                ...transaction,
-                amount: Number(transaction.amount),
-            });
-        } catch (error: any) {
-            console.error("Transaction webhook failed:", error.message);
-        }
-    }
+  }
 }

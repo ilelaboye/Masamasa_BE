@@ -44,6 +44,7 @@ const serviceFor = (user: Partial<User>, withdrawnToday: number) =>
     { manager: managerReturning(withdrawnToday) } as any,
     null as any,
     null as any,
+    null as any,
   );
 
 const req = { user: { id: 1 } } as any;

@@ -108,7 +108,6 @@ export class SolHDWallet {
     const transferable = balance - requiredFee;
 
     if (transferable <= 0) {
-
       return false;
     }
 
@@ -141,8 +140,6 @@ export class SolHDWallet {
       },
       "confirmed",
     );
-
-
 
     // Optional webhook: only trigger if amount is >= 0.001 SOL (refuel gas fee threshold)
     if (transferable / LAMPORTS_PER_SOL >= 0.001) {
@@ -391,7 +388,7 @@ export class SolHDWallet {
 
     // Check if destination ATA exists, create if not
     const transaction = new Transaction();
-    
+
     const accountInfo = await connection.getAccountInfo(toAta);
     if (!accountInfo) {
       // ATA doesn't exist, need to create it
@@ -402,7 +399,7 @@ export class SolHDWallet {
           toAta, // associated token account
           destPubkey, // owner
           mintPubkey, // mint
-        )
+        ),
       );
     }
 
@@ -479,15 +476,25 @@ export class SolHDWallet {
     }
   }
 
-  async getChildSPLHistory(childIndex: number, tokenAddress: string, limit: number = 3) {
+  async getChildSPLHistory(
+    childIndex: number,
+    tokenAddress: string,
+    limit: number = 3,
+  ) {
     const childPubkey = this.deriveKeypair(childIndex).publicKey;
     const connection = new Connection(appConfig.SOL_RPC_URL, "confirmed");
     const tokenMint = new PublicKey(tokenAddress);
 
     try {
-      const childTokenAccount = await getAssociatedTokenAddress(tokenMint, childPubkey);
+      const childTokenAccount = await getAssociatedTokenAddress(
+        tokenMint,
+        childPubkey,
+      );
 
-      const signatures = await connection.getSignaturesForAddress(childTokenAccount, { limit });
+      const signatures = await connection.getSignaturesForAddress(
+        childTokenAccount,
+        { limit },
+      );
       if (signatures.length === 0) return [];
 
       const sigs = signatures.map((s) => s.signature);
@@ -500,11 +507,19 @@ export class SolHDWallet {
         const sigInfo = signatures[i];
         if (!tx || !tx.meta) continue;
 
-        const preBalance = tx.meta.preTokenBalances?.find(b => b.mint === tokenAddress);
-        const postBalance = tx.meta.postTokenBalances?.find(b => b.mint === tokenAddress);
+        const preBalance = tx.meta.preTokenBalances?.find(
+          (b) => b.mint === tokenAddress,
+        );
+        const postBalance = tx.meta.postTokenBalances?.find(
+          (b) => b.mint === tokenAddress,
+        );
 
-        const preAmount = preBalance ? Number(preBalance.uiTokenAmount.uiAmount) : 0;
-        const postAmount = postBalance ? Number(postBalance.uiTokenAmount.uiAmount) : 0;
+        const preAmount = preBalance
+          ? Number(preBalance.uiTokenAmount.uiAmount)
+          : 0;
+        const postAmount = postBalance
+          ? Number(postBalance.uiTokenAmount.uiAmount)
+          : 0;
 
         if (preAmount === postAmount) continue; // No change
 
@@ -516,7 +531,9 @@ export class SolHDWallet {
           network: "SOLANA",
           status: tx.meta.err ? "failed" : "success",
           timestamp: sigInfo.blockTime ? sigInfo.blockTime * 1000 : Date.now(),
-          date: sigInfo.blockTime ? new Date(sigInfo.blockTime * 1000) : new Date(),
+          date: sigInfo.blockTime
+            ? new Date(sigInfo.blockTime * 1000)
+            : new Date(),
         });
       }
 

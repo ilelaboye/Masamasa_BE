@@ -13,7 +13,7 @@ export class TronHDWallet {
   constructor(
     mnemonic: string,
     fullNode = "https://api.trongrid.io",
-    publicService: PublicService
+    publicService: PublicService,
   ) {
     if (!bip39.validateMnemonic(mnemonic)) throw new Error("Invalid mnemonic");
     this.masterSeed = bip39.mnemonicToSeedSync(mnemonic);
@@ -63,7 +63,7 @@ export class TronHDWallet {
     child: { privateKey: string; address: string },
     masterAddressBase58: string,
     tronRpc: string,
-    symbol: string = "TRX"
+    symbol: string = "TRX",
   ) {
     const tronWeb = new TronWeb({
       fullHost: tronRpc,
@@ -90,7 +90,7 @@ export class TronHDWallet {
     const tx = await tronWeb.transactionBuilder.sendTrx(
       masterAddressBase58,
       sendAmount,
-      address
+      address,
     );
 
     const signedTx = await tronWeb.trx.sign(tx, child.privateKey);
@@ -116,7 +116,7 @@ export class TronHDWallet {
     master: { privateKey: string; address: string },
     tronRpc: string,
     tokenAddress: string,
-    symbol: string = "USDT"
+    symbol: string = "USDT",
   ) {
     // 1. Initialize TronWeb for child wallet
     const tronWebChild = new TronWeb({
@@ -148,7 +148,7 @@ export class TronHDWallet {
     const tokenBalance = Number(balanceRaw);
 
     console.log(
-      `${symbol} balance of child wallet ${childAddress}: ${tokenBalance}`
+      `${symbol} balance of child wallet ${childAddress}: ${tokenBalance}`,
     );
 
     if (tokenBalance === 0) return null;
@@ -191,12 +191,12 @@ export class TronHDWallet {
     const transaction = await this.tronWeb.transactionBuilder.sendTrx(
       toAddress,
       amountSun,
-      master.address
+      master.address,
     );
 
     const signedTx = await this.tronWeb.trx.sign(
       transaction,
-      master.privateKey
+      master.privateKey,
     );
     const receipt = await this.tronWeb.trx.sendRawTransaction(signedTx);
 
@@ -210,7 +210,7 @@ export class TronHDWallet {
   async withdrawTRC20(
     toAddress: string,
     amount: number,
-    tokenAddress: string
+    tokenAddress: string,
   ): Promise<string> {
     const master = this.getMasterWallet();
     const contract = await this.tronWeb.contract().at(tokenAddress);
@@ -228,7 +228,7 @@ export class TronHDWallet {
   async getChildTRC20History(
     childIndex: number,
     tokenAddress: string,
-    limit: number = 3
+    limit: number = 3,
   ): Promise<any[]> {
     const childAddress = this.getChildAddress(childIndex);
     console.log(childAddress);
@@ -269,7 +269,7 @@ export class TronHDWallet {
 
   async getChildTRXHistory(
     childIndex: number,
-    limit: number = 3
+    limit: number = 3,
   ): Promise<any[]> {
     const childAddress = this.getChildAddress(childIndex);
     const url = `https://api.trongrid.io/v1/accounts/${childAddress}/transactions?limit=${limit}`;
@@ -283,7 +283,7 @@ export class TronHDWallet {
 
       const history = data.data
         .filter(
-          (tx: any) => tx.raw_data.contract[0].type === "TransferContract"
+          (tx: any) => tx.raw_data.contract[0].type === "TransferContract",
         )
         .map((tx: any) => {
           const contract = tx.raw_data.contract[0].value;

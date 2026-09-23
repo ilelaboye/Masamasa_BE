@@ -48,7 +48,7 @@ export class Web3Controller {
   constructor(
     private readonly web3Service: Web3Service,
     private readonly disposableWalletService: DisposableWalletService,
-  ) { }
+  ) {}
 
   // Create new wallet
   // Self-custody wallet generation is retired — wallets are provisioned via
@@ -86,7 +86,7 @@ export class Web3Controller {
   @Get("/recent-transactions")
   async getRecentTransactions() {
     throw new BadRequestException(
-      "Recent transactions feature requires a deployed WalletManager contract. Please configure WALLET_MANAGER_CONTRACT_ADDRESS in your .env file."
+      "Recent transactions feature requires a deployed WalletManager contract. Please configure WALLET_MANAGER_CONTRACT_ADDRESS in your .env file.",
     );
     // return await this.web3Service.getRecentTransactions();
   }
@@ -112,9 +112,12 @@ export class Web3Controller {
   @UsePipes(new JoiValidationPipe(CreateDisposableWalletValidation))
   async createDisposableWallet(
     @Req() req: UserRequest,
-    @Body() body: CreateDisposableWalletDto
+    @Body() body: CreateDisposableWalletDto,
   ) {
-    return await this.disposableWalletService.createDisposableWallet(body, req.user.id);
+    return await this.disposableWalletService.createDisposableWallet(
+      body,
+      req.user.id,
+    );
   }
 
   // Check disposable wallet balance and status

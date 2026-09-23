@@ -1,4 +1,8 @@
-import { Injectable, BadRequestException, NotFoundException } from "@nestjs/common";
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+} from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, LessThan } from "typeorm";
 import { Cron, CronExpression } from "@nestjs/schedule";
@@ -6,12 +10,15 @@ import { ethers } from "ethers";
 import { Connection, PublicKey } from "@solana/web3.js";
 import * as QRCode from "qrcode";
 
-import { DisposableWallet, DisposableWalletStatus } from "../entity/disposable-wallet.entity";
-import { 
-  CreateDisposableWalletDto, 
+import {
+  DisposableWallet,
+  DisposableWalletStatus,
+} from "../entity/disposable-wallet.entity";
+import {
+  CreateDisposableWalletDto,
   DisposableWalletResponseDto,
   CheckDisposableWalletDto,
-  SweepDisposableWalletDto
+  SweepDisposableWalletDto,
 } from "../dto/disposable-wallet.dto";
 import { HDWallet } from "../hd-wallet";
 import { SolHDWallet } from "../sol-hd-wallet";
@@ -34,7 +41,7 @@ export class DisposableWalletService {
   private hdBTC: BtcHDWallet;
   private hdDoge: DogeHDWallet;
   private hdXrp: XrpHDWallet;
-  
+
   private providerBase: ethers.JsonRpcProvider;
   private providerETH: ethers.JsonRpcProvider;
   private providerBSC: ethers.JsonRpcProvider;
@@ -55,20 +62,42 @@ export class DisposableWalletService {
     this.providerBase = new ethers.JsonRpcProvider(appConfig.BASE_RPC_URL);
     this.providerETH = new ethers.JsonRpcProvider(appConfig.ETH_RPC_URL);
     this.providerBSC = new ethers.JsonRpcProvider(appConfig.EVM_RPC_URL);
-    
+
     const polygonNetwork = ethers.Network.from({ name: "matic", chainId: 137 });
-    this.providerPoly = new ethers.JsonRpcProvider(appConfig.POLY_RPC_URL, polygonNetwork, {
-      staticNetwork: polygonNetwork,
-    });
+    this.providerPoly = new ethers.JsonRpcProvider(
+      appConfig.POLY_RPC_URL,
+      polygonNetwork,
+      {
+        staticNetwork: polygonNetwork,
+      },
+    );
 
     this.connSol = new Connection(appConfig.SOL_RPC_URL, "confirmed");
 
     // Initialize HD wallets
-    this.hdSol = new SolHDWallet(appConfig.SOL_MASTER_MNEMONIC, this.publicService);
-    this.hdTron = new TronHDWallet(appConfig.TRX_MASTER_MNEMONIC, "https://api.trongrid.io", this.publicService);
-    this.hdADA = new CardanoHDWallet(appConfig.ADA_MASTER_MNEMONIC, this.publicService);
-    this.hdBTC = new BtcHDWallet(appConfig.BTC_MASTER_MNEMONIC, false, this.publicService);
-    this.hdDoge = new DogeHDWallet(appConfig.MASTER_MNEMONIC, false, this.publicService);
+    this.hdSol = new SolHDWallet(
+      appConfig.SOL_MASTER_MNEMONIC,
+      this.publicService,
+    );
+    this.hdTron = new TronHDWallet(
+      appConfig.TRX_MASTER_MNEMONIC,
+      "https://api.trongrid.io",
+      this.publicService,
+    );
+    this.hdADA = new CardanoHDWallet(
+      appConfig.ADA_MASTER_MNEMONIC,
+      this.publicService,
+    );
+    this.hdBTC = new BtcHDWallet(
+      appConfig.BTC_MASTER_MNEMONIC,
+      false,
+      this.publicService,
+    );
+    this.hdDoge = new DogeHDWallet(
+      appConfig.MASTER_MNEMONIC,
+      false,
+      this.publicService,
+    );
     this.hdXrp = new XrpHDWallet(appConfig.MASTER_MNEMONIC, this.publicService);
 
     this.initEVMWallet();
@@ -76,7 +105,10 @@ export class DisposableWalletService {
 
   private async initEVMWallet() {
     if (!this.hdEVM) {
-      this.hdEVM = await HDWallet.fromMnemonic(appConfig.MASTER_MNEMONIC, this.publicService);
+      this.hdEVM = await HDWallet.fromMnemonic(
+        appConfig.MASTER_MNEMONIC,
+        this.publicService,
+      );
     }
   }
 
@@ -85,7 +117,7 @@ export class DisposableWalletService {
    */
   async createDisposableWallet(
     dto: CreateDisposableWalletDto,
-    userId?: number
+    userId?: number,
   ): Promise<DisposableWalletResponseDto> {
     await this.initEVMWallet();
 
@@ -99,8 +131,8 @@ export class DisposableWalletService {
       order: { derivation_index: "DESC" },
     });
 
-    const derivationIndex = lastWallet 
-      ? lastWallet.derivation_index + 1 
+    const derivationIndex = lastWallet
+      ? lastWallet.derivation_index + 1
       : this.DISPOSABLE_WALLET_START_INDEX;
 
     let address: string;
@@ -109,28 +141,42 @@ export class DisposableWalletService {
     // Generate address based on network
     switch (network) {
       case "BASE":
-        address = this.hdEVM.getChildWallet(derivationIndex, this.providerBase).address;
+        address = this.hdEVM.getChildWallet(
+          derivationIndex,
+          this.providerBase,
+        ).address;
         break;
 
       case "ETH":
       case "ETHEREUM":
-        address = this.hdEVM.getChildWallet(derivationIndex, this.providerETH).address;
+        address = this.hdEVM.getChildWallet(
+          derivationIndex,
+          this.providerETH,
+        ).address;
         break;
 
       case "BSC":
       case "BNB":
       case "BINANCE":
-        address = this.hdEVM.getChildWallet(derivationIndex, this.providerBSC).address;
+        address = this.hdEVM.getChildWallet(
+          derivationIndex,
+          this.providerBSC,
+        ).address;
         break;
 
       case "POLYGON":
       case "MATIC":
-        address = this.hdEVM.getChildWallet(derivationIndex, this.providerPoly).address;
+        address = this.hdEVM.getChildWallet(
+          derivationIndex,
+          this.providerPoly,
+        ).address;
         break;
 
       case "SOLANA":
       case "SOL":
-        address = this.hdSol.deriveKeypair(derivationIndex).publicKey.toBase58();
+        address = this.hdSol
+          .deriveKeypair(derivationIndex)
+          .publicKey.toBase58();
         break;
 
       case "TRON":
@@ -186,7 +232,8 @@ export class DisposableWalletService {
       const walletEntry = this.walletRepository.create({
         user: { id: userId } as User,
         network,
-        currency: dto.tokenSymbol?.toUpperCase() || this.getDefaultCurrency(network),
+        currency:
+          dto.tokenSymbol?.toUpperCase() || this.getDefaultCurrency(network),
         wallet_address: address,
         expired_at: expiresAt, // Set expiration for disposable wallet (30 minutes)
       });
@@ -195,7 +242,12 @@ export class DisposableWalletService {
     }
 
     // Generate QR code
-    const qrData = this.formatAddressForQR(address, network, dto.tokenSymbol, dto.expectedAmount);
+    const qrData = this.formatAddressForQR(
+      address,
+      network,
+      dto.tokenSymbol,
+      dto.expectedAmount,
+    );
     const qrCode = await QRCode.toDataURL(qrData);
 
     return {
@@ -217,7 +269,7 @@ export class DisposableWalletService {
     await this.initEVMWallet();
 
     const wallet = await this.disposableWalletRepository.findOne({
-      where: { 
+      where: {
         address: dto.address,
         network: dto.network.toUpperCase(),
       },
@@ -228,7 +280,10 @@ export class DisposableWalletService {
     }
 
     // Check if expired
-    if (new Date() > wallet.expires_at && wallet.status === DisposableWalletStatus.PENDING) {
+    if (
+      new Date() > wallet.expires_at &&
+      wallet.status === DisposableWalletStatus.PENDING
+    ) {
       wallet.status = DisposableWalletStatus.EXPIRED;
       await this.disposableWalletRepository.save(wallet);
     }
@@ -239,18 +294,18 @@ export class DisposableWalletService {
       wallet.network,
       wallet.derivation_index,
       wallet.token_symbol,
-      wallet.destination_tag
+      wallet.destination_tag,
     );
 
     // Update received amount if changed
     if (balance > 0 && balance !== Number(wallet.received_amount)) {
       wallet.received_amount = balance;
-      
+
       if (wallet.status === DisposableWalletStatus.PENDING) {
         wallet.status = DisposableWalletStatus.FUNDED;
         wallet.funded_at = new Date();
       }
-      
+
       await this.disposableWalletRepository.save(wallet);
     }
 
@@ -278,7 +333,7 @@ export class DisposableWalletService {
     await this.initEVMWallet();
 
     const wallet = await this.disposableWalletRepository.findOne({
-      where: { 
+      where: {
         address: dto.address,
         network: dto.network.toUpperCase(),
       },
@@ -312,7 +367,9 @@ export class DisposableWalletService {
       };
     }
 
-    throw new BadRequestException("Sweep failed - insufficient balance or network error");
+    throw new BadRequestException(
+      "Sweep failed - insufficient balance or network error",
+    );
   }
 
   /**
@@ -332,7 +389,9 @@ export class DisposableWalletService {
     }
 
     if (filters?.network) {
-      query.andWhere("wallet.network = :network", { network: filters.network.toUpperCase() });
+      query.andWhere("wallet.network = :network", {
+        network: filters.network.toUpperCase(),
+      });
     }
 
     if (filters?.userId) {
@@ -362,27 +421,37 @@ export class DisposableWalletService {
     network: string,
     derivationIndex: number,
     tokenSymbol?: string,
-    destinationTag?: number
+    destinationTag?: number,
   ): Promise<number> {
     const net = network.toUpperCase();
 
     try {
       switch (net) {
         case "BASE": {
-          const wallet = this.hdEVM.getChildWallet(derivationIndex, this.providerBase);
+          const wallet = this.hdEVM.getChildWallet(
+            derivationIndex,
+            this.providerBase,
+          );
           if (tokenSymbol) {
             const tokenAddress = this.getTokenAddress(net, tokenSymbol);
-            return Number(await this.hdEVM.getERC20Balance(wallet.wallet, tokenAddress));
+            return Number(
+              await this.hdEVM.getERC20Balance(wallet.wallet, tokenAddress),
+            );
           }
           return Number(await this.hdEVM.getETHBalance(wallet.wallet));
         }
 
         case "ETH":
         case "ETHEREUM": {
-          const wallet = this.hdEVM.getChildWallet(derivationIndex, this.providerETH);
+          const wallet = this.hdEVM.getChildWallet(
+            derivationIndex,
+            this.providerETH,
+          );
           if (tokenSymbol) {
             const tokenAddress = this.getTokenAddress(net, tokenSymbol);
-            return Number(await this.hdEVM.getERC20Balance(wallet.wallet, tokenAddress));
+            return Number(
+              await this.hdEVM.getERC20Balance(wallet.wallet, tokenAddress),
+            );
           }
           return Number(await this.hdEVM.getETHBalance(wallet.wallet));
         }
@@ -390,20 +459,30 @@ export class DisposableWalletService {
         case "BSC":
         case "BNB":
         case "BINANCE": {
-          const wallet = this.hdEVM.getChildWallet(derivationIndex, this.providerBSC);
+          const wallet = this.hdEVM.getChildWallet(
+            derivationIndex,
+            this.providerBSC,
+          );
           if (tokenSymbol) {
             const tokenAddress = this.getTokenAddress("BNB", tokenSymbol);
-            return Number(await this.hdEVM.getERC20Balance(wallet.wallet, tokenAddress));
+            return Number(
+              await this.hdEVM.getERC20Balance(wallet.wallet, tokenAddress),
+            );
           }
           return Number(await this.hdEVM.getETHBalance(wallet.wallet));
         }
 
         case "POLYGON":
         case "MATIC": {
-          const wallet = this.hdEVM.getChildWallet(derivationIndex, this.providerPoly);
+          const wallet = this.hdEVM.getChildWallet(
+            derivationIndex,
+            this.providerPoly,
+          );
           if (tokenSymbol) {
             const tokenAddress = this.getTokenAddress("POLY", tokenSymbol);
-            return Number(await this.hdEVM.getERC20Balance(wallet.wallet, tokenAddress));
+            return Number(
+              await this.hdEVM.getERC20Balance(wallet.wallet, tokenAddress),
+            );
           }
           return Number(await this.hdEVM.getETHBalance(wallet.wallet));
         }
@@ -412,7 +491,11 @@ export class DisposableWalletService {
         case "SOL": {
           if (tokenSymbol && tokenSymbol !== "SOL") {
             const tokenAddress = this.getTokenAddress("SOL", tokenSymbol);
-            return await this.hdSol.getSPLTokenBalance(this.connSol, address, tokenAddress);
+            return await this.hdSol.getSPLTokenBalance(
+              this.connSol,
+              address,
+              tokenAddress,
+            );
           }
           return await this.hdSol.getSolBalance(this.connSol, address);
         }
@@ -423,7 +506,11 @@ export class DisposableWalletService {
 
         case "CARDANO":
         case "ADA": {
-          const balance = await this.hdADA.getChildBalance(derivationIndex, appConfig.BLOCK_API_KEY ?? "", true);
+          const balance = await this.hdADA.getChildBalance(
+            derivationIndex,
+            appConfig.BLOCK_API_KEY ?? "",
+            true,
+          );
           return balance.lovelace;
         }
 
@@ -444,7 +531,9 @@ export class DisposableWalletService {
             const tronWeb = this.hdTron.getTronWebInstance();
             tronWeb.setAddress(address);
             const contract = await tronWeb.contract().at(tokenAddress);
-            const balance = await contract.balanceOf(address).call({ from: address });
+            const balance = await contract
+              .balanceOf(address)
+              .call({ from: address });
             return Number(balance) / 1e6;
           }
           const tronWeb = this.hdTron.getTronWebInstance();
@@ -470,91 +559,163 @@ export class DisposableWalletService {
     try {
       switch (network) {
         case "BASE": {
-          const childWallet = this.hdEVM.getChildWallet(index, this.providerBase);
+          const childWallet = this.hdEVM.getChildWallet(
+            index,
+            this.providerBase,
+          );
           const masterWallet = this.hdEVM.getMasterWallet(this.providerBase);
-          
+
           if (wallet.token_symbol) {
-            const tokenAddress = this.getTokenAddress(network, wallet.token_symbol);
-            await this.hdEVM.sweepToken(childWallet, masterWallet, tokenAddress, "BASE", wallet.token_symbol);
+            const tokenAddress = this.getTokenAddress(
+              network,
+              wallet.token_symbol,
+            );
+            await this.hdEVM.sweepToken(
+              childWallet,
+              masterWallet,
+              tokenAddress,
+              "BASE",
+              wallet.token_symbol,
+            );
           } else {
             await this.hdEVM.sweep(childWallet, masterWallet, "BASE", "ETH");
           }
-          
+
           return "sweep_completed";
         }
 
         case "ETH":
         case "ETHEREUM": {
-          const childWallet = this.hdEVM.getChildWallet(index, this.providerETH);
+          const childWallet = this.hdEVM.getChildWallet(
+            index,
+            this.providerETH,
+          );
           const masterWallet = this.hdEVM.getMasterWallet(this.providerETH);
-          
+
           if (wallet.token_symbol) {
-            const tokenAddress = this.getTokenAddress("ETH", wallet.token_symbol);
-            await this.hdEVM.sweepToken(childWallet, masterWallet, tokenAddress, "ETHEREUM", wallet.token_symbol);
+            const tokenAddress = this.getTokenAddress(
+              "ETH",
+              wallet.token_symbol,
+            );
+            await this.hdEVM.sweepToken(
+              childWallet,
+              masterWallet,
+              tokenAddress,
+              "ETHEREUM",
+              wallet.token_symbol,
+            );
           } else {
-            await this.hdEVM.sweep(childWallet, masterWallet, "ETHEREUM", "ETH");
+            await this.hdEVM.sweep(
+              childWallet,
+              masterWallet,
+              "ETHEREUM",
+              "ETH",
+            );
           }
-          
+
           return "sweep_completed";
         }
 
         case "BSC":
         case "BNB":
         case "BINANCE": {
-          const childWallet = this.hdEVM.getChildWallet(index, this.providerBSC);
+          const childWallet = this.hdEVM.getChildWallet(
+            index,
+            this.providerBSC,
+          );
           const masterWallet = this.hdEVM.getMasterWallet(this.providerBSC);
-          
+
           if (wallet.token_symbol) {
-            const tokenAddress = this.getTokenAddress("BNB", wallet.token_symbol);
-            await this.hdEVM.sweepToken(childWallet, masterWallet, tokenAddress, "BINANCE CHAIN", wallet.token_symbol);
+            const tokenAddress = this.getTokenAddress(
+              "BNB",
+              wallet.token_symbol,
+            );
+            await this.hdEVM.sweepToken(
+              childWallet,
+              masterWallet,
+              tokenAddress,
+              "BINANCE CHAIN",
+              wallet.token_symbol,
+            );
           } else {
-            await this.hdEVM.sweep(childWallet, masterWallet, "BINANCE CHAIN", "BNB");
+            await this.hdEVM.sweep(
+              childWallet,
+              masterWallet,
+              "BINANCE CHAIN",
+              "BNB",
+            );
           }
-          
+
           return "sweep_completed";
         }
 
         case "POLYGON":
         case "MATIC": {
-          const childWallet = this.hdEVM.getChildWallet(index, this.providerPoly);
+          const childWallet = this.hdEVM.getChildWallet(
+            index,
+            this.providerPoly,
+          );
           const masterWallet = this.hdEVM.getMasterWallet(this.providerPoly);
-          
+
           if (wallet.token_symbol) {
-            const tokenAddress = this.getTokenAddress("POLY", wallet.token_symbol);
-            await this.hdEVM.sweepToken(childWallet, masterWallet, tokenAddress, "POLYGON", wallet.token_symbol);
+            const tokenAddress = this.getTokenAddress(
+              "POLY",
+              wallet.token_symbol,
+            );
+            await this.hdEVM.sweepToken(
+              childWallet,
+              masterWallet,
+              tokenAddress,
+              "POLYGON",
+              wallet.token_symbol,
+            );
           } else {
             await this.hdEVM.sweep(childWallet, masterWallet, "POLYGON", "POL");
           }
-          
+
           return "sweep_completed";
         }
 
         case "SOLANA":
         case "SOL": {
           const childKeypair = this.hdSol.deriveKeypair(index);
-          const masterAddress = this.hdSol.getMasterKeypair().publicKey.toBase58();
-          
+          const masterAddress = this.hdSol
+            .getMasterKeypair()
+            .publicKey.toBase58();
+
           if (wallet.token_symbol && wallet.token_symbol !== "SOL") {
-            const tokenAddress = this.getTokenAddress("SOL", wallet.token_symbol);
+            const tokenAddress = this.getTokenAddress(
+              "SOL",
+              wallet.token_symbol,
+            );
             await this.hdSol.sweepSPLToken(
-              { privateKey: childKeypair.secretKey, address: childKeypair.publicKey.toBase58(), store: null },
+              {
+                privateKey: childKeypair.secretKey,
+                address: childKeypair.publicKey.toBase58(),
+                store: null,
+              },
               masterAddress,
               tokenAddress,
               this.connSol,
               index,
               wallet.token_symbol,
-              this.hdSol.getMasterKeypair()
+              this.hdSol.getMasterKeypair(),
             );
           } else {
-            const childKey = Buffer.from(childKeypair.secretKey).toString("hex");
+            const childKey = Buffer.from(childKeypair.secretKey).toString(
+              "hex",
+            );
             await this.hdSol.sweepSOL(
-              { address: childKeypair.publicKey.toBase58(), privateKey: childKey },
+              {
+                address: childKeypair.publicKey.toBase58(),
+                privateKey: childKey,
+              },
               masterAddress,
               this.connSol,
-              index
+              index,
             );
           }
-          
+
           return "sweep_completed";
         }
 
@@ -567,7 +728,12 @@ export class DisposableWalletService {
         case "CARDANO":
         case "ADA": {
           const masterAddress = this.hdADA.generateAddress(0);
-          return await this.hdADA.sweepADA(index, masterAddress, appConfig.BLOCK_API_KEY ?? "", true);
+          return await this.hdADA.sweepADA(
+            index,
+            masterAddress,
+            appConfig.BLOCK_API_KEY ?? "",
+            true,
+          );
         }
 
         case "RIPPLE":
@@ -587,14 +753,27 @@ export class DisposableWalletService {
         case "TRX": {
           const childWallet = this.hdTron.deriveChild(index);
           const masterWallet = this.hdTron.getMasterWallet();
-          
+
           if (wallet.token_symbol && wallet.token_symbol !== "TRX") {
-            const tokenAddress = this.getTokenAddress("TRON", wallet.token_symbol);
-            await this.hdTron.sweepTRC20(childWallet, masterWallet, "https://api.trongrid.io", tokenAddress, wallet.token_symbol);
+            const tokenAddress = this.getTokenAddress(
+              "TRON",
+              wallet.token_symbol,
+            );
+            await this.hdTron.sweepTRC20(
+              childWallet,
+              masterWallet,
+              "https://api.trongrid.io",
+              tokenAddress,
+              wallet.token_symbol,
+            );
           } else {
-            await this.hdTron.sweepTRON(childWallet, masterWallet.address, "https://api.trongrid.io");
+            await this.hdTron.sweepTRON(
+              childWallet,
+              masterWallet.address,
+              "https://api.trongrid.io",
+            );
           }
-          
+
           return "sweep_completed";
         }
 
@@ -615,8 +794,8 @@ export class DisposableWalletService {
     console.log("Running auto-sweep for funded disposable wallets...");
 
     const fundedWallets = await this.disposableWalletRepository.find({
-      where: { 
-        status: DisposableWalletStatus.FUNDED 
+      where: {
+        status: DisposableWalletStatus.FUNDED,
       },
       take: 50, // Process 50 at a time
     });
@@ -631,34 +810,37 @@ export class DisposableWalletService {
           wallet.network,
           wallet.derivation_index,
           wallet.token_symbol,
-          wallet.destination_tag
+          wallet.destination_tag,
         );
 
         if (balance > 0) {
           const txHash = await this.performSweep(wallet);
-          
+
           if (txHash) {
             wallet.status = DisposableWalletStatus.SWEPT;
             wallet.swept_at = new Date();
             wallet.sweep_tx_hash = txHash;
             await this.disposableWalletRepository.save(wallet);
-            
-            console.log(`✅ Swept ${wallet.network} wallet ${wallet.address}: ${txHash}`);
+
+            console.log(
+              `✅ Swept ${wallet.network} wallet ${wallet.address}: ${txHash}`,
+            );
           }
         } else {
           console.log(`⚠️ Wallet ${wallet.address} has zero balance, skipping`);
         }
       } catch (error) {
         console.error(`❌ Failed to sweep ${wallet.address}:`, error.message);
-        
+
         // Mark as failed after 3 attempts
         if (!wallet.metadata) wallet.metadata = {};
-        wallet.metadata.sweep_attempts = (wallet.metadata.sweep_attempts || 0) + 1;
-        
+        wallet.metadata.sweep_attempts =
+          (wallet.metadata.sweep_attempts || 0) + 1;
+
         if (wallet.metadata.sweep_attempts >= 3) {
           wallet.status = DisposableWalletStatus.FAILED;
         }
-        
+
         await this.disposableWalletRepository.save(wallet);
       }
     }
@@ -678,7 +860,7 @@ export class DisposableWalletService {
       },
       {
         status: DisposableWalletStatus.EXPIRED,
-      }
+      },
     );
 
     console.log("Expired wallets updated");
@@ -711,7 +893,9 @@ export class DisposableWalletService {
 
     const key = `${network}_${symbol}`;
     if (!ERC20_TOKENS[key]) {
-      throw new BadRequestException(`Token ${symbol} not supported on ${network}`);
+      throw new BadRequestException(
+        `Token ${symbol} not supported on ${network}`,
+      );
     }
 
     return ERC20_TOKENS[key];
@@ -722,7 +906,7 @@ export class DisposableWalletService {
    */
   private getDefaultCurrency(network: string): string {
     const net = network.toUpperCase();
-    
+
     switch (net) {
       case "BASE":
       case "ETH":
@@ -765,23 +949,27 @@ export class DisposableWalletService {
     address: string,
     network: string,
     tokenSymbol?: string,
-    amount?: number
+    amount?: number,
   ): string {
     const net = network.toUpperCase();
 
     switch (net) {
       case "BITCOIN":
       case "BTC":
-        return amount ? `bitcoin:${address}?amount=${amount}` : `bitcoin:${address}`;
+        return amount
+          ? `bitcoin:${address}?amount=${amount}`
+          : `bitcoin:${address}`;
 
       case "ETHEREUM":
       case "ETH":
-        return amount ? `ethereum:${address}?value=${amount}` : `ethereum:${address}`;
+        return amount
+          ? `ethereum:${address}?value=${amount}`
+          : `ethereum:${address}`;
 
       case "RIPPLE":
       case "XRP": {
         const [xrpAddress, tag] = address.split(":");
-        return tag 
+        return tag
           ? `${xrpAddress}?dt=${tag}${amount ? `&amount=${amount}` : ""}`
           : xrpAddress;
       }
@@ -820,11 +1008,16 @@ export class DisposableWalletService {
       walletsToSweep = [wallet];
     } else {
       // Otherwise, sweep all funded wallets (not yet swept)
-      const query = this.disposableWalletRepository.createQueryBuilder("wallet")
-        .where("wallet.status = :status", { status: DisposableWalletStatus.FUNDED });
+      const query = this.disposableWalletRepository
+        .createQueryBuilder("wallet")
+        .where("wallet.status = :status", {
+          status: DisposableWalletStatus.FUNDED,
+        });
 
       if (options?.network) {
-        query.andWhere("wallet.network = :network", { network: options.network.toUpperCase() });
+        query.andWhere("wallet.network = :network", {
+          network: options.network.toUpperCase(),
+        });
       }
 
       if (options?.userId) {
@@ -910,11 +1103,21 @@ export class DisposableWalletService {
   async getStatistics(): Promise<any> {
     const [total, pending, funded, swept, expired, failed] = await Promise.all([
       this.disposableWalletRepository.count(),
-      this.disposableWalletRepository.count({ where: { status: DisposableWalletStatus.PENDING } }),
-      this.disposableWalletRepository.count({ where: { status: DisposableWalletStatus.FUNDED } }),
-      this.disposableWalletRepository.count({ where: { status: DisposableWalletStatus.SWEPT } }),
-      this.disposableWalletRepository.count({ where: { status: DisposableWalletStatus.EXPIRED } }),
-      this.disposableWalletRepository.count({ where: { status: DisposableWalletStatus.FAILED } }),
+      this.disposableWalletRepository.count({
+        where: { status: DisposableWalletStatus.PENDING },
+      }),
+      this.disposableWalletRepository.count({
+        where: { status: DisposableWalletStatus.FUNDED },
+      }),
+      this.disposableWalletRepository.count({
+        where: { status: DisposableWalletStatus.SWEPT },
+      }),
+      this.disposableWalletRepository.count({
+        where: { status: DisposableWalletStatus.EXPIRED },
+      }),
+      this.disposableWalletRepository.count({
+        where: { status: DisposableWalletStatus.FAILED },
+      }),
     ]);
 
     return {

@@ -78,7 +78,10 @@ export class AuthController {
     @Body() body: VerifyMfaDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const { token, user } = await this.authService.verifyMfaLogin(body.email, body.token);
+    const { token, user } = await this.authService.verifyMfaLogin(
+      body.email,
+      body.token,
+    );
     const cookieData = { token, user: extractUserForCookie(user) };
     res.cookie(_AUTH_COOKIE_NAME_, encryptData(cookieData), CookieOptions);
     return { data: user };

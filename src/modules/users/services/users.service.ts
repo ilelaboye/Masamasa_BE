@@ -13,6 +13,7 @@ import {
   ChangePinDto,
   ChangeUserPasswordDto,
   CreatePinDto,
+  KycDto,
   TransferDto,
   UpdateAccountDto,
   UploadImageDto,
@@ -33,6 +34,7 @@ import {
   timeIsAfter,
 } from "@/core/utils";
 import {
+  KYC_TIER_IDENTITY,
   WITHDRAWAL_MAX_PER_DAY,
   WITHDRAWAL_MIN_PER_TRANSACTION,
   ZohoMailTemplates,
@@ -50,8 +52,10 @@ import {
   capitalizeString,
   generateRandomNumberString,
 } from "@/core/helpers";
-import { BVNVerificationDto } from "@/modules/global/bank-verification/dto/bvn-verification.dto";
 import { BankVerificationService } from "@/modules/global/bank-verification/bank-verification.service";
+import { IdentityType } from "@/modules/global/bank-verification/identity-providers";
+import { CloudinaryService } from "@/modules/global/cloudinary/cloudinary.service";
+import { WinstonLogger } from "@/modules/global/logger/winston-logger";
 import {
   Notification,
   NotificationTag,
@@ -83,9 +87,13 @@ export class UsersService extends BaseService {
     private readonly dataSource: DataSource,
     private readonly cacheService: CacheService,
     private readonly mixpanel: MixpanelService,
+    private readonly cloudinaryService: CloudinaryService,
   ) {
     super();
   }
+
+  private readonly logger = new WinstonLogger();
+
   async getAuthStaff(req: UserRequest) {
     const fetch = await this.userRepository
       .createQueryBuilder("user")
@@ -489,6 +497,10 @@ export class UsersService extends BaseService {
 
     return {
       kycVerified,
+      // What the app shows on the tier ladder. The ceiling above is what a
+      // withdrawal is actually held to, so the two cannot drift apart.
+      tier: user.kyc_tier,
+      kycStatus: user.kyc_status,
       maxPerDay,
       minPerTransaction: WITHDRAWAL_MIN_PER_TRANSACTION,
       withdrawnToday,
@@ -818,7 +830,7 @@ export class UsersService extends BaseService {
       await queryRunner.release();
     }
 
-    var accessToken = await this.accessTokenRepository.findOne({
+    let accessToken = await this.accessTokenRepository.findOne({
       where: { type: AccessTokenType.nomba },
     });
 
@@ -916,10 +928,43 @@ export class UsersService extends BaseService {
     return trans;
   }
 
-  async userKyc(bVNVerificationDto: BVNVerificationDto, req: UserRequest) {
-    const { first_name, last_name, id } = req.user;
-    const { bvn, dob, gender } = bVNVerificationDto;
+  /**
+   * What the user is told, by reason code.
+   *
+   * Every message says what they can do about it. The operational reasons —
+   * our Prembly wallet, our key, their downtime — deliberately share one
+   * message: the user cannot fix any of them, and which one it was is in the
+   * error log, not in their face.
+   */
+  private static readonly KYC_REJECTIONS: Record<string, string> = {
+    ID_NOT_FOUND:
+      "We could not find this ID with the issuing authority. Check the number and try again.",
+    ID_INVALID:
+      "That ID number is not valid. Check it against your document and try again.",
+    ID_BLOCKED:
+      "This ID has been flagged by the issuing authority and cannot be used to verify an account. Please contact support.",
+    NAME_MISMATCH:
+      "The name on this ID does not match the name on your account.",
+    DOB_MISMATCH:
+      "The date of birth on this ID does not match the one you entered.",
+    DETAILS_MISMATCH:
+      "The details on this ID do not match the records held by the issuing authority. Check that your name and date of birth are exactly as they appear on it.",
+    DOCUMENT_UNREADABLE:
+      "We could not read this document. Retake the photo in good lighting with all four corners visible.",
+  };
 
+  /** Shown for anything the user cannot act on. */
+  private static readonly KYC_UNAVAILABLE =
+    "Verification is temporarily unavailable. Please try again in a few minutes.";
+
+  /**
+   * Tier 2 identity verification.
+   *
+   * Two ways in, one outcome each: an ID number is looked up with the issuing
+   * authority and settles immediately, while a photographed document is read
+   * by Prembly and falls back to an admin review if that cannot be done.
+   */
+  async userKyc(kycDto: KycDto, req: UserRequest) {
     const user = await this.userRepository.findOne({
       where: { id: req.user.id },
     });
@@ -927,70 +972,169 @@ export class UsersService extends BaseService {
     if (!user) {
       throw new BadRequestException("User not found, please login again");
     }
-    if (user && user.kyc_status == KycStatus.success)
+    if (user.kyc_status == KycStatus.success) {
       return { message: "You are already verified." };
+    }
+    if (user.kyc_status == KycStatus.pending) {
+      throw new BadRequestException(
+        "We are reviewing your last submission, you will hear from us shortly",
+      );
+    }
 
-    // Analytics: document TYPE only — never the BVN/NIN value (Do Not Send).
-    this.mixpanel.track("kyc submitted", req.user.id, {
-      "kyc document type": "bvn",
+    const { type, number, dob, nin, front_image, back_image, selfie } = kycDto;
+
+    // Analytics: document TYPE only — never the ID value (Do Not Send).
+    this.mixpanel.track("kyc submitted", user.id, {
+      "kyc document type": type,
+      "kyc entry method": number ? "number" : "document",
     });
-    this.mixpanel.setProfile(req.user.id, { "kyc status": "pending" });
+    this.mixpanel.setProfile(user.id, { "kyc status": "pending" });
 
-    try {
-      const { data, success } =
-        await this.bankVerificationService.bvnVerification(bvn, {
-          first_name: user.first_name,
-          last_name: user.last_name,
-          dob,
-          gender,
-        });
-
-      if (!success) {
-        // Fixed reason codes only — free text is prohibited in payloads.
-        this.mixpanel.track("kyc result", req.user.id, {
-          "kyc status": "rejected",
-          "rejection reason code": !data
-            ? "PROVIDER_UNAVAILABLE"
-            : "BVN_MISMATCH",
-        });
-        this.mixpanel.setProfile(req.user.id, { "kyc status": "rejected" });
-        if (!data)
-          throw new BadRequestException(
-            "BVN verification can not be processed at the moment, please try again later",
-          );
-        throw new BadRequestException(
-          "BVN information does not match the user details (first name, last name, date of birth) provided",
+    const result = number
+      ? await this.bankVerificationService.verifyIdentity(
+          type as IdentityType,
+          {
+            number,
+            dob: dob as string,
+            nin,
+            first_name: user.first_name,
+            last_name: user.last_name,
+          },
+          user.id,
+        )
+      : await this.bankVerificationService.verifyDocument(
+          type,
+          front_image as string,
+          { first_name: user.first_name, last_name: user.last_name },
+          user.id,
         );
+
+    const [kyc_image, kyc_image_back, kyc_selfie] = await this.uploadKycImages(
+      front_image,
+      back_image,
+      selfie,
+    );
+    const documents = {
+      kyc_type: type,
+      kyc_image,
+      kyc_image_back,
+      kyc_selfie,
+    };
+
+    if (result.outcome === "unavailable") {
+      // With no document there is nothing for an admin to review, so the user
+      // is asked to retry rather than left waiting on a queue no one can act
+      // on.
+      if (!kyc_image) {
+        throw new BadRequestException(UsersService.KYC_UNAVAILABLE);
       }
 
-      // Approval raises the account's ceiling. Only ever runs on the
-      // none/failed → success transition (the guard above returns early for an
-      // already-verified account), so it cannot undo a limit an admin set by
-      // hand afterwards.
-      const save = await this.userRepository.update(
-        { id: req.user.id },
-        {
-          kyc_status: KycStatus.success,
-          withdrawal_limit: WITHDRAWAL_MAX_PER_DAY,
-        },
+      await this.userRepository.update(
+        { id: user.id },
+        { ...documents, kyc_status: KycStatus.pending, kyc_error: null },
       );
+      this.mixpanel.track("kyc result", user.id, {
+        "kyc status": "pending",
+        "rejection reason code": result.reason,
+      });
 
-      this.mixpanel.track("kyc result", req.user.id, {
-        "kyc status": "verified",
-      });
-      this.mixpanel.setProfile(req.user.id, {
-        "kyc status": "verified",
-        "kyc completed date": new Date().toISOString(),
-        state: user.state?.toLowerCase(),
-      });
-      console.log("save", save);
       return {
-        message: "KYC verification successful",
-        data,
+        message: "We have received your documents and are reviewing them",
+        data: { kyc_status: KycStatus.pending, kyc_tier: user.kyc_tier },
       };
-    } catch (error) {
-      throw new BadRequestException(error.message);
     }
+
+    if (result.outcome === "mismatch") {
+      const reason =
+        UsersService.KYC_REJECTIONS[result.reason] ??
+        "We could not verify this ID.";
+
+      await this.userRepository.update(
+        { id: user.id },
+        { ...documents, kyc_status: KycStatus.failed, kyc_error: reason },
+      );
+      // Fixed reason codes only — free text is prohibited in payloads.
+      this.mixpanel.track("kyc result", user.id, {
+        "kyc status": "rejected",
+        "rejection reason code": result.reason,
+      });
+      this.mixpanel.setProfile(user.id, { "kyc status": "rejected" });
+
+      throw new BadRequestException(reason);
+    }
+
+    // Approval raises the account's ceiling. Only ever runs on the
+    // none/failed → success transition (the guard above returns early for an
+    // already-verified account), so it cannot undo a limit an admin set by
+    // hand afterwards.
+    await this.userRepository.update(
+      { id: user.id },
+      {
+        ...documents,
+        kyc_status: KycStatus.success,
+        kyc_tier: KYC_TIER_IDENTITY,
+        kyc_error: null,
+        withdrawal_limit: WITHDRAWAL_MAX_PER_DAY,
+      },
+    );
+
+    this.mixpanel.track("kyc result", user.id, { "kyc status": "verified" });
+    this.mixpanel.setProfile(user.id, {
+      "kyc status": "verified",
+      "kyc completed date": new Date().toISOString(),
+      state: user.state?.toLowerCase(),
+    });
+
+    return {
+      message: "KYC verification successful",
+      data: {
+        kyc_status: KycStatus.success,
+        kyc_tier: KYC_TIER_IDENTITY,
+        withdrawal_limit: WITHDRAWAL_MAX_PER_DAY,
+      },
+    };
+  }
+
+  /**
+   * Base64 images in, stored URLs out, in the order given. The app sends the
+   * raw image because Prembly reads it before anything is stored — going
+   * through an upload first would mean storing documents we then reject.
+   *
+   * A failed upload returns undefined rather than throwing. By the time this
+   * runs the Prembly call has already been made, paid for and recorded in
+   * `bank_verifications`, so letting Cloudinary throw here would discard a
+   * verification the user has already been charged for — and, because
+   * `assertNotAlreadyUsed` would then find that record, permanently block
+   * them from retrying with their own ID. A missing image URL is the smaller
+   * loss: the submission still resolves, and the `unavailable` branch already
+   * treats a missing `kyc_image` as "nothing for an admin to review".
+   */
+  private async uploadKycImages(
+    ...images: (string | undefined)[]
+  ): Promise<(string | undefined)[]> {
+    return Promise.all(
+      images.map(async (image) => {
+        if (!image) return undefined;
+
+        const buffer = Buffer.from(
+          image.replace(/^data:[^;]+;base64,/, ""),
+          "base64",
+        );
+        try {
+          const [uploaded] = await this.cloudinaryService.upload([
+            { buffer } as Express.Multer.File,
+          ]);
+          return uploaded?.secure_url;
+        } catch (error) {
+          // Ours, not the user's — it surfaces only as KYC images quietly
+          // going missing, so it has to reach the error log.
+          this.logger.error(
+            `KYC image upload to Cloudinary failed: ${(error as Error).message}`,
+          );
+          return undefined;
+        }
+      }),
+    );
   }
 
   /**

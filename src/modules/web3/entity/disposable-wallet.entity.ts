@@ -1,12 +1,12 @@
-import { 
-  Entity, 
-  Column, 
-  PrimaryGeneratedColumn, 
-  CreateDateColumn, 
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  CreateDateColumn,
   UpdateDateColumn,
   Index,
   ManyToOne,
-  JoinColumn
+  JoinColumn,
 } from "typeorm";
 import { User } from "@/modules/users/entities/user.entity";
 
@@ -15,7 +15,7 @@ export enum DisposableWalletStatus {
   FUNDED = "funded",
   SWEPT = "swept",
   EXPIRED = "expired",
-  FAILED = "failed"
+  FAILED = "failed",
 }
 
 @Entity("disposable_wallets")
@@ -55,7 +55,7 @@ export class DisposableWallet {
   @Column({
     type: "enum",
     enum: DisposableWalletStatus,
-    default: DisposableWalletStatus.PENDING
+    default: DisposableWalletStatus.PENDING,
   })
   status: DisposableWalletStatus;
 

@@ -254,12 +254,7 @@ export class Web3Service {
           wallet_address: childWallet.address,
         });
         await this.walletRepository.save(base);
-        const EVM_NETWORKS = new Set([
-          "erc20",
-          "bep20",
-          "base",
-          "pol",
-        ]);
+        const EVM_NETWORKS = new Set(["erc20", "bep20", "base", "pol"]);
         const EVM_NATIVE = new Set(["eth", "bnb"]);
         const evmPairs = QUIDAX_CURRENCIES.filter(({ currency, network }) =>
           network ? EVM_NETWORKS.has(network) : EVM_NATIVE.has(currency),
@@ -627,7 +622,7 @@ export class Web3Service {
             "BINANCE CHAIN",
             "SOL",
           );
-          console.log(childWallet2)
+          console.log(childWallet2);
         } catch (e) {}
 
         try {
@@ -1469,13 +1464,15 @@ export class Web3Service {
     try {
       // Check if contract address is configured
       if (!appConfig.WALLET_MANAGER_CONTRACT_ADDRESS) {
-        throw new Error("WALLET_MANAGER_CONTRACT_ADDRESS not configured in .env");
+        throw new Error(
+          "WALLET_MANAGER_CONTRACT_ADDRESS not configured in .env",
+        );
       }
 
       const signer = this.getSigner();
       const walletManager = this.getContract(
         appConfig.WALLET_MANAGER_CONTRACT_ADDRESS,
-        signer
+        signer,
       );
 
       const raw = await walletManager.getAllTransactions();

@@ -522,7 +522,7 @@ export class AuthService extends BaseService {
       token,
       password_confirmation,
     } = resetPasswordDto;
-    var email = emailData.toLowerCase();
+    const email = emailData.toLowerCase();
     const user = await this.userRepository
       .createQueryBuilder("user")
       .addSelect("user.remember_token")

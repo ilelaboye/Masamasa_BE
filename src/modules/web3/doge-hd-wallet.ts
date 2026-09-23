@@ -8,322 +8,335 @@ import { PublicService } from "../global/public/public.service";
 const bip32 = BIP32Factory(ecc);
 
 const DOGECOIN: bitcoin.Network = {
-    messagePrefix: '\x19Dogecoin Signed Message:\n',
-    bech32: 'dc', // Dogecoin doesn't typically use bech32
-    bip32: {
-        public: 0x02facafd,
-        private: 0x02fac398,
-    },
-    pubKeyHash: 0x1e, // Addresses start with D
-    scriptHash: 0x16, // Addresses start with 9 or A
-    wif: 0x9e,
+  messagePrefix: "\x19Dogecoin Signed Message:\n",
+  bech32: "dc", // Dogecoin doesn't typically use bech32
+  bip32: {
+    public: 0x02facafd,
+    private: 0x02fac398,
+  },
+  pubKeyHash: 0x1e, // Addresses start with D
+  scriptHash: 0x16, // Addresses start with 9 or A
+  wif: 0x9e,
 };
 
 export class DogeHDWallet {
-    private mnemonic: string;
-    private seed: Buffer;
-    private root: BIP32Interface;
-    private network: bitcoin.Network;
-    private readonly publicService: PublicService;
+  private mnemonic: string;
+  private seed: Buffer;
+  private root: BIP32Interface;
+  private network: bitcoin.Network;
+  private readonly publicService: PublicService;
 
-    constructor(mnemonic: string, testnet = false, publicService: PublicService) {
-        if (!bip39.validateMnemonic(mnemonic)) {
-            throw new Error("Invalid mnemonic");
-        }
-        this.mnemonic = mnemonic;
-        // Dogecoin testnet: pubKeyHash 0x71, scriptHash 0xc4, wif 0xf1
-        this.network = testnet
-            ? {
-                messagePrefix: '\x19Dogecoin Signed Message:\n',
-                bech32: 'tdge',
-                bip32: {
-                    public: 0x043587cf,
-                    private: 0x04358394,
-                },
-                pubKeyHash: 0x71,
-                scriptHash: 0xc4,
-                wif: 0xf1,
-            }
-            : DOGECOIN;
-        this.seed = bip39.mnemonicToSeedSync(mnemonic);
-        this.root = bip32.fromSeed(this.seed, this.network);
-        this.publicService = publicService;
+  constructor(mnemonic: string, testnet = false, publicService: PublicService) {
+    if (!bip39.validateMnemonic(mnemonic)) {
+      throw new Error("Invalid mnemonic");
     }
+    this.mnemonic = mnemonic;
+    // Dogecoin testnet: pubKeyHash 0x71, scriptHash 0xc4, wif 0xf1
+    this.network = testnet
+      ? {
+          messagePrefix: "\x19Dogecoin Signed Message:\n",
+          bech32: "tdge",
+          bip32: {
+            public: 0x043587cf,
+            private: 0x04358394,
+          },
+          pubKeyHash: 0x71,
+          scriptHash: 0xc4,
+          wif: 0xf1,
+        }
+      : DOGECOIN;
+    this.seed = bip39.mnemonicToSeedSync(mnemonic);
+    this.root = bip32.fromSeed(this.seed, this.network);
+    this.publicService = publicService;
+  }
 
-    /**
-     * Derive legacy address m/44'/3'/0'/0/index
-     */
-    generateAddress(index: number): string {
-        const path = `m/44'/3'/0'/0/${index}`;
-        const child = this.root.derivePath(path);
-        const { address } = bitcoin.payments.p2pkh({
-            pubkey: child.publicKey,
-            network: this.network,
-        });
-        if (!address) throw new Error("Failed to generate address");
-        return address;
+  /**
+   * Derive legacy address m/44'/3'/0'/0/index
+   */
+  generateAddress(index: number): string {
+    const path = `m/44'/3'/0'/0/${index}`;
+    const child = this.root.derivePath(path);
+    const { address } = bitcoin.payments.p2pkh({
+      pubkey: child.publicKey,
+      network: this.network,
+    });
+    if (!address) throw new Error("Failed to generate address");
+    return address;
+  }
+
+  /**
+   * Get balance in DOGE
+   */
+  async getBalance(address: string): Promise<number> {
+    // Using BlockCypher for DOGE
+    const apiToken = process.env.BLOCKCYPHER_TOKEN || "";
+    const baseUrl = `https://api.blockcypher.com/v1/doge/main`;
+
+    try {
+      const url = apiToken
+        ? `${baseUrl}/addrs/${address}/balance?token=${apiToken}`
+        : `${baseUrl}/addrs/${address}/balance`;
+      const { data } = await axios.get(url);
+      return data.balance / 1e8;
+    } catch (error: any) {
+      console.error("Failed to fetch DOGE balance:", error.message);
+      // Fallback to SoChain
+      try {
+        const { data } = await axios.get(
+          `https://sochain.com/api/v2/get_address_balance/DOGE/${address}`,
+        );
+        return Number(data.data.confirmed_balance);
+      } catch (err) {
+        return 0;
+      }
     }
+  }
 
-    /**
-     * Get balance in DOGE
-     */
-    async getBalance(address: string): Promise<number> {
-        // Using BlockCypher for DOGE
-        const apiToken = process.env.BLOCKCYPHER_TOKEN || '';
-        const baseUrl = `https://api.blockcypher.com/v1/doge/main`;
+  /**
+   * Sweep DOGE from child to master
+   */
+  async sweepDOGE(
+    childIndex: number,
+    masterAddress: string,
+  ): Promise<string | null> {
+    const childAddress = this.generateAddress(childIndex);
+    const path = `m/44'/3'/0'/0/${childIndex}`;
+    const childNode = this.root.derivePath(path);
 
-        try {
-            const url = apiToken ? `${baseUrl}/addrs/${address}/balance?token=${apiToken}` : `${baseUrl}/addrs/${address}/balance`;
-            const { data } = await axios.get(url);
-            return data.balance / 1e8;
-        } catch (error: any) {
-            console.error("Failed to fetch DOGE balance:", error.message);
-            // Fallback to SoChain
-            try {
-                const { data } = await axios.get(`https://sochain.com/api/v2/get_address_balance/DOGE/${address}`);
-                return Number(data.data.confirmed_balance);
-            } catch (err) {
-                return 0;
-            }
-        }
-    }
+    const RPC_URL = process.env.INSTANODES_DOGE_RPC!;
 
-    /**
-     * Sweep DOGE from child to master
-     */
-    async sweepDOGE(
-        childIndex: number,
-        masterAddress: string,
-    ): Promise<string | null> {
+    const rpcCall = async (method: string, params: any[] = []) => {
+      const { data } = await axios.post(RPC_URL, {
+        jsonrpc: "1.0",
+        id: "doge",
+        method,
+        params,
+      });
+      return data.result;
+    };
 
-        const childAddress = this.generateAddress(childIndex);
-        const path = `m/44'/3'/0'/0/${childIndex}`;
-        const childNode = this.root.derivePath(path);
+    try {
+      console.log("Sweeping:", childAddress);
 
-        const RPC_URL = process.env.INSTANODES_DOGE_RPC!;
+      // 1. Fetch UTXOs
+      const utxos = await rpcCall("listunspent", [0, 9999999, [childAddress]]);
+      if (!utxos || utxos.length === 0) return null;
 
-        const rpcCall = async (method: string, params: any[] = []) => {
-            const { data } = await axios.post(RPC_URL, {
-                jsonrpc: "1.0",
-                id: "doge",
-                method,
-                params,
-            });
-            return data.result;
-        };
+      const psbt = new bitcoin.Psbt({ network: this.network });
 
-        try {
-            console.log("Sweeping:", childAddress);
+      let totalInput = BigInt(0);
 
-            // 1. Fetch UTXOs
-            const utxos = await rpcCall("listunspent", [0, 9999999, [childAddress]]);
-            if (!utxos || utxos.length === 0) return null;
+      // 2. Add inputs
+      for (const utxo of utxos) {
+        const rawTx = await rpcCall("getrawtransaction", [utxo.txid, false]);
 
-            const psbt = new bitcoin.Psbt({ network: this.network });
-
-            let totalInput = BigInt(0);
-
-            // 2. Add inputs
-            for (const utxo of utxos) {
-                const rawTx = await rpcCall("getrawtransaction", [utxo.txid, false]);
-
-                psbt.addInput({
-                    hash: utxo.txid,
-                    index: utxo.vout,
-                    nonWitnessUtxo: Buffer.from(rawTx, "hex"),
-                });
-
-                totalInput += BigInt(Math.floor(utxo.amount * 1e8));
-            }
-
-            // 3. Fee (DOGE standard is LOW)
-            const estimatedSize = utxos.length * 148 + 34 + 10;
-
-            // DOGE fee ≈ 0.01 DOGE per KB
-            const fee = BigInt(Math.ceil((estimatedSize / 1000) * 1e6));
-            // 1e6 = 0.01 DOGE in satoshis
-
-            const sendAmount = totalInput - fee;
-
-            if (sendAmount <= BigInt(1e8)) {
-                console.log("Too small to sweep");
-                return null;
-            }
-
-            // 4. Output
-            psbt.addOutput({
-                address: masterAddress,
-                value: sendAmount,
-            });
-
-            // 5. Sign
-            utxos.forEach((_: any, i: number) => {
-                psbt.signInput(i, childNode);
-            });
-
-            psbt.finalizeAllInputs();
-
-            const tx = psbt.extractTransaction();
-            const txHex = tx.toHex();
-
-            // 6. Broadcast via Instanodes
-            const txid = await rpcCall("sendrawtransaction", [txHex]);
-
-            await this._transactionWebhook({
-                network: "DOGE",
-                address: childAddress,
-                amount: Number(sendAmount) / 1e8,
-                token_symbol: "DOGE",
-                hash: txid,
-            });
-
-            return txid;
-
-        } catch (error: any) {
-            console.error("DOGE sweep failed:", error.response?.data || error.message);
-            return null;
-        }
-    }
-    /**
-     * Withdraw DOGE from master to any address
-     */
-    async withdrawDOGE(
-        masterAddress: string,
-        toAddress: string,
-        amountDOGE: number,
-    ): Promise<string> {
-        const masterIdx = 0;
-        const masterNode = this.root.derivePath(`m/44'/3'/0'/0/${masterIdx}`);
-        const masterAddr = this.generateAddress(masterIdx);
-
-        if (masterAddr !== masterAddress) {
-            console.warn("Derived master address mismatch");
-        }
-
-        const apiToken = process.env.BLOCKCYPHER_TOKEN || '';
-        const baseUrl = `https://api.blockcypher.com/v1/doge/main`;
-
-        // 1. Get UTXOs
-        const utxoUrl = apiToken
-            ? `${baseUrl}/addrs/${masterAddr}?unspentOnly=true&token=${apiToken}`
-            : `${baseUrl}/addrs/${masterAddr}?unspentOnly=true`;
-        const { data: addrInfo } = await axios.get(utxoUrl);
-        const utxos = addrInfo.txrefs;
-        if (!utxos || utxos.length === 0) throw new Error("No funds in master wallet");
-
-        // 2. Build Transaction
-        const psbt = new bitcoin.Psbt({ network: this.network });
-        let totalInput = BigInt(0);
-        const sendAmountSat = BigInt(Math.floor(amountDOGE * 1e8));
-
-        let inputCount = 0;
-        for (const utxo of utxos) {
-            const txUrl = apiToken
-                ? `${baseUrl}/txs/${utxo.tx_hash}?includeHex=true&token=${apiToken}`
-                : `${baseUrl}/txs/${utxo.tx_hash}?includeHex=true`;
-            const { data: txHex } = await axios.get(txUrl);
-            psbt.addInput({
-                hash: utxo.tx_hash,
-                index: utxo.tx_output_n,
-                nonWitnessUtxo: Buffer.from(txHex.hex, 'hex'),
-            });
-            totalInput += BigInt(utxo.value);
-            inputCount++;
-            if (totalInput > sendAmountSat + BigInt(200000000)) break; // 2 DOGE buffer
-        }
-
-        if (totalInput < sendAmountSat) throw new Error("Insufficient DOGE balance");
-
-        // 3. Estimate Fee
-        const estimatedSize = inputCount * 148 + 2 * 34 + 10;
-        const fee = BigInt(Math.ceil(estimatedSize * 1000));
-
-        if (totalInput < sendAmountSat + fee) throw new Error("Insufficient balance for fee");
-
-        // 4. Add Outputs
-        psbt.addOutput({
-            address: toAddress,
-            value: sendAmountSat,
+        psbt.addInput({
+          hash: utxo.txid,
+          index: utxo.vout,
+          nonWitnessUtxo: Buffer.from(rawTx, "hex"),
         });
 
-        const change = totalInput - sendAmountSat - fee;
-        if (change > BigInt(100000000)) { // 1 DOGE change limit
-            psbt.addOutput({
-                address: masterAddr,
-                value: change,
-            });
-        }
+        totalInput += BigInt(Math.floor(utxo.amount * 1e8));
+      }
 
-        // 5. Sign
-        for (let i = 0; i < inputCount; i++) {
-            psbt.signInput(i, masterNode);
-        }
+      // 3. Fee (DOGE standard is LOW)
+      const estimatedSize = utxos.length * 148 + 34 + 10;
 
-        psbt.finalizeAllInputs();
-        const tx = psbt.extractTransaction();
-        const txHex = tx.toHex();
+      // DOGE fee ≈ 0.01 DOGE per KB
+      const fee = BigInt(Math.ceil((estimatedSize / 1000) * 1e6));
+      // 1e6 = 0.01 DOGE in satoshis
 
-        // 6. Broadcast
-        const pushUrl = apiToken ? `${baseUrl}/txs/push?token=${apiToken}` : `${baseUrl}/txs/push`;
-        const { data: broadcastRes } = await axios.post(pushUrl, { tx: txHex });
-        return broadcastRes.tx.hash;
+      const sendAmount = totalInput - fee;
+
+      if (sendAmount <= BigInt(1e8)) {
+        console.log("Too small to sweep");
+        return null;
+      }
+
+      // 4. Output
+      psbt.addOutput({
+        address: masterAddress,
+        value: sendAmount,
+      });
+
+      // 5. Sign
+      utxos.forEach((_: any, i: number) => {
+        psbt.signInput(i, childNode);
+      });
+
+      psbt.finalizeAllInputs();
+
+      const tx = psbt.extractTransaction();
+      const txHex = tx.toHex();
+
+      // 6. Broadcast via Instanodes
+      const txid = await rpcCall("sendrawtransaction", [txHex]);
+
+      await this._transactionWebhook({
+        network: "DOGE",
+        address: childAddress,
+        amount: Number(sendAmount) / 1e8,
+        token_symbol: "DOGE",
+        hash: txid,
+      });
+
+      return txid;
+    } catch (error: any) {
+      console.error(
+        "DOGE sweep failed:",
+        error.response?.data || error.message,
+      );
+      return null;
+    }
+  }
+  /**
+   * Withdraw DOGE from master to any address
+   */
+  async withdrawDOGE(
+    masterAddress: string,
+    toAddress: string,
+    amountDOGE: number,
+  ): Promise<string> {
+    const masterIdx = 0;
+    const masterNode = this.root.derivePath(`m/44'/3'/0'/0/${masterIdx}`);
+    const masterAddr = this.generateAddress(masterIdx);
+
+    if (masterAddr !== masterAddress) {
+      console.warn("Derived master address mismatch");
     }
 
-    async getChildTransactionHistory(
-        childIndex: number,
-        limit: number = 3,
-    ): Promise<any[]> {
-        const address = this.generateAddress(childIndex);
-        const apiToken = process.env.BLOCKCYPHER_TOKEN || '';
-        const baseUrl = `https://api.blockcypher.com/v1/doge/main`;
+    const apiToken = process.env.BLOCKCYPHER_TOKEN || "";
+    const baseUrl = `https://api.blockcypher.com/v1/doge/main`;
 
-        try {
-            const historyUrl = apiToken
-                ? `${baseUrl}/addrs/${address}/full?limit=${limit}&token=${apiToken}`
-                : `${baseUrl}/addrs/${address}/full?limit=${limit}`;
-            const { data } = await axios.get(historyUrl);
-            if (!data.txs) return [];
+    // 1. Get UTXOs
+    const utxoUrl = apiToken
+      ? `${baseUrl}/addrs/${masterAddr}?unspentOnly=true&token=${apiToken}`
+      : `${baseUrl}/addrs/${masterAddr}?unspentOnly=true`;
+    const { data: addrInfo } = await axios.get(utxoUrl);
+    const utxos = addrInfo.txrefs;
+    if (!utxos || utxos.length === 0)
+      throw new Error("No funds in master wallet");
 
-            return data.txs.map((tx: any) => {
-                let totalIn = 0;
-                tx.outputs.forEach((output: any) => {
-                    if (output.addresses && output.addresses.includes(address)) {
-                        totalIn += output.value;
-                    }
-                });
+    // 2. Build Transaction
+    const psbt = new bitcoin.Psbt({ network: this.network });
+    let totalInput = BigInt(0);
+    const sendAmountSat = BigInt(Math.floor(amountDOGE * 1e8));
 
-                return {
-                    txID: tx.hash,
-                    type: totalIn > 0 ? "IN" : "OUT",
-                    amount: totalIn / 1e8,
-                    address: address,
-                    token_symbol: "DOGE",
-                    network: "DOGE",
-                    status: tx.confirmations > 0 ? "success" : "pending",
-                    timestamp: new Date(tx.confirmed).getTime(),
-                    date: new Date(tx.confirmed),
-                };
-            }).filter((t: any) => t.type === "IN");
-        } catch (error: any) {
-            console.error("Failed to fetch DOGE history:", error.message);
-            return [];
-        }
+    let inputCount = 0;
+    for (const utxo of utxos) {
+      const txUrl = apiToken
+        ? `${baseUrl}/txs/${utxo.tx_hash}?includeHex=true&token=${apiToken}`
+        : `${baseUrl}/txs/${utxo.tx_hash}?includeHex=true`;
+      const { data: txHex } = await axios.get(txUrl);
+      psbt.addInput({
+        hash: utxo.tx_hash,
+        index: utxo.tx_output_n,
+        nonWitnessUtxo: Buffer.from(txHex.hex, "hex"),
+      });
+      totalInput += BigInt(utxo.value);
+      inputCount++;
+      if (totalInput > sendAmountSat + BigInt(200000000)) break; // 2 DOGE buffer
     }
 
-    private async _transactionWebhook(transaction: {
-        network: string;
-        address: string;
-        amount: number | string;
-        token_symbol: string;
-        hash?: string;
-    }) {
-        try {
-            return await this.publicService.transactionWebhook({
-                ...transaction,
-                amount: Number(transaction.amount),
-            });
-        } catch (error: any) {
-            console.error("DOGE transaction webhook failed:", error.message);
-        }
+    if (totalInput < sendAmountSat)
+      throw new Error("Insufficient DOGE balance");
+
+    // 3. Estimate Fee
+    const estimatedSize = inputCount * 148 + 2 * 34 + 10;
+    const fee = BigInt(Math.ceil(estimatedSize * 1000));
+
+    if (totalInput < sendAmountSat + fee)
+      throw new Error("Insufficient balance for fee");
+
+    // 4. Add Outputs
+    psbt.addOutput({
+      address: toAddress,
+      value: sendAmountSat,
+    });
+
+    const change = totalInput - sendAmountSat - fee;
+    if (change > BigInt(100000000)) {
+      // 1 DOGE change limit
+      psbt.addOutput({
+        address: masterAddr,
+        value: change,
+      });
     }
+
+    // 5. Sign
+    for (let i = 0; i < inputCount; i++) {
+      psbt.signInput(i, masterNode);
+    }
+
+    psbt.finalizeAllInputs();
+    const tx = psbt.extractTransaction();
+    const txHex = tx.toHex();
+
+    // 6. Broadcast
+    const pushUrl = apiToken
+      ? `${baseUrl}/txs/push?token=${apiToken}`
+      : `${baseUrl}/txs/push`;
+    const { data: broadcastRes } = await axios.post(pushUrl, { tx: txHex });
+    return broadcastRes.tx.hash;
+  }
+
+  async getChildTransactionHistory(
+    childIndex: number,
+    limit: number = 3,
+  ): Promise<any[]> {
+    const address = this.generateAddress(childIndex);
+    const apiToken = process.env.BLOCKCYPHER_TOKEN || "";
+    const baseUrl = `https://api.blockcypher.com/v1/doge/main`;
+
+    try {
+      const historyUrl = apiToken
+        ? `${baseUrl}/addrs/${address}/full?limit=${limit}&token=${apiToken}`
+        : `${baseUrl}/addrs/${address}/full?limit=${limit}`;
+      const { data } = await axios.get(historyUrl);
+      if (!data.txs) return [];
+
+      return data.txs
+        .map((tx: any) => {
+          let totalIn = 0;
+          tx.outputs.forEach((output: any) => {
+            if (output.addresses && output.addresses.includes(address)) {
+              totalIn += output.value;
+            }
+          });
+
+          return {
+            txID: tx.hash,
+            type: totalIn > 0 ? "IN" : "OUT",
+            amount: totalIn / 1e8,
+            address: address,
+            token_symbol: "DOGE",
+            network: "DOGE",
+            status: tx.confirmations > 0 ? "success" : "pending",
+            timestamp: new Date(tx.confirmed).getTime(),
+            date: new Date(tx.confirmed),
+          };
+        })
+        .filter((t: any) => t.type === "IN");
+    } catch (error: any) {
+      console.error("Failed to fetch DOGE history:", error.message);
+      return [];
+    }
+  }
+
+  private async _transactionWebhook(transaction: {
+    network: string;
+    address: string;
+    amount: number | string;
+    token_symbol: string;
+    hash?: string;
+  }) {
+    try {
+      return await this.publicService.transactionWebhook({
+        ...transaction,
+        amount: Number(transaction.amount),
+      });
+    } catch (error: any) {
+      console.error("DOGE transaction webhook failed:", error.message);
+    }
+  }
 }

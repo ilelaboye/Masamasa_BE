@@ -94,7 +94,6 @@ export class HDWallet {
     const balance = await wallet.provider.getBalance(wallet.address);
     if (balance === 0n) return null;
 
-
     // 2. Prepare dummy tx for gas estimation
     const dummyTx = {
       to: masterWallet.address,
@@ -164,7 +163,6 @@ export class HDWallet {
         return null;
       }
 
-
       // 5. Send transaction
       tx = await wallet.sendTransaction({
         to: masterWallet.address,
@@ -218,13 +216,13 @@ export class HDWallet {
     const totalGasCost = gasPrice * gasLimit;
     const nativeBalance = await wallet.provider.getBalance(wallet.address);
 
-
     if (nativeBalance < totalGasCost) {
       // Fund from master if needed - use 1.5x buffer for safety (reduced from 2x)
-      const fundAmount = (totalGasCost - nativeBalance) * 3n / 2n; // 1.5x multiplier
+      const fundAmount = ((totalGasCost - nativeBalance) * 3n) / 2n; // 1.5x multiplier
 
       // Check if master wallet has enough balance before attempting to fund
-      const masterBalance = await masterWallet.provider?.getBalance(masterWallet.address) ?? 0n;
+      const masterBalance =
+        (await masterWallet.provider?.getBalance(masterWallet.address)) ?? 0n;
 
       if (masterBalance < fundAmount) {
         return null;

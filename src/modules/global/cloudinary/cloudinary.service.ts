@@ -36,6 +36,7 @@ export class CloudinaryService {
 
       return results as Array<cloudinary.UploadApiResponse>;
     } catch (error) {
+      console.log("Error uploading to Cloudinary:", error);
       throw new NotAcceptableException(error.message);
     }
   }

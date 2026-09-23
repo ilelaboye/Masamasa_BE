@@ -1,4 +1,4 @@
-import { WITHDRAWAL_MAX_PER_DAY } from "@/constants";
+import { KYC_TIER_IDENTITY, WITHDRAWAL_MAX_PER_DAY } from "@/constants";
 import { CacheService } from "@/modules/global/cache-container/cache-container.service";
 import { MixpanelService } from "@/modules/global/mixpanel/mixpanel.service";
 import { BadRequestException, Injectable } from "@nestjs/common";
@@ -365,6 +365,9 @@ export class AdministratorService {
       { id: user_id },
       {
         kyc_status: KycStatus.success,
+        // Same transition the automated path makes — an approval here has to
+        // move the tier too, or the user is shown Tier 1 with Tier 2 limits.
+        kyc_tier: KYC_TIER_IDENTITY,
         withdrawal_limit: WITHDRAWAL_MAX_PER_DAY,
       },
     );
