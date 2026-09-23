@@ -44,6 +44,10 @@ export class User {
   @Column()
   last_name: string;
 
+  /** Lowercase, 3–30 chars of [a-z0-9_]. Unique across the table. */
+  @Column({ type: "varchar", length: 30, unique: true })
+  username: string;
+
   @Column({
     type: "varchar",
     default: Status.active,

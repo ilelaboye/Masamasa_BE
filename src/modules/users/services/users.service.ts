@@ -6,7 +6,7 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { DataSource, EntityManager, Repository } from "typeorm";
+import { DataSource, EntityManager, Not, Repository } from "typeorm";
 import { BaseService } from "../../base.service";
 import { KycStatus, User } from "../entities/user.entity";
 import {
@@ -113,6 +113,12 @@ export class UsersService extends BaseService {
   }
 
   async updateProfile(updateAccountDto: UpdateAccountDto, req: UserRequest) {
+    const username = updateAccountDto.username.toLowerCase();
+    const taken = await this.userRepository.exists({
+      where: { username, id: Not(req.user.id) },
+    });
+    if (taken) throw new BadRequestException("Username is already taken.");
+
     const update = await this.userRepository.update(
       { id: req.user.id },
       {
@@ -120,6 +126,7 @@ export class UsersService extends BaseService {
         address: updateAccountDto.address,
         first_name: updateAccountDto.first_name,
         last_name: updateAccountDto.last_name,
+        username,
         city: updateAccountDto.city,
         state: updateAccountDto.state,
         country: updateAccountDto.country,

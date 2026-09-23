@@ -1,8 +1,20 @@
 import * as Joi from "joi";
 
+// Shared by signup and profile edit so the rule cannot drift. The mobile
+// signup form mirrors this pattern.
+const username = Joi.string()
+  .lowercase()
+  .pattern(/^[a-z0-9_]{3,30}$/)
+  .messages({
+    "string.pattern.base":
+      "username must be 3-30 characters: letters, numbers or underscores",
+  })
+  .label("Username");
+
 export const CreateAccountValidation = Joi.object().keys({
   first_name: Joi.string().required().label("First name"),
   last_name: Joi.string().required().label("Last name"),
+  username: username.required(),
   email: Joi.string().email().required().label("Email"),
   google_id: Joi.string().optional().allow(null, ""),
   // Compulsory at registration. `.allow(null, "")` is deliberately absent —
@@ -38,6 +50,7 @@ export const CreateAccountValidation = Joi.object().keys({
 export const UpdateAccountValidation = Joi.object().keys({
   first_name: Joi.string().required().label("First name"),
   last_name: Joi.string().required().label("Last name"),
+  username: username.required(),
   email: Joi.optional().allow(null).label("Email"),
   phone: Joi.string().max(50).required().label("Phone"),
   country: Joi.string().optional().allow(null).label("Country"),

@@ -235,7 +235,10 @@ export class AuthService extends BaseService {
 
     console.log("User login", user);
 
-    const token = this.jwtService.sign({ ...user });
+    // Only the id is ever read back from the token (AuthGuard sets it as
+    // req.user). Signing the whole row made the auth cookie outgrow nginx's
+    // response-header buffer and every login came back as a 502.
+    const token = this.jwtService.sign({ id: user.id, email: user.email });
 
     this.notifyLogin(fetch, req);
 
@@ -361,10 +364,16 @@ export class AuthService extends BaseService {
         queryRunner.manager,
       );
 
+      const username = createAccountDto.username.toLowerCase();
+      if (await queryRunner.manager.existsBy(User, { username })) {
+        throw new BadRequestException("Username is already taken.");
+      }
+
       const rememberToken = generateRandomNumberString(6);
       const user = await queryRunner.manager.save(User, {
         first_name: first_name.toLowerCase(),
         last_name: last_name.toLowerCase(),
+        username,
         email: email.toLowerCase(),
         phone: phone ? phone.toLowerCase() : null,
         country: country.toLowerCase(),
@@ -603,7 +612,8 @@ export class AuthService extends BaseService {
     };
     delete user.pin;
 
-    const jwtToken = this.jwtService.sign({ ...user });
+    // Same minimal payload as login(); see the note there.
+    const jwtToken = this.jwtService.sign({ id: user.id, email: user.email });
 
     this.notifyLogin(fetch);
 

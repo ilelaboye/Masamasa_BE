@@ -799,6 +799,7 @@ export class AdministratorService {
             search: `%${search}%`,
           })
             .orWhere("users.last_name ILIKE :search", { search: `%${search}%` })
+            .orWhere("users.username ILIKE :search", { search: `%${search}%` })
             .orWhere("users.email ILIKE :search", { search: `%${search}%` })
             .orWhere("users.phone ILIKE :search", { search: `%${search}%` })
             // Match the full name too, so "john doe" finds a user whose

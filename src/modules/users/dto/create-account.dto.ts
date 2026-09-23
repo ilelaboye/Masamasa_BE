@@ -8,6 +8,9 @@ export class CreateAccountDto {
   @ApiProperty({ example: "christmas" })
   last_name: string;
 
+  @ApiProperty({ example: "janet_c" })
+  username: string;
+
   @ApiProperty({ example: "ilelaboyealekan@gmail.com" })
   email: string;
 
@@ -43,6 +46,9 @@ export class UpdateAccountDto {
 
   @ApiProperty({ example: "christmas" })
   last_name: string;
+
+  @ApiProperty({ example: "janet_c" })
+  username: string;
 
   @ApiProperty({ example: "+2349094749994" })
   phone: string;
