@@ -493,14 +493,14 @@ export class AdministratorController {
   })
   @ApiQuery({ name: "page", required: false, type: Number })
   @ApiQuery({ name: "limit", required: false, type: Number })
-  @AllowRoles(AdministratorRoles.marketer)
+  @AllowRoles(AdministratorRoles.marketer, AdministratorRoles.support)
   @Get("notifications")
   async listBroadcastNotifications(@Req() req: AdminRequest) {
     return await this.notificationsService.listBroadcasts(req);
   }
 
   @ApiOperation({ summary: "Send a custom notification to all users" })
-  @AllowRoles(AdministratorRoles.marketer)
+  @AllowRoles(AdministratorRoles.marketer, AdministratorRoles.support)
   @Post("notifications/broadcast")
   @UsePipes(new JoiValidationPipe(BroadcastNotificationValidation))
   async broadcastNotification(
@@ -517,7 +517,7 @@ export class AdministratorController {
   }
 
   @ApiOperation({ summary: "Edit a scheduled broadcast before it goes out" })
-  @AllowRoles(AdministratorRoles.marketer)
+  @AllowRoles(AdministratorRoles.marketer, AdministratorRoles.support)
   @Patch("notifications/broadcast")
   async updateScheduledBroadcast(
     @Body(new JoiValidationPipe(UpdateScheduledBroadcastValidation))
@@ -528,7 +528,7 @@ export class AdministratorController {
   }
 
   @ApiOperation({ summary: "Cancel a scheduled broadcast before it goes out" })
-  @AllowRoles(AdministratorRoles.marketer)
+  @AllowRoles(AdministratorRoles.marketer, AdministratorRoles.support)
   @Patch("notifications/broadcast/:id/status")
   async updateScheduledBroadcastStatus(
     @Param("id") id: number,

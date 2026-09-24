@@ -1,5 +1,6 @@
 // import { PreferenceValueType } from '@/modules/preferences/entities/preference.entity';
 import { CurrencyCoin } from "@/modules/exchange-rates/exchange-rates.entity";
+import { ASSIGNABLE_ADMIN_ROLES } from "@/modules/administrator/entities/administrator.entity";
 import { ApiProperty } from "@nestjs/swagger";
 
 export class CreateExchangeRateDto {
@@ -122,7 +123,7 @@ export class CreateStaffDto {
   @ApiProperty({ example: "alice@masamasa.ng" })
   email: string;
 
-  @ApiProperty({ example: "marketer", enum: ["marketer"] })
+  @ApiProperty({ example: "marketer", enum: ASSIGNABLE_ADMIN_ROLES })
   role: string;
 }
 
