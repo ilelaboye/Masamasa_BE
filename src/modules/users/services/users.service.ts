@@ -30,11 +30,13 @@ import {
   sendAccountDeletedEmail,
   sendPasswordChangedEmail,
   sendPinChangedEmail,
+  sendPinResetEmail,
   sendWithdrawalSuccessEmail,
   timeIsAfter,
 } from "@/core/utils";
 import {
   KYC_TIER_IDENTITY,
+  PIN_RESET_FREEZE_HOURS,
   WITHDRAWAL_MAX_PER_DAY,
   WITHDRAWAL_MIN_PER_TRANSACTION,
   ZohoMailTemplates,
@@ -160,9 +162,12 @@ export class UsersService extends BaseService {
     return user;
   }
 
-  async requestPinChangeOtp(req: UserRequest) {
-    const { user } = req;
-
+  /**
+   * Stores a fresh one-time code against the account and emails it. Shared by
+   * the PIN change and PIN reset requests so both land in the same
+   * remember_token / token_created_at pair the verification steps read.
+   */
+  private async emailPinOtp(user: User, subject: string) {
     const otp = generateRandomNumberString(6);
     await this.userRepository.update(
       { id: user.id },
@@ -177,7 +182,7 @@ export class UsersService extends BaseService {
         },
       },
       {
-        subject: "PIN Change Verification Code",
+        subject,
         templateId: ZohoMailTemplates.verify_email,
         variables: {
           firstName: capitalizeString(user.first_name),
@@ -187,6 +192,105 @@ export class UsersService extends BaseService {
     );
 
     return { message: "Verification code sent to your email." };
+  }
+
+  async requestPinChangeOtp(req: UserRequest) {
+    return this.emailPinOtp(req.user, "PIN Change Verification Code");
+  }
+
+  /**
+   * Step 1 of the forgot-PIN flow. Deliberately does not require the old PIN —
+   * the whole point is that the user no longer has it — so the emailed code is
+   * the only proof, and `resetPin` freezes money movement afterwards to
+   * compensate.
+   */
+  async requestPinResetOtp(req: UserRequest) {
+    return this.emailPinOtp(req.user, "PIN Reset Verification Code");
+  }
+
+  /**
+   * Step 2 of the forgot-PIN flow: emailed code plus the new PIN, no old PIN.
+   * Stamps `pin_reset_at`, which `assertPinResetFreeze` then enforces against
+   * withdrawals and transfers for PIN_RESET_FREEZE_HOURS.
+   */
+  async resetPin(changePinDto: ChangePinDto, req: UserRequest) {
+    const { user } = req;
+
+    if (!changePinDto.otp) {
+      throw new BadRequestException("Verification code is required");
+    }
+    if (!changePinDto.pin || !/^\d{4}$/.test(changePinDto.pin)) {
+      throw new BadRequestException("Invalid new pin, pin must be 4-digit");
+    }
+
+    const fetch = await this.userRepository
+      .createQueryBuilder("user")
+      .addSelect("user.remember_token")
+      .where("user.id = :id", { id: user.id })
+      .getOne();
+
+    if (!fetch) throw new BadRequestException("User not found");
+
+    if (
+      fetch.remember_token !== changePinDto.otp ||
+      !fetch.token_created_at ||
+      timeIsAfter(fetch.token_created_at, 15)
+    ) {
+      throw new BadRequestException("Invalid or expired verification code.");
+    }
+
+    await this.userRepository.update(
+      { id: user.id },
+      {
+        pin: hashResourceSync(`${changePinDto.pin}`),
+        pin_reset_at: new Date(),
+        // Burn the code, so the same email cannot be replayed to reset again.
+        remember_token: null,
+        token_created_at: null,
+      },
+    );
+
+    sendPinResetEmail(fetch, PIN_RESET_FREEZE_HOURS);
+
+    this.notificationRepository
+      .save({
+        user_id: user.id,
+        message: `Your transaction PIN was reset. Withdrawals and transfers are paused for ${PIN_RESET_FREEZE_HOURS} hours. If this wasn't you, contact support immediately.`,
+        tag: NotificationTag.security,
+        metadata: {},
+      } as unknown as Notification)
+      .catch(() => {});
+
+    return {
+      message: `PIN reset successfully. Withdrawals and transfers are paused for ${PIN_RESET_FREEZE_HOURS} hours.`,
+      freeze_hours: PIN_RESET_FREEZE_HOURS,
+      frozen_until: new Date(
+        Date.now() + PIN_RESET_FREEZE_HOURS * 60 * 60 * 1000,
+      ).toISOString(),
+    };
+  }
+
+  /**
+   * Refuses money movement inside the post-reset freeze window. Called by both
+   * `withdrawal()` and `transfer()` — the only two PIN-gated debit paths — and
+   * only after the PIN itself has been verified, so a wrong PIN is still
+   * reported as a wrong PIN.
+   */
+  private assertPinResetFreeze(user: User) {
+    if (!user.pin_reset_at) return;
+    if (timeIsAfter(user.pin_reset_at, PIN_RESET_FREEZE_HOURS * 60)) return;
+
+    const endsAt = new Date(
+      new Date(user.pin_reset_at).getTime() +
+        PIN_RESET_FREEZE_HOURS * 60 * 60 * 1000,
+    );
+
+    throw new BadRequestException(
+      `For your security, withdrawals and transfers are paused for ${PIN_RESET_FREEZE_HOURS} hours after a PIN reset. You can try again after ${endsAt.toLocaleString(
+        "en-NG",
+        { timeZone: "Africa/Lagos", dateStyle: "medium", timeStyle: "short" },
+      )} (WAT).`,
+    );
   }
 
   async changePin(changePinDto: ChangePinDto, req: UserRequest) {
@@ -541,6 +645,8 @@ export class UsersService extends BaseService {
     const verified = await verifyHash(transferDto.pin, user.pin);
     if (!verified) throw new BadRequestException("Incorrect pin");
 
+    this.assertPinResetFreeze(user);
+
     delete user.pin;
 
     const queryRunner = this.dataSource.createQueryRunner();
@@ -721,6 +827,8 @@ export class UsersService extends BaseService {
 
     const verified = await verifyHash(withdrawalDto.pin, user.pin);
     if (!verified) throw new BadRequestException("Incorrect pin");
+
+    this.assertPinResetFreeze(user);
 
     delete user.pin;
 

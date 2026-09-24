@@ -72,6 +72,18 @@ export class UsersController {
     return await this.usersService.changePin(changePinDto, req);
   }
 
+  // Forgot-PIN flow. No old PIN is required, so `reset-pin` freezes
+  // withdrawals and transfers for PIN_RESET_FREEZE_HOURS afterwards.
+  @Post("reset-pin/request-otp")
+  async requestPinResetOtp(@Req() req: UserRequest) {
+    return await this.usersService.requestPinResetOtp(req);
+  }
+
+  @Post("reset-pin")
+  async resetPin(@Body() changePinDto: ChangePinDto, @Req() req: UserRequest) {
+    return await this.usersService.resetPin(changePinDto, req);
+  }
+
   @Post("pin-verification")
   async verifyPin(@Body() verifyPinDto: VerifyPinDto, @Req() req: UserRequest) {
     return await this.usersService.verifyPin(verifyPinDto, req);

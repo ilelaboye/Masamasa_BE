@@ -182,6 +182,15 @@ export class User {
   @Column({ type: "timestamp", nullable: true })
   token_created_at?: Date | null;
 
+  /**
+   * When the PIN was last reset via the forgot-PIN flow (email code only, no
+   * old PIN). Withdrawals and transfers are refused for
+   * PIN_RESET_FREEZE_HOURS afterwards. A normal change-PIN, which proves
+   * knowledge of the old PIN, deliberately does not set this.
+   */
+  @Column({ type: "timestamp", nullable: true })
+  pin_reset_at?: Date | null;
+
   // Updated (throttled) by the AuthGuard — powers daily-active-user stats
   @Column({ type: "timestamp", nullable: true })
   last_seen_at?: Date | null;

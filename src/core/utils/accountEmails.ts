@@ -131,6 +131,31 @@ export function sendPinChangedEmail(user: EmailUser) {
   ).catch(() => {});
 }
 
+/**
+ * Confirmation that the transaction PIN was reset through the forgot-PIN
+ * flow. Separate from sendPinChangedEmail because only this path freezes
+ * withdrawals, and the user has to be told why their money is stuck.
+ */
+export function sendPinResetEmail(user: EmailUser, freezeHours: number) {
+  sendZohoMail(
+    {
+      to: {
+        name: `${capitalizeString(user.first_name ?? "")} ${capitalizeString(user.last_name ?? "")}`.trim(),
+        email: user.email,
+      },
+    },
+    {
+      subject: "Your MasaMasa transaction PIN was reset",
+      html: shell(
+        user.first_name ?? "",
+        `<p>Your transaction PIN was reset on <b>${nowInLagos()} (WAT)</b>.</p>
+         <p>For your security, <b>withdrawals and transfers are paused for the next ${freezeHours} hours</b>. Bill payments are unaffected, and you can use your new PIN for those straight away.</p>
+         <p><b>If you did not reset your PIN, contact our support team immediately</b> — someone else may have access to your email.</p>`,
+      ),
+    },
+  ).catch(() => {});
+}
+
 /** Confirmation that the account was deleted at the user's own request. */
 export function sendAccountDeletedEmail(user: EmailUser, reason?: string) {
   sendZohoMail(

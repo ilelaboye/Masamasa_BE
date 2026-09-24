@@ -55,6 +55,13 @@ export const WITHDRAWAL_MIN_PER_TRANSACTION = 1000;
 // migration 1783400000000 has to move with it.
 export const WITHDRAWAL_MAX_UNVERIFIED = 50000;
 
+// A PIN reset only needs access to the account's email, so it is the cheapest
+// path in for whoever has taken over an inbox. Money is frozen for this long
+// afterwards to leave the real owner time to notice the reset email and call
+// support. It blocks withdrawals and P2P transfers only — bill payments are
+// small and capped, and freezing them would strand users mid-emergency.
+export const PIN_RESET_FREEZE_HOURS = 24;
+
 // ─── Referrals ───────────────────────────────────────────────────────────────
 // A referrer earns REFERRAL_REWARD_NGN once — and only once — per person they
 // referred, the moment that person's lifetime successful deposits cross
