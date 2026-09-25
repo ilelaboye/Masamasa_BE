@@ -123,8 +123,6 @@ export class CreateStaffDto {
   @ApiProperty({ example: "alice@masamasa.ng" })
   email: string;
 
-  // Derived from the same list CreateStaffValidation validates against, so a
-  // new assignable role appears in Swagger without editing this.
   @ApiProperty({ example: "marketer", enum: ASSIGNABLE_ADMIN_ROLES })
   role: string;
 }
