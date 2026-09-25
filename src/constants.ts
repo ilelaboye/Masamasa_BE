@@ -30,7 +30,12 @@ export const ClearCookieOptions = {
 
 // Flat fee (in USD) charged on every crypto deposit except the exempt coins.
 export const DEPOSIT_FEE_USD = 1;
-export const DEPOSIT_FEE_EXEMPT_CURRENCIES = new Set(["usdt", "cngn"]);
+export const DEPOSIT_FEE_EXEMPT_CURRENCIES = new Set([
+  "usdt",
+  "cngn",
+  "usdc",
+  "busd",
+]);
 
 // The highest daily withdrawal ceiling any account may hold, in NGN. Each
 // account carries its own limit in users.withdrawal_limit — this is the value
