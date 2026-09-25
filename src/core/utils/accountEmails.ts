@@ -207,6 +207,108 @@ export function sendAccountStatusChangedEmail(
 }
 
 /**
+ * The two tiers a person reviews by hand, and the words that differ between
+ * them. Tier 2 reaches here only for the photographed ID types (passport,
+ * driver's licence, voter's card) — a BVN or NIN lookup settles instantly and
+ * never waits on an admin, so it sends none of these.
+ */
+export type ReviewedTier = 2 | 3;
+
+const REVIEWED_TIERS: Record<
+  ReviewedTier,
+  {
+    received: string;
+    approved: string;
+    declined: string;
+    approvedBody: string;
+    declinedLead: string;
+    resubmit: string;
+  }
+> = {
+  2: {
+    received: "We have received your identity verification",
+    approved: "Your identity has been verified",
+    declined: "Your identity verification was declined",
+    approvedBody:
+      "your document has been approved and your account is now on <b>Tier 2</b>",
+    declinedLead:
+      "We were unable to verify your identity with the document you submitted.",
+    resubmit: "You can submit a new document from the app",
+  },
+  3: {
+    received: "We have received your address verification",
+    approved: "Your address has been verified",
+    declined: "Your address verification was declined",
+    approvedBody:
+      "your proof of address has been approved and your account is now on <b>Tier 3</b>",
+    declinedLead:
+      "We were unable to verify your address with the document you submitted.",
+    resubmit: "You can submit a new proof of address from the app",
+  },
+};
+
+/**
+ * Acknowledgement that a submission is queued for review.
+ *
+ * Neither reviewed tier has an automated verdict — a person looks at the
+ * document — so this is the only thing the user hears until an admin decides.
+ */
+export function sendKycReceivedEmail(user: EmailUser, tier: ReviewedTier) {
+  sendZohoMail(
+    {
+      to: {
+        name: `${capitalizeString(user.first_name ?? "")} ${capitalizeString(user.last_name ?? "")}`.trim(),
+        email: user.email,
+      },
+    },
+    {
+      subject: REVIEWED_TIERS[tier].received,
+      html: shell(
+        user.first_name ?? "",
+        `<p>Thank you for your Tier ${tier} submission</p>
+         <p>Your submission is currently under review. We’ll notify you by email as soon as a decision has been made.</p>
+         <p>There’s no need to submit anything again while your submission is being reviewed.</p>`,
+      ),
+    },
+  ).catch(() => {});
+}
+
+/**
+ * The admin's verdict on a reviewed submission. A decline always carries the
+ * reason the admin gave — without it the user has nothing to correct before
+ * resubmitting.
+ */
+export function sendKycDecisionEmail(
+  user: EmailUser,
+  tier: ReviewedTier,
+  approved: boolean,
+  reason?: string,
+) {
+  const copy = REVIEWED_TIERS[tier];
+
+  sendZohoMail(
+    {
+      to: {
+        name: `${capitalizeString(user.first_name ?? "")} ${capitalizeString(user.last_name ?? "")}`.trim(),
+        email: user.email,
+      },
+    },
+    {
+      subject: approved ? copy.approved : copy.declined,
+      html: shell(
+        user.first_name ?? "",
+        approved
+          ? `<p>Good news — ${copy.approvedBody}.</p>
+             <p>Your daily withdrawal limit has been raised. You can see your new limit in the app under transaction limits.</p>`
+          : `<p>${copy.declinedLead}</p>
+             ${reason ? `<p><b>Reason:</b> ${esc(reason)}</p>` : ""}
+             <p>${copy.resubmit} once the issue above is resolved. If you think this is a mistake, please contact our support team.</p>`,
+      ),
+    },
+  ).catch(() => {});
+}
+
+/**
  * Confirmation that a bank withdrawal was paid out successfully.
  */
 export function sendWithdrawalSuccessEmail(

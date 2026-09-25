@@ -1,30 +1,60 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
- * Prembly identity endpoints, one entry per ID type.
+ * Prembly identity endpoints, one entry per ID type that is looked up.
  *
  * Every endpoint takes a different request body and answers in a different
  * shape, so the differences live here as data rather than as a branch per type
  * in the service. The mobile app carries the mirror image of this table (which
  * fields to ask the user for) in `kyc_flow.dart`.
  *
+ * Tier 2 has two routes and this file draws the line between them: a type is
+ * either in IDENTITY_PROVIDERS (number lookup, instant verdict) or in
+ * MANUAL_REVIEW_TYPES (photo upload, admin decides). Never both.
+ *
  * Everything in this file is pure — see identity-providers.spec.ts.
  */
 
 const PREMBLY = "https://api.prembly.com/verification";
 
-export type IdentityType =
-  | "bvn"
-  | "nin"
-  | "passport"
-  | "drivers_license"
-  | "voters_card";
+/**
+ * The ID types that are verified by a number lookup. Only these have a Prembly
+ * endpoint — see MANUAL_REVIEW_TYPES for the rest.
+ */
+export type IdentityType = "bvn" | "nin";
+
+/**
+ * The ID types an admin reviews from a photograph.
+ *
+ * These deliberately have **no** entry in IDENTITY_PROVIDERS: the user uploads
+ * the front of the document and nothing is checked on the way in, so there is
+ * no endpoint to call and no instant verdict. Prembly does sell lookups for all
+ * three, and this file used to configure them; the business chose manual review
+ * instead, so the config was removed rather than left unreachable.
+ *
+ * Two consequences worth knowing before adding to this list:
+ *
+ * - `assertNotAlreadyUsed` cannot run. It dedupes on the number read off the
+ *   document, and there is no longer a number to read.
+ * - Nothing is written to `bank_verifications`, because no verification was
+ *   bought.
+ */
+export const MANUAL_REVIEW_TYPES = [
+  "passport",
+  "drivers_license",
+  "voters_card",
+] as const;
+
+export type ManualReviewType = (typeof MANUAL_REVIEW_TYPES)[number];
+
+/** True when the type is queued for an admin rather than looked up. */
+export function isManualReviewType(type: string): type is ManualReviewType {
+  return (MANUAL_REVIEW_TYPES as readonly string[]).includes(type);
+}
 
 /** What the user supplied, plus the account's own names to verify against. */
 export interface IdentityInput {
   number: string;
   dob?: string;
-  /** Passport only: the holder's NIN, which the endpoint cross-checks. */
-  nin?: string;
   first_name: string;
   last_name: string;
 }
@@ -36,8 +66,9 @@ export interface IdentityProvider {
   verified: (res: any) => boolean;
   /**
    * The name parts the provider returned, for us to match against the account.
-   * `null` means the provider matched the names itself from what we sent —
-   * there is nothing for us to compare.
+   * `null` means the provider matched the names itself from what we sent, so
+   * there is nothing for us to compare — no endpoint here does that today, but
+   * `verifyIdentity` still honours it.
    */
   names: (res: any) => (string | undefined)[] | null;
   /** The birthdate the provider holds, when it returns one. */
@@ -68,44 +99,6 @@ export const IDENTITY_PROVIDERS: Record<IdentityType, IdentityProvider> = {
     ],
     // Returned as DD-MM-YYYY, unlike every other endpoint here.
     dob: (res) => res?.data?.birthdate,
-  },
-
-  passport: {
-    url: `${PREMBLY}/national_passport_v2`,
-    // Takes the passport number, the holder's NIN and date of birth — see
-    // https://docs.prembly.com/reference/passport-version-2
-    body: ({ number, nin, dob }) => ({ number, nin, dob }),
-    verified: (res) => Boolean(res?.status),
-    names: (res) => [
-      res?.data?.firstName,
-      res?.data?.lastName,
-      res?.data?.middleName,
-    ],
-    dob: (res) => res?.data?.dateOfBirth,
-  },
-
-  drivers_license: {
-    url: `${PREMBLY}/drivers_license`,
-    body: ({ number, dob, first_name, last_name }) => ({
-      number,
-      dob,
-      first_name,
-      last_name,
-    }),
-    // FRSC matches the names and date of birth we send and answers with a
-    // verdict — there are no details in the response to compare ourselves.
-    verified: (res) =>
-      Boolean(res?.status) && Boolean(res?.frsc_data?.verified),
-    names: () => null,
-    dob: () => undefined,
-  },
-
-  voters_card: {
-    url: `${PREMBLY}/voters_card`,
-    body: ({ number }) => ({ number }),
-    verified: (res) => Boolean(res?.status),
-    names: (res) => [res?.data?.fullName],
-    dob: (res) => res?.data?.date_of_birth,
   },
 };
 

@@ -29,6 +29,7 @@ import {
   verifyHash,
   sendZohoMailWithTemplate,
   sendAccountDeletedEmail,
+  sendKycReceivedEmail,
   sendPasswordChangedEmail,
   sendPinChangedEmail,
   sendPinResetEmail,
@@ -56,7 +57,10 @@ import {
   generateRandomNumberString,
 } from "@/core/helpers";
 import { BankVerificationService } from "@/modules/global/bank-verification/bank-verification.service";
-import { IdentityType } from "@/modules/global/bank-verification/identity-providers";
+import {
+  IdentityType,
+  isManualReviewType,
+} from "@/modules/global/bank-verification/identity-providers";
 import { CloudinaryService } from "@/modules/global/cloudinary/cloudinary.service";
 import { WinstonLogger } from "@/modules/global/logger/winston-logger";
 import {
@@ -1077,9 +1081,11 @@ export class UsersService extends BaseService {
   /**
    * Tier 2 identity verification.
    *
-   * Two ways in, one outcome each: an ID number is looked up with the issuing
-   * authority and settles immediately, while a photographed document is read
-   * by Prembly and falls back to an admin review if that cannot be done.
+   * Three ways in. A number (BVN, NIN) is looked up with the issuing authority
+   * and settles immediately. A passport, driver's licence or voter's card is a
+   * photograph an admin reviews — nothing is checked on the way in, exactly
+   * like tier 3. Anything else photographed is read by Prembly and falls back
+   * to an admin review if that cannot be done.
    */
   async userKyc(kycDto: KycDto, req: UserRequest) {
     const user = await this.userRepository.findOne({
@@ -1098,7 +1104,7 @@ export class UsersService extends BaseService {
       );
     }
 
-    const { type, number, dob, nin, front_image, back_image, selfie } = kycDto;
+    const { type, number, dob, front_image, back_image, selfie } = kycDto;
 
     // Analytics: document TYPE only — never the ID value (Do Not Send).
     this.mixpanel.track("kyc submitted", user.id, {
@@ -1107,13 +1113,20 @@ export class UsersService extends BaseService {
     });
     this.mixpanel.setProfile(user.id, { "kyc status": "pending" });
 
+    if (isManualReviewType(type)) {
+      return this.queueManualKyc(user, type, {
+        front_image: front_image as string,
+        back_image,
+        selfie,
+      });
+    }
+
     const result = number
       ? await this.bankVerificationService.verifyIdentity(
           type as IdentityType,
           {
             number,
             dob: dob as string,
-            nin,
             first_name: user.first_name,
             last_name: user.last_name,
           },
@@ -1213,6 +1226,65 @@ export class UsersService extends BaseService {
   }
 
   /**
+   * Stores a photographed ID and queues it for an admin, with no provider call.
+   *
+   * The same shape as `submitAddressKyc`: record, set `pending`, stop. Nothing
+   * here raises the tier or the ceiling — `verifyKyc` is the only thing that
+   * does, so the app's closing screen is always "in review".
+   *
+   * ponytail: no dedupe on this path. `assertNotAlreadyUsed` needs the number
+   * Prembly reads off the document, and there is no provider call to read one,
+   * so the same passport can be submitted on two accounts and only an admin
+   * would notice. Closing it means collecting the document number from the user
+   * (or from the admin at approval) and hashing it the way the lookup path
+   * does.
+   */
+  private async queueManualKyc(
+    user: User,
+    type: string,
+    images: {
+      front_image: string;
+      back_image?: string;
+      selfie?: string;
+    },
+  ) {
+    const [kyc_image, kyc_image_back, kyc_selfie] = await this.uploadKycImages(
+      images.front_image,
+      images.back_image,
+      images.selfie,
+    );
+
+    // The document IS the submission. Joi already required it on the wire, so
+    // reaching here without a stored URL means the upload failed — and there
+    // would be nothing for an admin to look at.
+    if (!kyc_image) {
+      throw new BadRequestException(
+        "We could not store your document. Please try again in a few minutes.",
+      );
+    }
+
+    await this.userRepository.update(
+      { id: user.id },
+      {
+        kyc_type: type,
+        kyc_image,
+        kyc_image_back,
+        kyc_selfie,
+        kyc_status: KycStatus.pending,
+        kyc_error: null,
+      },
+    );
+
+    sendKycReceivedEmail(user, 2);
+
+    return {
+      message: "We have received your document and are reviewing it",
+      // The ceiling deliberately does not move here — it moves on approval.
+      data: { kyc_status: KycStatus.pending, kyc_tier: user.kyc_tier },
+    };
+  }
+
+  /**
    * Tier 3 address verification.
    *
    * Nothing is checked automatically here — there is no provider call and no
@@ -1278,6 +1350,11 @@ export class UsersService extends BaseService {
       "kyc tier": "tier 3",
       "kyc document type": dto.document_type,
     });
+
+    // Tier 3 waits on a human, so the acknowledgement is the only thing the
+    // user gets until an admin decides. Fire-and-forget: the submission is
+    // already stored and a mail outage must not fail it.
+    sendKycReceivedEmail(user, 3);
 
     return {
       message: "We have received your document and are reviewing it",

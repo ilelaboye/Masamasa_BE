@@ -36,6 +36,7 @@ import {
   getRequestQuery,
   hashResource,
   sendAccountStatusChangedEmail,
+  sendKycDecisionEmail,
   sendStaffInviteEmail,
   verifyHash,
 } from "@/core/utils";
@@ -406,6 +407,8 @@ export class AdministratorService {
       pushTitle: "Address verified",
     });
 
+    sendKycDecisionEmail(user, 3, true);
+
     this.mixpanel.track("kyc result", user_id, {
       "kyc tier": "tier 3",
       "kyc status": "verified",
@@ -443,6 +446,11 @@ export class AdministratorService {
       message: `Your address verification was declined: ${declineKycDto.reason}`,
       pushTitle: "Address verification declined",
     });
+
+    // The reason travels to the user here and in the notification above — it
+    // is the only thing that tells them what to fix before resubmitting. It
+    // must never reach Mixpanel, hence the fixed code below.
+    sendKycDecisionEmail(user, 3, false, declineKycDto.reason);
 
     // Fixed code only — the admin's free-text reason must not be sent.
     this.mixpanel.track("kyc result", user.id, {
@@ -485,6 +493,16 @@ export class AdministratorService {
     const msg = `${req.admin.first_name} ${req.admin.last_name} verified ${user.first_name} ${user.last_name} kyc`;
     this.createAdminLog(null, req.admin, AdminLogEntities.KYC_STATUS, msg);
 
+    await this.notificationsService.create({
+      userId: user_id,
+      tag: NotificationTag.security,
+      message:
+        "Your identity has been verified. You are now on Tier 2 with a higher daily limit.",
+      pushTitle: "Identity verified",
+    });
+
+    sendKycDecisionEmail(user, 2, true);
+
     this.mixpanel.track("kyc result", user_id, { "kyc status": "verified" });
     this.mixpanel.setProfile(user_id, {
       "kyc status": "verified",
@@ -512,6 +530,18 @@ export class AdministratorService {
 
     const msg = `${req.admin.first_name} ${req.admin.last_name} declined ${user.first_name} ${user.last_name} kyc because: ${declineKycDto.reason}`;
     this.createAdminLog(null, req.admin, AdminLogEntities.KYC_STATUS, msg);
+
+    await this.notificationsService.create({
+      userId: user.id,
+      tag: NotificationTag.security,
+      message: `Your identity verification was declined: ${declineKycDto.reason}`,
+      pushTitle: "Identity verification declined",
+    });
+
+    // The reason travels to the user here and in the notification above — it
+    // is the only thing that tells them what to fix before resubmitting. It
+    // must never reach Mixpanel, hence the fixed code below.
+    sendKycDecisionEmail(user, 2, false, declineKycDto.reason);
 
     // Fixed code only — the admin's free-text reason must not be sent.
     this.mixpanel.track("kyc result", user.id, {

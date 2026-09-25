@@ -625,49 +625,50 @@ export class PublicService {
   }
 
   async test(req: Request) {
-    const { search } = getRequestQuery(req);
-    let accessToken = await this.accessTokenRepository.findOne({
-      where: { type: AccessTokenType.nomba },
-    });
+    console.log("test", req);
+    // const { search } = getRequestQuery(req);
+    // let accessToken = await this.accessTokenRepository.findOne({
+    //   where: { type: AccessTokenType.nomba },
+    // });
 
-    if (!accessToken) {
-      accessToken = await this.cronJob.generateNombaAccessToken();
-    }
-    try {
-      const res = await axiosClient(
-        `${appConfig.NOMBA_BASE_URL}/v1/transactions/accounts/single?merchantTxRef=${search}`,
-        {
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-            accountId: appConfig.NOMBA_ACCOUNT_ID,
-            Authorization: `Bearer ${accessToken!.token}`,
-          },
-        },
-      );
-      console.log("Nomba bank verify transfer", res.data);
-      return res.data;
+    // if (!accessToken) {
+    //   accessToken = await this.cronJob.generateNombaAccessToken();
+    // }
+    // try {
+    //   const res = await axiosClient(
+    //     `${appConfig.NOMBA_BASE_URL}/v1/transactions/accounts/single?merchantTxRef=${search}`,
+    //     {
+    //       headers: {
+    //         "Content-Type": "application/json",
+    //         Accept: "application/json",
+    //         accountId: appConfig.NOMBA_ACCOUNT_ID,
+    //         Authorization: `Bearer ${accessToken!.token}`,
+    //       },
+    //     },
+    //   );
+    //   console.log("Nomba bank verify transfer", res.data);
+    //   return res.data;
 
-      // const priceResult = await this.getPrice("POL");
-      // console.log("priceResult", priceResult);
-      // return priceResult;
-      // const res = await axios.get(
-      //   `https://openapi.quidax.io/exchange-open-api/api/v1/users/1cs4v97s/wallets/xrp`,
+    //   // const priceResult = await this.getPrice("POL");
+    //   // console.log("priceResult", priceResult);
+    //   // return priceResult;
+    //   // const res = await axios.get(
+    //   //   `https://openapi.quidax.io/exchange-open-api/api/v1/users/1cs4v97s/wallets/xrp`,
 
-      //   {
-      //     headers: {
-      //       Authorization: `Bearer ZSKTsErViB1iY2nfVgzS6nv26kJLAjqL`,
-      //       "Content-Type": "application/json",
-      //     },
-      //     timeout: 15000,
-      //   },
-      // );
-      // console.log("quidax test", res);
-      // return res;
-    } catch (error: any) {
-      console.log("quidax test error", error.response?.data);
-      console.log("quidax test error", error);
-    }
+    //   //   {
+    //   //     headers: {
+    //   //       Authorization: `Bearer ZSKTsErViB1iY2nfVgzS6nv26kJLAjqL`,
+    //   //       "Content-Type": "application/json",
+    //   //     },
+    //   //     timeout: 15000,
+    //   //   },
+    //   // );
+    //   // console.log("quidax test", res);
+    //   // return res;
+    // } catch (error: any) {
+    //   console.log("quidax test error", error.response?.data);
+    //   console.log("quidax test error", error);
+    // }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -1,9 +1,11 @@
 import {
   IDENTITY_PROVIDERS,
   IdentityInput,
+  MANUAL_REVIEW_TYPES,
   classifyHttpError,
   classifyResponse,
   dobMismatch,
+  isManualReviewType,
   isOperational,
   namesMatch,
   normaliseDob,
@@ -19,7 +21,6 @@ import {
 const input: IdentityInput = {
   number: "12345678901",
   dob: "1994-08-21",
-  nin: "98765432109",
   first_name: "Lekan",
   last_name: "Ilelaboye",
 };
@@ -32,24 +33,6 @@ describe("identity provider table", () => {
     expect(IDENTITY_PROVIDERS.nin.body(input)).toEqual({
       number: "12345678901",
     });
-    expect(IDENTITY_PROVIDERS.voters_card.body(input)).toEqual({
-      number: "12345678901",
-    });
-
-    // The passport endpoint cross-checks the holder's NIN and dob.
-    expect(IDENTITY_PROVIDERS.passport.body(input)).toEqual({
-      number: "12345678901",
-      nin: "98765432109",
-      dob: "1994-08-21",
-    });
-
-    // FRSC matches the full name and dob we send.
-    expect(IDENTITY_PROVIDERS.drivers_license.body(input)).toEqual({
-      number: "12345678901",
-      dob: "1994-08-21",
-      first_name: "Lekan",
-      last_name: "Ilelaboye",
-    });
   });
 
   it("reads the names out of each response shape", () => {
@@ -60,34 +43,10 @@ describe("identity provider table", () => {
     ).toEqual(["Lekan", "Ilelaboye", "Tayo"]);
 
     expect(
-      IDENTITY_PROVIDERS.passport.names({
+      IDENTITY_PROVIDERS.bvn.names({
         data: { firstName: "Lekan", lastName: "Ilelaboye" },
       }),
     ).toEqual(["Lekan", "Ilelaboye", undefined]);
-
-    expect(
-      IDENTITY_PROVIDERS.voters_card.names({
-        data: { fullName: "Lekan Tayo Ilelaboye" },
-      }),
-    ).toEqual(["Lekan Tayo Ilelaboye"]);
-  });
-
-  it("has nothing to match for a driver's licence", () => {
-    // FRSC returns a verdict, not details — a null list means "already
-    // matched by the provider", which is not the same as "no names found".
-    expect(IDENTITY_PROVIDERS.drivers_license.names({})).toBeNull();
-  });
-
-  it("only passes a licence when FRSC itself verified it", () => {
-    const { verified } = IDENTITY_PROVIDERS.drivers_license;
-    expect(verified({ status: true, frsc_data: { verified: true } })).toBe(
-      true,
-    );
-    // A successful call that did not verify must not count as a pass.
-    expect(verified({ status: true, frsc_data: { verified: false } })).toBe(
-      false,
-    );
-    expect(verified({ status: true })).toBe(false);
   });
 
   it("reads each endpoint's birthdate field", () => {
@@ -97,10 +56,39 @@ describe("identity provider table", () => {
     expect(
       IDENTITY_PROVIDERS.bvn.dob({ data: { dateOfBirth: "1994-08-21" } }),
     ).toBe("1994-08-21");
-    expect(
-      IDENTITY_PROVIDERS.passport.dob({ data: { dateOfBirth: "1994-08-21" } }),
-    ).toBe("1994-08-21");
-    expect(IDENTITY_PROVIDERS.drivers_license.dob({})).toBeUndefined();
+  });
+});
+
+describe("the lookup / manual-review split", () => {
+  /**
+   * The whole point of the split: a type is looked up or it is reviewed by a
+   * person, never both. A type in both lists would burn a Prembly credit on a
+   * submission an admin is also going to read; a type in neither is
+   * unsubmittable.
+   */
+  it("never lists a type as both looked up and reviewed", () => {
+    for (const type of MANUAL_REVIEW_TYPES) {
+      expect(IDENTITY_PROVIDERS).not.toHaveProperty(type);
+    }
+  });
+
+  it("covers every ID type the app offers", () => {
+    // Mirrors kIdTypes in the mobile app's kyc_flow.dart.
+    const offered = ["bvn", "nin", "passport", "drivers_license", "voters_card"];
+    for (const type of offered) {
+      const routed =
+        isManualReviewType(type) ||
+        Object.prototype.hasOwnProperty.call(IDENTITY_PROVIDERS, type);
+      expect([type, routed]).toEqual([type, true]);
+    }
+  });
+
+  it("does not route a looked-up type to manual review", () => {
+    expect(isManualReviewType("bvn")).toBe(false);
+    expect(isManualReviewType("nin")).toBe(false);
+    expect(isManualReviewType("passport")).toBe(true);
+    expect(isManualReviewType("drivers_license")).toBe(true);
+    expect(isManualReviewType("voters_card")).toBe(true);
   });
 });
 

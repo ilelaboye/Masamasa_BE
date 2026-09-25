@@ -9,7 +9,8 @@ export class KycDto {
 
   @ApiPropertyOptional({
     example: "12345678901",
-    description: "The ID number. Send this or front_image, not neither.",
+    description:
+      "The ID number, with dob. Looked-up types only (bvn, nin) — rejected for passport, drivers_license and voters_card, which an admin reviews.",
   })
   number?: string;
 
@@ -17,12 +18,9 @@ export class KycDto {
   dob?: string;
 
   @ApiPropertyOptional({
-    example: "12345678901",
-    description: "The holder's NIN. Required when type is passport.",
+    description:
+      "Base64 of the front of the document. Required for passport, drivers_license and voters_card.",
   })
-  nin?: string;
-
-  @ApiPropertyOptional({ description: "Base64 of the front of the document" })
   front_image?: string;
 
   @ApiPropertyOptional({ description: "Base64 of the back of the document" })

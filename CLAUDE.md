@@ -180,15 +180,26 @@ try {
 
 Three tiers. Tier 1 is every registered account with a verified email (₦50,000 daily withdrawal); tier 2 is identity verified (₦5,000,000); tier 3 is address verified (₦10,000,000). `users.kyc_tier` is what the app shows; `users.withdrawal_limit` is what a withdrawal is actually held to, because an admin can adjust an individual account. Never derive one from the other at the point of use.
 
-### The provider table
+### Tier 2 has two routes, and which one a type takes is data
 
-[`identity-providers.ts`](src/modules/global/bank-verification/identity-providers.ts) is the centre of this. Each Prembly endpoint takes a different request body and answers in a different shape, so the differences live there as data — one entry per ID type with `url`, `body()`, `verified()`, `names()` and `dob()`. Adding an ID type is a new entry, not a new branch. The file is pure and covered by `identity-providers.spec.ts`; **the mobile app mirrors it** in `masamasa_mobile/lib/screens/Dashboard/kyc/kyc_flow.dart` and the two must agree.
+[`identity-providers.ts`](src/modules/global/bank-verification/identity-providers.ts) is the centre of this, and its job is to draw that line. A type is in **one** of two lists, never both:
 
-Per-endpoint traps the table already accounts for:
+| Route | Types | What happens |
+|---|---|---|
+| `IDENTITY_PROVIDERS` | `bvn`, `nin` | Number looked up with the issuing authority. Instant verdict. |
+| `MANUAL_REVIEW_TYPES` | `passport`, `drivers_license`, `voters_card` | Front photo uploaded, **an admin decides**. No provider call at all. |
+
+`isManualReviewType(type)` is the switch, and `userKyc` branches on it into `queueManualKyc` before any provider is touched. A type in both lists would buy a Prembly credit on a submission a person is also going to read; a type in neither is unsubmittable. `identity-providers.spec.ts` pins exactly that, and **the mobile app mirrors the split** in `masamasa_mobile/lib/screens/Dashboard/kyc/kyc_flow.dart` via `IdTypeConfig.needsDocument` — change one, change the other.
+
+Each looked-up endpoint takes a different request body and answers in a different shape, so those differences live in `IDENTITY_PROVIDERS` as data — one entry with `url`, `body()`, `verified()`, `names()` and `dob()`. Adding a looked-up type is a new entry, not a new branch.
+
+Per-endpoint traps the table accounts for:
 
 - NIN returns `birthdate` as **DD-MM-YYYY**, which `new Date()` cannot parse at all. Use `normaliseDob`, never `new Date(...)`, on a provider date.
-- The driver's licence endpoint returns **no user details** — FRSC matches the name and date of birth we send and answers with a verdict. `names()` returns `null` there, meaning "already matched by the provider", which is not the same as "no names found".
-- Document scans are matched on **name only**. A date of birth read by OCR would reject legitimate users over a misread digit.
+- `names()` returning `null` means "the provider matched the names itself from what we sent", which is not the same as "no names found". No endpoint does this today — the driver's licence FRSC lookup that did was removed when the licence became a manual-review type — but `verifyIdentity` still honours it.
+- Document scans (the `other` type, via `verifyDocument`) are matched on **name only**. A date of birth read by OCR would reject legitimate users over a misread digit.
+
+**Why the three were taken off Prembly.** The business chose a person over a lookup. Their endpoint config was deleted rather than left unreachable, so the file never claims a call it does not make. Re-enabling one means restoring its `IDENTITY_PROVIDERS` entry *and* removing it from `MANUAL_REVIEW_TYPES` *and* flipping `needsDocument` in the mobile table.
 
 ### Failures: whose problem is it
 
@@ -198,7 +209,14 @@ Per-endpoint traps the table already accounts for:
 
 ### Flow
 
-`POST /user/kyc` takes **either** `number` + `dob` **or** `front_image` (base64), never neither — enforced by Joi `.or()`/`.and()`. Outcomes: verified → tier 2 + raised ceiling; mismatch → `failed` + `kyc_error`; provider unavailable → `pending` for admin review if a document was supplied, otherwise "try again later" (there is nothing for an admin to look at without one).
+**`POST /user/kyc` accepts a different body per type, and `KycValidation` enforces it** — this is the trust boundary, not a convenience:
+
+- **Manual-review types**: `front_image` (base64) is **required**, and `number`/`dob` are `Joi.forbidden()`. A rejection is deliberate rather than stripping the field: a client still sending a number is a stale build that believes it is getting an instant verdict.
+- **Looked-up types**: `number` + `dob` (`.and()`), or a `front_image` for the OCR path — never neither (`.or()`).
+
+Outcomes on the looked-up route: verified → tier 2 + raised ceiling; mismatch → `failed` + `kyc_error`; provider unavailable → `pending` for admin review if a document was supplied, otherwise "try again later" (there is nothing for an admin to look at without one).
+
+The manual route has exactly one outcome: `kyc_status = pending`, ceiling unmoved, queued for `GET /admin/get-pending-kyc?type=identity`. It is the same shape as `submitAddressKyc` — record, set pending, stop — so **the closing screen in the app is always "in review"** for those three types.
 
 The selfie arrives as base64 in that same body and is uploaded to Cloudinary alongside the document, with whatever verdict came back. There is **no liveness check** — it was removed along with the `POST /user/kyc/selfie` endpoint it lived in, so nothing verifies that a selfie is a live face.
 
@@ -207,7 +225,8 @@ Both admin approval (`administrator.service.ts`) and the automated path must set
 ### Gotchas
 
 - Images arrive as base64 in the JSON body because Prembly reads them before anything is stored. `main.ts` raises the body-parser limit to 12mb for this; Express's 100kb default rejects every photo.
-- One government ID verifies one account. `assertNotAlreadyUsed` compares a stored excerpt plus a bcrypt hash — the full number is never stored, and a document is deduped on the number Prembly reads off it.
+- **One government ID verifies one account — but only on the looked-up route.** `assertNotAlreadyUsed` compares a stored excerpt plus a bcrypt hash of the number, and the full number is never stored. It **cannot run for a manual-review type**: there is no provider call, so there is no number read off the document. The same passport can therefore be submitted on two accounts and only an admin would notice. This was an explicit trade, marked with a `ponytail:` comment on `queueManualKyc`; closing it means collecting the document number from the user, or from the admin at approval, and hashing it the way the lookup path does.
+- Nothing is written to `bank_verifications` on the manual route either, because no verification was bought.
 - `bank_verifications.type` is a **varchar**, not a pg enum, so a new ID type does not need an `ALTER TYPE`.
 
 ### Tier 3 (address verification)
@@ -219,6 +238,10 @@ it from the KYC page in `masamasa-admin2`, and `verifyAddressKyc` is the only
 thing that moves `kyc_tier` to 3 and `withdrawal_limit` to
 `WITHDRAWAL_MAX_ADDRESS_VERIFIED`. So there is no poller, no `job_id` and no
 instant-success path — **the closing screen in the app is always "in review"**.
+
+(Tier 2's manual-review types now work the same way — `queueManualKyc` is the
+tier 2 equivalent of this. What is still tier-3-only is everything below: the
+separate columns, the separate queue, and the tier 2 prerequisite.)
 
 (Prembly *does* sell an asynchronous address check — `POST
 /verification/address` returns a `job_id`, a person visits the address, a
@@ -250,6 +273,43 @@ Two things that are easy to get wrong:
 
 A decline only moves `address_*`; the account keeps the tier 2 status and
 ceiling it already earned.
+
+---
+
+## Announcing a reviewed decision
+
+**Wherever a person decides, the outcome is announced.** There is no polling for
+the app to do, so the user hears about a reviewed submission only through what
+these paths send. That now covers both reviewed routes — tier 3, and the tier 2
+manual-review types:
+
+| Path | Email (`accountEmails.ts`) | In-app + push |
+|---|---|---|
+| `queueManualKyc` (tier 2 photo) | `sendKycReceivedEmail(user, 2)` | — |
+| `verifyKyc` | `sendKycDecisionEmail(user, 2, true)` | `notificationsService.create` |
+| `declineKyc` | `sendKycDecisionEmail(user, 2, false, reason)` | `notificationsService.create` |
+| `submitAddressKyc` | `sendKycReceivedEmail(user, 3)` | — |
+| `verifyAddressKyc` | `sendKycDecisionEmail(user, 3, true)` | `notificationsService.create` |
+| `declineAddressKyc` | `sendKycDecisionEmail(user, 3, false, reason)` | `notificationsService.create` |
+
+The copy that differs between the two tiers lives in one `REVIEWED_TIERS` table
+in `accountEmails.ts`, so there is a single pair of senders rather than a pair
+per tier. `ReviewedTier` is `2 | 3` — **a BVN or NIN lookup sends none of
+these**, because it settles in seconds and never waits on an admin.
+
+A `create()` with `pushTitle` writes the stored in-app row **and** fires the FCM
+pop-up — one call, both surfaces. The emails are fire-and-forget with
+`.catch(() => {})` like every other sender in that file: the submission is
+already stored and the tier already moved, so a ZeptoMail outage must never
+fail the request.
+
+**The decline reason goes to the user and nowhere else.** It reaches them in
+both the email and the notification message — without it there is nothing to
+correct before resubmitting. It is admin free text, so the email escapes it
+through `esc()`, and it must **never** be sent to Mixpanel, which takes the
+fixed code `ADMIN_DECLINED` instead. `kycEmails.spec.ts` pins the reason, the
+escaping, the absence of a reason on the approval path, and that the two tiers'
+copy does not get swapped.
 
 ---
 
