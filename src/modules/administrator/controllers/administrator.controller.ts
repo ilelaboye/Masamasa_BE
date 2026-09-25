@@ -402,6 +402,12 @@ export class AdministratorController {
     required: false,
     enum: ["none", "pending", "success", "failed"],
   })
+  @ApiQuery({
+    name: "type",
+    required: false,
+    enum: ["identity", "address"],
+    description: "address reads the tier 3 queue (address_status)",
+  })
   @ApiQuery({ name: "page", required: false, type: Number })
   @ApiQuery({ name: "limit", required: false, type: Number })
   @AllowRoles(AdministratorRoles.support)
@@ -414,6 +420,23 @@ export class AdministratorController {
   @Get("verify-kyc/:id")
   async verifyKyc(@Param("id") id: string, @Req() req: AdminRequest) {
     return this.administratorService.verifyKyc(+id, req);
+  }
+
+  @ApiOperation({
+    summary: "Approve a user's tier 3 address verification",
+  })
+  @Get("verify-address-kyc/:id")
+  async verifyAddressKyc(@Param("id") id: string, @Req() req: AdminRequest) {
+    return this.administratorService.verifyAddressKyc(+id, req);
+  }
+
+  @ApiOperation({ summary: "Decline a user's tier 3 address verification" })
+  @Post("decline-address-kyc")
+  async declineAddressKyc(
+    @Body() declineKycDto: DeclineKycDto,
+    @Req() req: AdminRequest,
+  ) {
+    return this.administratorService.declineAddressKyc(declineKycDto, req);
   }
 
   @ApiOperation({ summary: "Get exchange rates" })

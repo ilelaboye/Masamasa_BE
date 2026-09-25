@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- the test doubles below
    stand in for a TypeORM repository, DataSource and query builder; typing them
    fully would be more scaffolding than the three assertions are worth. */
-import { WITHDRAWAL_MAX_PER_DAY } from "@/constants";
+import { WITHDRAWAL_MAX_ADDRESS_VERIFIED } from "@/constants";
 import { UpdateWithdrawalLimitValidation } from "@/modules/administrator/validations/admin.validation";
 import { KycStatus, User } from "../entities/user.entity";
 import { UsersService } from "./users.service";
@@ -99,13 +99,13 @@ describe("UpdateWithdrawalLimitValidation", () => {
   });
 
   it("accepts the maximum a withdrawal request may itself be", () => {
-    expect(validate(WITHDRAWAL_MAX_PER_DAY).error).toBeUndefined();
+    expect(validate(WITHDRAWAL_MAX_ADDRESS_VERIFIED).error).toBeUndefined();
   });
 
   it("rejects a limit no withdrawal could ever use", () => {
     // Above this, WithdrawalValidation would reject the request before the
     // service ever compared it to the account's limit.
-    expect(validate(WITHDRAWAL_MAX_PER_DAY + 1).error).toBeDefined();
+    expect(validate(WITHDRAWAL_MAX_ADDRESS_VERIFIED + 1).error).toBeDefined();
     expect(validate(-1).error).toBeDefined();
   });
 });

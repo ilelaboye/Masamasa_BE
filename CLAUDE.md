@@ -178,7 +178,7 @@ try {
 
 ## KYC tiers
 
-Three tiers. Tier 1 is every registered account with a verified email (₦50,000 daily withdrawal); tier 2 is identity verified (₦5,000,000); tier 3 is address verified (₦10,000,000, **not built yet**). `users.kyc_tier` is what the app shows; `users.withdrawal_limit` is what a withdrawal is actually held to, because an admin can adjust an individual account. Never derive one from the other at the point of use.
+Three tiers. Tier 1 is every registered account with a verified email (₦50,000 daily withdrawal); tier 2 is identity verified (₦5,000,000); tier 3 is address verified (₦10,000,000). `users.kyc_tier` is what the app shows; `users.withdrawal_limit` is what a withdrawal is actually held to, because an admin can adjust an individual account. Never derive one from the other at the point of use.
 
 ### The provider table
 
@@ -210,53 +210,46 @@ Both admin approval (`administrator.service.ts`) and the automated path must set
 - One government ID verifies one account. `assertNotAlreadyUsed` compares a stored excerpt plus a bcrypt hash — the full number is never stored, and a document is deduped on the number Prembly reads off it.
 - `bank_verifications.type` is a **varchar**, not a pg enum, so a new ID type does not need an `ALTER TYPE`.
 
-### Tier 3 (address verification) — not built
+### Tier 3 (address verification)
 
-Nothing below exists yet. It is written down because the shape of tier 3 is
-**not** the shape of tier 2, and assuming otherwise is the trap.
+**Tier 3 is reviewed by a person, not a provider.** There is no Prembly call
+on this path at all: `POST /user/kyc/address` records the address and its
+proof, sets `address_status = pending` and stops. An admin approves or declines
+it from the KYC page in `masamasa-admin2`, and `verifyAddressKyc` is the only
+thing that moves `kyc_tier` to 3 and `withdrawal_limit` to
+`WITHDRAWAL_MAX_ADDRESS_VERIFIED`. So there is no poller, no `job_id` and no
+instant-success path — **the closing screen in the app is always "in review"**.
 
-**Prembly's address verification is asynchronous.** `POST /verification/address`
-returns a `job_id` and `addressStatus: "pending"`; a real verdict takes a
-minimum of 48 hours because a human goes to the address. `POST
-/verification/address/status` with that `job_id` returns `pending`,
-`unassigned` or `VERIFIED`. Note the trap in the submit response: its
-`verification.status` reads `"VERIFIED"` for an accepted *request* — the actual
-state is `data.addressStatus`, not that field.
+(Prembly *does* sell an asynchronous address check — `POST
+/verification/address` returns a `job_id`, a person visits the address, a
+verdict takes 48h minimum, and the real state is `data.addressStatus`, not the
+`verification.status` field, which reads `"VERIFIED"` for a merely *accepted*
+request. None of that is wired up. Adding it means a `CronJob` polling
+`/verification/address/status` and the extra fields it wants — `street`, `lga`,
+`landmark` — which `users` does not have.)
 
-Consequences, in the order they will bite:
+**Tier 3 has its own columns and its own queue.** `address_status`,
+`address_proof_type`, `address_proof_image` and `address_error` exist because a
+tier 3 submission arrives when the account is already `kyc_status = success`:
+sharing the `kyc_*` columns would hit `userKyc`'s early return, and the identity
+queue (`kyc_status = pending`) would read every address submission as an ID
+review. `GET /admin/get-pending-kyc?type=address` is the tier 3 queue;
+`verify-address-kyc/:id` and `decline-address-kyc` are its decisions. They are
+separate endpoints from the tier 2 pair on purpose — they write different
+columns.
 
-1. **The one-submission-per-user-row model breaks.** `kyc_status`, `kyc_image`,
-   `kyc_image_back` and `kyc_selfie` describe a single in-flight submission. A
-   tier 3 submission arrives when the account is already `kyc_status = success`
-   from tier 2, which `userKyc` returns early on and which the admin queue
-   (`kyc_status = pending` + `kyc_image`) would misread as an identity review.
-   Decide first: separate columns (`address_status`, `address_job_id`,
-   `address_proof_image`) or finally add the `kyc_submissions` table that was
-   deferred in tier 2. Everything else depends on this.
-2. **Something has to poll.** Tier 3 is granted when the status endpoint turns
-   `VERIFIED`, not when the user submits. That needs a job in the existing
-   `CronJob` reading pending `address_job_id`s, plus a notification when it
-   lands. There is no webhook.
-3. **The submission needs fields we do not collect.** Prembly requires
-   `first_name`, `last_name`, `phone`, `email`, `address`, `street`, `city`,
-   `state`, `lga`, `landmark`, `verification_type: "person"` and
-   `address_verification_due_date` (YYYY-MM-DD). `users` has address, city,
-   state and country — `lga`, `street` and `landmark` are new, and `country` is
-   unused here since the endpoint is Nigeria-only.
-4. **The closing screen is always "in review".** There is no instant-success
-   path to mirror tier 2's, and limits must not move until the poller says so.
+Two things that are easy to get wrong:
 
-Reusable as-is, so do not rebuild: `classifyResponse` / `classifyHttpError` and
-the operational-vs-user failure split, the base64 + 12mb body limit path, the
-Cloudinary upload helper, and `DOCUMENT_CODES.utility_bill` (`"UB"`) if a
-scanned proof of address is wanted alongside the physical visit.
+- **Tier 3 sits on top of tier 2.** `submitAddressKyc` refuses an account whose
+  `kyc_status` is not `success`, or tier 3 limits would be granted to someone
+  nobody has identified.
+- **`WITHDRAWAL_MAX_PER_DAY` (₦5m) is the tier 2 ceiling, not the system
+  maximum.** Both Joi schemas — `WithdrawalValidation` and
+  `UpdateWithdrawalLimitValidation` — cap at `WITHDRAWAL_MAX_ADDRESS_VERIFIED`
+  (₦10m). Capping either at the tier 2 figure silently makes tier 3 unusable.
 
-Still to add: `KYC_TIER_ADDRESS = 3` and a ₦10,000,000 ceiling constant in
-`constants.ts` (the mobile side already carries the figure in
-`kTierDailyLimits[3]`), and a migration for whichever data model wins point 1.
-
-**Blocked on**: the tier 3 screen designs, which have not been supplied. The
-mobile flow cannot start without them; points 1–3 are backend work that can.
+A decline only moves `address_*`; the account keeps the tier 2 status and
+ceiling it already earned.
 
 ---
 

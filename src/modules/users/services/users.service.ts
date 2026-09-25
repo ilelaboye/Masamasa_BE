@@ -10,6 +10,7 @@ import { DataSource, EntityManager, Not, Repository } from "typeorm";
 import { BaseService } from "../../base.service";
 import { KycStatus, User } from "../entities/user.entity";
 import {
+  AddressKycDto,
   ChangePinDto,
   ChangeUserPasswordDto,
   CreatePinDto,
@@ -168,6 +169,7 @@ export class UsersService extends BaseService {
    * remember_token / token_created_at pair the verification steps read.
    */
   private async emailPinOtp(user: User, subject: string) {
+    console.log("user", user);
     const otp = generateRandomNumberString(6);
     await this.userRepository.update(
       { id: user.id },
@@ -1207,6 +1209,80 @@ export class UsersService extends BaseService {
         kyc_tier: KYC_TIER_IDENTITY,
         withdrawal_limit: WITHDRAWAL_MAX_PER_DAY,
       },
+    };
+  }
+
+  /**
+   * Tier 3 address verification.
+   *
+   * Nothing is checked automatically here — there is no provider call and no
+   * instant-success path. The address and its proof are recorded, the account
+   * is queued for an admin to look at, and the tier and ceiling only move when
+   * `verifyAddressKyc` approves it. Tier 3 has its own `address_*` columns
+   * because the account is already `kyc_status = success` by the time it gets
+   * here.
+   */
+  async submitAddressKyc(dto: AddressKycDto, req: UserRequest) {
+    const user = await this.userRepository.findOne({
+      where: { id: req.user.id },
+    });
+    if (!user) {
+      throw new BadRequestException("User not found, please login again");
+    }
+
+    // Address verification sits on top of identity verification — approving it
+    // for an unverified account would hand out tier 3 limits without anyone
+    // having confirmed who the holder is.
+    if (user.kyc_status !== KycStatus.success) {
+      throw new BadRequestException(
+        "Complete your identity verification (Tier 2) before verifying your address",
+      );
+    }
+    if (user.address_status === KycStatus.success) {
+      return { message: "Your address is already verified." };
+    }
+    if (user.address_status === KycStatus.pending) {
+      throw new BadRequestException(
+        "We are reviewing your last submission, you will hear from us shortly",
+      );
+    }
+
+    const [address_proof_image] = await this.uploadKycImages(
+      dto.document_image,
+    );
+    // The document IS the submission: with no stored image there is nothing
+    // for an admin to review, so this cannot be queued as pending.
+    if (!address_proof_image) {
+      throw new BadRequestException(
+        "We could not store your document. Please try again in a few minutes.",
+      );
+    }
+
+    await this.userRepository.update(
+      { id: user.id },
+      {
+        address: dto.address,
+        city: dto.city,
+        state: dto.state,
+        country: dto.country,
+        postal_code: dto.postal_code || null,
+        address_proof_type: dto.document_type,
+        address_proof_image,
+        address_status: KycStatus.pending,
+        address_error: null,
+      },
+    );
+
+    // Document TYPE only — never the document itself or the address.
+    this.mixpanel.track("kyc submitted", user.id, {
+      "kyc tier": "tier 3",
+      "kyc document type": dto.document_type,
+    });
+
+    return {
+      message: "We have received your document and are reviewing it",
+      // The ceiling deliberately does not move here — it moves on approval.
+      data: { address_status: KycStatus.pending, kyc_tier: user.kyc_tier },
     };
   }
 

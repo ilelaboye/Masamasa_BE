@@ -32,17 +32,23 @@ export const ClearCookieOptions = {
 export const DEPOSIT_FEE_USD = 1;
 export const DEPOSIT_FEE_EXEMPT_CURRENCIES = new Set(["usdt", "cngn"]);
 
-// The highest daily withdrawal ceiling any account may hold, in NGN. Each
-// account carries its own limit in users.withdrawal_limit — this is the value
-// KYC approval raises it to, and the maximum an admin may set it to. There is
-// no separate per-transaction cap: a single withdrawal may be as large as the
-// day's remaining allowance.
+// The daily withdrawal ceiling identity verification (tier 2) raises an account
+// to, in NGN. Each account carries its own limit in users.withdrawal_limit.
+// There is no separate per-transaction cap: a single withdrawal may be as large
+// as the day's remaining allowance.
 // The day is a calendar day in the app timezone (Africa/Lagos).
 export const WITHDRAWAL_MAX_PER_DAY = 5000000;
 
+// What address verification (tier 3) raises the ceiling to, and therefore the
+// highest limit any account may hold: the maximum an admin may set by hand and
+// the widest a single withdrawal may be. Both Joi schemas cap at this rather
+// than at the tier 2 figure, or a tier 3 account could never spend its ceiling.
+export const WITHDRAWAL_MAX_ADDRESS_VERIFIED = 10000000;
+
 // Verification tier reached once identity is verified. Tier 1 is every
-// registered account; tier 3 (address verification) is not built yet.
+// registered account; tier 3 is address verified.
 export const KYC_TIER_IDENTITY = 2;
+export const KYC_TIER_ADDRESS = 3;
 
 // Smallest withdrawal accepted, for any account.
 export const WITHDRAWAL_MIN_PER_TRANSACTION = 1000;

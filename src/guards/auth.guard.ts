@@ -30,7 +30,7 @@ export class AuthGuard implements CanActivate {
 
       // console.log("Payload", payload);
 
-      req["user"] = payload;
+      req["user"] = user;
     } catch {
       res.clearCookie(_AUTH_COOKIE_NAME_);
       throw new UnauthorizedException(

@@ -17,6 +17,7 @@ import {
 import { ApiCookieAuth, ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
 import {
+  AddressKycDto,
   ChangePinDto,
   ChangeUserPasswordDto,
   ConfirmDeleteAccountDto,
@@ -32,6 +33,7 @@ import {
 } from "../dto";
 import { UsersService } from "../services/users.service";
 import {
+  AddressKycValidation,
   ChangeUserPasswordValidation,
   KycValidation,
   VerifyPasswordChangeValidation,
@@ -159,6 +161,17 @@ export class UsersController {
   @UsePipes(new JoiValidationPipe(KycValidation))
   async kyc(@Body() kycDto: KycDto, @Req() req: UserRequest) {
     return await this.usersService.userKyc(kycDto, req);
+  }
+
+  // Tier 3. Always ends in a review queue — there is no provider to ask, so
+  // this never comes back verified.
+  @Post("kyc/address")
+  @UsePipes(new JoiValidationPipe(AddressKycValidation))
+  async addressKyc(
+    @Body() addressKycDto: AddressKycDto,
+    @Req() req: UserRequest,
+  ) {
+    return await this.usersService.submitAddressKyc(addressKycDto, req);
   }
 
   // @Post("email-verification")

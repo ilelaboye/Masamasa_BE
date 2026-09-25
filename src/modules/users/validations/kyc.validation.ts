@@ -47,3 +47,33 @@ export const KycValidation = Joi.object()
   })
   .or("number", "front_image")
   .and("number", "dob");
+
+/**
+ * What counts as a proof of address. Stored as-is on the user so the admin
+ * reviewing the document knows what they are looking at; the mobile flow
+ * mirrors this list.
+ */
+export const ADDRESS_PROOF_TYPES = [
+  "electricity_bill",
+  "water_bill",
+  "government_correspondence",
+  "other",
+];
+
+/**
+ * Tier 3 address verification. Unlike tier 2 there is no provider to ask —
+ * the document is reviewed by an admin, so everything here is simply recorded
+ * and queued. The image is the whole point of the submission and is required.
+ */
+export const AddressKycValidation = Joi.object().keys({
+  address: Joi.string().min(5).max(255).required().label("Address"),
+  city: Joi.string().max(100).required().label("City"),
+  state: Joi.string().max(100).required().label("State"),
+  country: Joi.string().max(100).required().label("Country"),
+  postal_code: Joi.string().max(20).allow("", null).label("Postal code"),
+  document_type: Joi.string()
+    .valid(...ADDRESS_PROOF_TYPES)
+    .required()
+    .label("Document type"),
+  document_image: base64Image.required().label("Document"),
+});

@@ -1,4 +1,11 @@
-import { KYC_TIER_IDENTITY, WITHDRAWAL_MAX_PER_DAY } from "@/constants";
+import {
+  KYC_TIER_ADDRESS,
+  KYC_TIER_IDENTITY,
+  WITHDRAWAL_MAX_ADDRESS_VERIFIED,
+  WITHDRAWAL_MAX_PER_DAY,
+} from "@/constants";
+import { NotificationsService } from "@/modules/notifications/notifications.service";
+import { NotificationTag } from "@/modules/notifications/entities/notification.entity";
 import { CacheService } from "@/modules/global/cache-container/cache-container.service";
 import { MixpanelService } from "@/modules/global/mixpanel/mixpanel.service";
 import { BadRequestException, Injectable } from "@nestjs/common";
@@ -73,6 +80,7 @@ export class AdministratorService {
     private readonly exchangeRateService: ExchangeRateService,
     private readonly mixpanel: MixpanelService,
     private readonly dataSource: DataSource,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   // What a reprocessed withdrawal's retry counter is wound back to. Not 0:
@@ -318,30 +326,132 @@ export class AdministratorService {
    * Pass ?status=pending for the review queue (documents awaiting a decision),
    * or any other KycStatus value. `none` is stored as NULL on older rows, so
    * it is matched with IS NULL as well.
+   *
+   * ?type=address switches to the tier 3 queue, which lives in its own
+   * `address_status` column — an account in it is already `kyc_status =
+   * success`, so the two queues would otherwise be indistinguishable.
    */
   async getPendingKYC(req: AdminRequest) {
-    const { limit, page, skip, status } = getRequestQuery(req);
+    const { limit, page, skip, status, type } = getRequestQuery(req);
 
     const kycStatus = Object.values(KycStatus).includes(status as KycStatus)
       ? (status as KycStatus)
       : KycStatus.none;
+    const column = type === "address" ? "address_status" : "kyc_status";
 
     const queryRunner = this.userRepository.createQueryBuilder("users");
 
     if (kycStatus === KycStatus.none) {
       queryRunner.where(
-        "(users.kyc_status = :status OR users.kyc_status IS NULL)",
+        `(users.${column} = :status OR users.${column} IS NULL)`,
         { status: KycStatus.none },
       );
     } else {
-      queryRunner.where("users.kyc_status = :status", { status: kycStatus });
+      queryRunner.where(`users.${column} = :status`, { status: kycStatus });
     }
 
     const count = await queryRunner.getCount();
-    const kyc = await queryRunner.skip(skip).take(limit).getMany();
+    const kyc = await queryRunner
+      .orderBy("users.updated_at", "ASC")
+      .skip(skip)
+      .take(limit)
+      .getMany();
 
     const metadata = paginate(count, page, limit);
     return { kyc, metadata };
+  }
+
+  /**
+   * Approve a tier 3 address submission.
+   *
+   * Tier 3 has no automated route — an admin looking at the document is the
+   * only way an account reaches it, so this is where the tier and the ceiling
+   * move. Guarded to the pending → success transition so it cannot reset a
+   * limit an admin set by hand on an already-verified account.
+   */
+  async verifyAddressKyc(user_id: number, req: AdminRequest) {
+    const user = await this.userRepository
+      .createQueryBuilder("user")
+      .where("user.id = :id", { id: user_id })
+      .getOne();
+    if (!user) throw new BadRequestException("User not found");
+
+    if (!user.address_proof_image) {
+      throw new BadRequestException("User has not uploaded a proof of address");
+    }
+    if (user.address_status != KycStatus.pending) {
+      throw new BadRequestException(
+        "This user does not have a pending address verification",
+      );
+    }
+
+    const update = await this.userRepository.update(
+      { id: user_id },
+      {
+        address_status: KycStatus.success,
+        address_error: null,
+        kyc_tier: KYC_TIER_ADDRESS,
+        withdrawal_limit: WITHDRAWAL_MAX_ADDRESS_VERIFIED,
+      },
+    );
+
+    const msg = `${req.admin.first_name} ${req.admin.last_name} verified ${user.first_name} ${user.last_name} address`;
+    this.createAdminLog(null, req.admin, AdminLogEntities.KYC_STATUS, msg);
+
+    await this.notificationsService.create({
+      userId: user_id,
+      tag: NotificationTag.security,
+      message:
+        "Your address has been verified. You are now on Tier 3 with a higher daily limit.",
+      pushTitle: "Address verified",
+    });
+
+    this.mixpanel.track("kyc result", user_id, {
+      "kyc tier": "tier 3",
+      "kyc status": "verified",
+    });
+
+    return update;
+  }
+
+  async declineAddressKyc(declineKycDto: DeclineKycDto, req: AdminRequest) {
+    if (!declineKycDto.reason || declineKycDto.reason.length < 2) {
+      throw new BadRequestException("Decline reason is required");
+    }
+    const user = await this.userRepository
+      .createQueryBuilder("user")
+      .where("user.id = :id", { id: declineKycDto.user })
+      .getOne();
+    if (!user) throw new BadRequestException("User not found");
+
+    // Only address_* moves — the account keeps the tier 2 status and ceiling
+    // it already earned.
+    const update = await this.userRepository.update(
+      { id: user.id },
+      {
+        address_status: KycStatus.failed,
+        address_error: declineKycDto.reason,
+      },
+    );
+
+    const msg = `${req.admin.first_name} ${req.admin.last_name} declined ${user.first_name} ${user.last_name} address verification because: ${declineKycDto.reason}`;
+    this.createAdminLog(null, req.admin, AdminLogEntities.KYC_STATUS, msg);
+
+    await this.notificationsService.create({
+      userId: user.id,
+      tag: NotificationTag.security,
+      message: `Your address verification was declined: ${declineKycDto.reason}`,
+      pushTitle: "Address verification declined",
+    });
+
+    // Fixed code only — the admin's free-text reason must not be sent.
+    this.mixpanel.track("kyc result", user.id, {
+      "kyc tier": "tier 3",
+      "kyc status": "rejected",
+      "rejection reason code": "ADMIN_DECLINED",
+    });
+
+    return update;
   }
 
   async verifyKyc(user_id: number, req: AdminRequest) {

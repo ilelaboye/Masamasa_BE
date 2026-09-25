@@ -86,12 +86,36 @@ export class User {
 
   /**
    * Verification tier reached. 1 is every registered account; 2 is identity
-   * verified; 3 (address verified) is not built yet. The tier is what the user
-   * is shown — `withdrawal_limit` is what a withdrawal is actually held to,
-   * because an admin can adjust that per account.
+   * verified; 3 is address verified. The tier is what the user is shown —
+   * `withdrawal_limit` is what a withdrawal is actually held to, because an
+   * admin can adjust that per account.
    */
   @Column({ type: "smallint", default: 1 })
   kyc_tier: number;
+
+  /**
+   * Tier 3 (address verification) has its own status columns rather than
+   * reusing the kyc_* ones. A tier 3 submission arrives when `kyc_status` is
+   * already `success`, so sharing them would both be rejected by `userKyc`'s
+   * early return and misread by the admin identity queue as an ID review.
+   */
+  @Column({
+    type: "varchar",
+    default: KycStatus.none,
+  })
+  address_status: KycStatus;
+
+  /** Which proof of address was supplied — see ADDRESS_PROOF_TYPES. */
+  @Column({ type: "varchar", nullable: true })
+  address_proof_type?: string | null;
+
+  /** The uploaded proof of address (Cloudinary URL). */
+  @Column({ type: "varchar", nullable: true })
+  address_proof_image?: string | null;
+
+  /** Why the last address submission was declined. Cleared on a fresh one. */
+  @Column({ type: "varchar", nullable: true })
+  address_error?: string | null;
 
   @Column({ unique: true })
   email: string;
@@ -119,6 +143,10 @@ export class User {
 
   @Column({ nullable: true })
   country: string;
+
+  /** Optional — collected with the tier 3 address, not everywhere in Nigeria has one. */
+  @Column({ type: "varchar", nullable: true })
+  postal_code?: string | null;
 
   /**
    * This user's own referral code — what they share with other people.

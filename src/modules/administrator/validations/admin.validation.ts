@@ -1,4 +1,4 @@
-import { WITHDRAWAL_MAX_PER_DAY } from "@/constants";
+import { WITHDRAWAL_MAX_ADDRESS_VERIFIED } from "@/constants";
 import { CurrencyCoin } from "@/modules/exchange-rates/exchange-rates.entity";
 import * as Joi from "joi";
 import {
@@ -96,12 +96,13 @@ export const UpdateUserStatusValidation = Joi.object().keys({
 });
 
 export const UpdateWithdrawalLimitValidation = Joi.object().keys({
-  // Capped at the same constant WithdrawalValidation allows, so an admin cannot
-  // grant a limit that the withdrawal endpoint would then reject as over its
-  // own max. Zero is allowed and means withdrawals are blocked for the account.
+  // Capped at the same constant WithdrawalValidation allows — the tier 3
+  // ceiling — so an admin cannot grant a limit that the withdrawal endpoint
+  // would then reject as over its own max. Zero is allowed and means
+  // withdrawals are blocked for the account.
   withdrawal_limit: Joi.number()
     .min(0)
-    .max(WITHDRAWAL_MAX_PER_DAY)
+    .max(WITHDRAWAL_MAX_ADDRESS_VERIFIED)
     .required()
     .label("Withdrawal limit"),
 });
