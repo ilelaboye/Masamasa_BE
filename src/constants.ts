@@ -29,7 +29,7 @@ export const ClearCookieOptions = {
 } satisfies CookieOptionsType;
 
 // Flat fee (in USD) charged on every crypto deposit except the exempt coins.
-export const DEPOSIT_FEE_USD = 1;
+export const DEPOSIT_FEE_USD = 2;
 export const DEPOSIT_FEE_EXEMPT_CURRENCIES = new Set([
   "usdt",
   "cngn",
