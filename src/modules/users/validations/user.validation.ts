@@ -96,8 +96,20 @@ export const UploadImageValidation = Joi.object().keys({
   image: Joi.string().required().uri(),
 });
 
+// A MasaMasa tag is the recipient's username. People type it as "@maryj", so
+// the "@" is stripped before the signup rule runs.
+export const userTag = username.trim().replace(/^@/, "").label("Tag");
+
 export const TransferValidation = Joi.object().keys({
   pin: Joi.string().required(),
-  email: Joi.string().email().required(),
+  username: userTag.required(),
   amount: Joi.number().required().min(100),
+  narration: Joi.string().trim().max(100).optional().allow(""),
+});
+
+// Push permission can be granted long after login (the app's homepage prompt),
+// so the token gets its own tiny route rather than riding on update-profile,
+// which requires a whole profile and can fail on a username clash.
+export const NotificationTokenValidation = Joi.object().keys({
+  notification_token: Joi.string().required().label("Notification token"),
 });

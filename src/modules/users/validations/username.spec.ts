@@ -1,5 +1,6 @@
 import {
   CreateAccountValidation,
+  TransferValidation,
   UpdateAccountValidation,
 } from "./user.validation";
 
@@ -46,5 +47,19 @@ describe("username validation", () => {
         CreateAccountValidation.validate({ ...base, username }).error,
       ).toBeDefined();
     }
+  });
+
+  it("accepts a transfer tag typed with @ and resolves it to the username", () => {
+    const { error, value } = TransferValidation.validate({
+      pin: "1234",
+      username: " @MaryJ ",
+      amount: 3000,
+    });
+    expect(error).toBeUndefined();
+    expect(value.username).toBe("maryj");
+    expect(
+      TransferValidation.validate({ pin: "1234", username: "@", amount: 3000 })
+        .error,
+    ).toBeDefined();
   });
 });

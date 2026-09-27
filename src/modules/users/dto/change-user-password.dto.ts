@@ -48,11 +48,14 @@ export class TransferDto {
   @ApiProperty({ example: "1234" })
   pin: string;
 
-  @ApiProperty({ example: "lekan@gmail.com" })
-  email: string;
+  @ApiProperty({ example: "maryj", description: "Recipient's MasaMasa tag" })
+  username: string;
 
   @ApiProperty({ example: 4500 })
   amount: number;
+
+  @ApiProperty({ example: "Lunch", required: false })
+  narration?: string;
 }
 
 export class WithdrawalDto {

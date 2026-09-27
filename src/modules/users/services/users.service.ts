@@ -3,18 +3,25 @@ import {
   BadGatewayException,
   BadRequestException,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { DataSource, EntityManager, Not, Repository } from "typeorm";
 import { BaseService } from "../../base.service";
-import { KycStatus, User } from "../entities/user.entity";
+import {
+  KycStatus,
+  Status as UserStatus,
+  User,
+} from "../entities/user.entity";
+import { NotificationsService } from "@/modules/notifications/notifications.service";
 import {
   AddressKycDto,
   ChangePinDto,
   ChangeUserPasswordDto,
   CreatePinDto,
   KycDto,
+  NotificationTokenDto,
   TransferDto,
   UpdateAccountDto,
   UploadImageDto,
@@ -95,6 +102,7 @@ export class UsersService extends BaseService {
     private readonly cacheService: CacheService,
     private readonly mixpanel: MixpanelService,
     private readonly cloudinaryService: CloudinaryService,
+    private readonly notificationsService: NotificationsService,
   ) {
     super();
   }
@@ -138,6 +146,20 @@ export class UsersService extends BaseService {
         state: updateAccountDto.state,
         country: updateAccountDto.country,
       },
+    );
+  }
+
+  // Login and sign-up carry a push token, but only if the OS had already
+  // granted permission by then. Once the user allows it mid-session, the app
+  // sends the freshly issued token here — otherwise nothing reaches this
+  // device until their next login.
+  async updateNotificationToken(
+    { notification_token }: NotificationTokenDto,
+    req: UserRequest,
+  ) {
+    await this.userRepository.update(
+      { id: req.user.id },
+      { notification_token },
     );
   }
 
@@ -626,13 +648,32 @@ export class UsersService extends BaseService {
     };
   }
 
-  async transfer(transferDto: TransferDto, req: UserRequest) {
+  /**
+   * Resolves a MasaMasa tag to the name the sender confirms before paying —
+   * the in-app equivalent of a bank account name enquiry. Only names and the
+   * tag are returned; never the email or phone.
+   */
+  async lookupTag(username: string) {
+    const find = await this.findTransferRecipient(username);
+    return {
+      username: find.username,
+      first_name: find.first_name,
+      last_name: find.last_name,
+    };
+  }
+
+  private async findTransferRecipient(username: string) {
     const find = await this.userRepository.findOne({
-      where: { email: transferDto.email },
+      where: { username, status: UserStatus.active },
     });
     if (!find) {
-      throw new BadRequestException("User with this email was not found");
+      throw new NotFoundException("No MasaMasa user with this tag");
     }
+    return find;
+  }
+
+  async transfer(transferDto: TransferDto, req: UserRequest) {
+    const find = await this.findTransferRecipient(transferDto.username);
 
     const user = await this.userRepository
       .createQueryBuilder("user")
@@ -707,12 +748,14 @@ export class UsersService extends BaseService {
           mode: TransactionModeType.debit,
           entity_type: TransactionEntityType.transfer,
           metadata: {
+            // Tag, not email: the sender only ever knew the tag.
             receiver: {
               id: find.id,
               first_name: find.first_name,
               last_name: find.last_name,
-              email: find.email,
+              username: find.username,
             },
+            narration: transferDto.narration || null,
             client: getClientInfo(req),
           },
           exchange_rate_id: null,
@@ -739,8 +782,9 @@ export class UsersService extends BaseService {
               id: user.id,
               first_name: user.first_name,
               last_name: user.last_name,
-              email: user.email,
+              username: user.username,
             },
+            narration: transferDto.narration || null,
           },
           exchange_rate_id: null,
           currency: "NGN",
@@ -760,6 +804,17 @@ export class UsersService extends BaseService {
     } finally {
       await queryRunner.release();
     }
+
+    // After commit: the push is an external call, and a failed push must not
+    // undo money that has already moved.
+    this.notificationsService
+      .create({
+        userId: find.id,
+        tag: NotificationTag.wallet_credit,
+        message: `You received ₦${Number(transferDto.amount).toLocaleString("en-NG")} from @${user.username}${transferDto.narration ? `: ${transferDto.narration}` : ""}`,
+        pushTitle: "Money received",
+      })
+      .catch(() => {});
 
     return trans;
   }

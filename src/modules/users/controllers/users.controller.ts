@@ -4,10 +4,12 @@ import { AuthGuard } from "@/guards";
 import { CacheService } from "@/modules/global/cache-container/cache-container.service";
 import { JoiValidationPipe } from "@/pipes/joi.validation.pipe";
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
   Get,
+  Param,
   Post,
   Req,
   Res,
@@ -25,6 +27,7 @@ import {
   DeleteAccountDto,
   EditUserDto,
   KycDto,
+  NotificationTokenDto,
   TransferDto,
   UpdateAccountDto,
   UploadImageDto,
@@ -36,6 +39,7 @@ import {
   AddressKycValidation,
   ChangeUserPasswordValidation,
   KycValidation,
+  NotificationTokenValidation,
   VerifyPasswordChangeValidation,
   EditUserValidation,
   TransferValidation,
@@ -43,6 +47,7 @@ import {
   UploadImageValidation,
   WithdrawalValidation,
 } from "../validations";
+import { userTag } from "../validations/user.validation";
 
 @ApiCookieAuth(_AUTH_COOKIE_NAME_)
 @UseGuards(AuthGuard)
@@ -89,6 +94,13 @@ export class UsersController {
   @Post("pin-verification")
   async verifyPin(@Body() verifyPinDto: VerifyPinDto, @Req() req: UserRequest) {
     return await this.usersService.verifyPin(verifyPinDto, req);
+  }
+
+  @Get("lookup-tag/:username")
+  async lookupTag(@Param("username") raw: string) {
+    const { error, value } = userTag.required().validate(raw);
+    if (error) throw new BadRequestException(error.message);
+    return await this.usersService.lookupTag(value);
   }
 
   @Post("transfer")
@@ -155,6 +167,20 @@ export class UsersController {
     @Req() req: UserRequest,
   ) {
     return await this.usersService.updateProfile(updateAccountDto, req);
+  }
+
+  // Sent when the user grants push permission after login, since the token
+  // login carried was null at the time.
+  @UsePipes(new JoiValidationPipe(NotificationTokenValidation))
+  @Post("notification-token")
+  async notificationToken(
+    @Body() notificationTokenDto: NotificationTokenDto,
+    @Req() req: UserRequest,
+  ) {
+    return await this.usersService.updateNotificationToken(
+      notificationTokenDto,
+      req,
+    );
   }
 
   @Post("kyc")

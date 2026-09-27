@@ -144,3 +144,8 @@ export class ConfirmUserEmailDto {
   @ApiProperty({ example: "emmanuel.p@buysimply.app" })
   email: string;
 }
+
+export class NotificationTokenDto {
+  @ApiProperty({ example: "fcm-device-token" })
+  notification_token: string;
+}

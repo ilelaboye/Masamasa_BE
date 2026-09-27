@@ -12,7 +12,8 @@ import { UsersService } from "./users.service";
 // untouched.
 
 const service = new UsersService(
-  ...(Array(11).fill(null) as [
+  ...(Array(12).fill(null) as [
+    any,
     any,
     any,
     any,
