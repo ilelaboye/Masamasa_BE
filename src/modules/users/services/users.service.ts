@@ -129,14 +129,28 @@ export class UsersService extends BaseService {
 
   async updateProfile(updateAccountDto: UpdateAccountDto, req: UserRequest) {
     const username = updateAccountDto.username.toLowerCase();
-    const taken = await this.userRepository.exists({
-      where: { username, id: Not(req.user.id) },
+    const current = await this.userRepository.findOne({
+      where: { id: req.user.id },
+      select: ["id", "username", "username_changeable"],
     });
-    if (taken) throw new BadRequestException("Username is already taken.");
+    if (!current) throw new UnauthorizedException("User not found, please login");
+    const renaming = username !== current.username;
+    if (renaming) {
+      if (!current.username_changeable) {
+        throw new BadRequestException("Your username can't be changed.");
+      }
+      const taken = await this.userRepository.exists({
+        where: { username, id: Not(req.user.id) },
+      });
+      if (taken) throw new BadRequestException("Username is already taken.");
+    }
 
+    // The username_changeable condition makes two concurrent renames spend
+    // the single change only once.
     const update = await this.userRepository.update(
-      { id: req.user.id },
+      { id: req.user.id, ...(renaming && { username_changeable: true }) },
       {
+        ...(renaming && { username_changeable: false }),
         phone: updateAccountDto.phone,
         address: updateAccountDto.address,
         first_name: updateAccountDto.first_name,
@@ -147,6 +161,9 @@ export class UsersService extends BaseService {
         country: updateAccountDto.country,
       },
     );
+    if (!update.affected) {
+      throw new BadRequestException("Your username can't be changed.");
+    }
   }
 
   // Login and sign-up carry a push token, but only if the OS had already

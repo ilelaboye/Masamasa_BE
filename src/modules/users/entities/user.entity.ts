@@ -48,6 +48,10 @@ export class User {
   @Column({ type: "varchar", length: 30, unique: true })
   username: string;
 
+  /** True only for a backfilled username, until its one allowed change. */
+  @Column({ default: false })
+  username_changeable: boolean;
+
   @Column({
     type: "varchar",
     default: Status.active,
