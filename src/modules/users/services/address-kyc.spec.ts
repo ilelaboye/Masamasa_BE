@@ -1,6 +1,7 @@
 import { AddressKycValidation } from "../validations/kyc.validation";
 import {
   KYC_TIER_ADDRESS,
+  WITHDRAWAL_LIMIT_ADMIN_MAX,
   WITHDRAWAL_MAX_ADDRESS_VERIFIED,
   WITHDRAWAL_MAX_PER_DAY,
 } from "@/constants";
@@ -57,11 +58,15 @@ describe("AddressKycValidation", () => {
 });
 
 describe("tier 3 constants", () => {
-  it("raises the ceiling above tier 2, and that is the system maximum", () => {
-    // Both Joi schemas cap at WITHDRAWAL_MAX_ADDRESS_VERIFIED; if it were not
-    // the largest, a tier 3 account could never spend its own limit.
+  it("raises the ceiling above tier 2, and stays inside the admin maximum", () => {
+    // Tier 3 grants more than tier 2, and both Joi schemas cap at the admin
+    // maximum — if the grant ever exceeded that cap, a tier 3 account could not
+    // spend the limit its own verification earned it.
     expect(WITHDRAWAL_MAX_ADDRESS_VERIFIED).toBeGreaterThan(
       WITHDRAWAL_MAX_PER_DAY,
+    );
+    expect(WITHDRAWAL_LIMIT_ADMIN_MAX).toBeGreaterThanOrEqual(
+      WITHDRAWAL_MAX_ADDRESS_VERIFIED,
     );
     expect(KYC_TIER_ADDRESS).toBe(3);
   });

@@ -1,5 +1,5 @@
 import {
-  WITHDRAWAL_MAX_ADDRESS_VERIFIED,
+  WITHDRAWAL_LIMIT_ADMIN_MAX,
   WITHDRAWAL_MIN_PER_TRANSACTION,
 } from "@/constants";
 import * as Joi from "joi";
@@ -50,13 +50,14 @@ export const WithdrawalValidation = Joi.object().keys({
   // drift below the limit users.service actually enforces. Joi runs in the
   // pipe ahead of the service, so a lower number here silently becomes the
   // real limit and the service's own check never gets a chance to run.
-  // The tier 3 ceiling is the widest a single withdrawal can ever be; the
-  // service narrows it further per account (its own limit, allowance already
-  // used today). Capping at the tier 2 figure would silently make tier 3
-  // unusable above ₦5m.
+  // The highest limit an account can hold is the widest a single withdrawal can
+  // ever be; the service narrows it further per account (its own limit,
+  // allowance already used today). That is the admin maximum, not the tier 3
+  // grant — an account an admin lifted above tier 3 would otherwise be blocked
+  // here before the service ever read its real limit.
   amount: Joi.number()
     .min(WITHDRAWAL_MIN_PER_TRANSACTION)
-    .max(WITHDRAWAL_MAX_ADDRESS_VERIFIED)
+    .max(WITHDRAWAL_LIMIT_ADMIN_MAX)
     .required()
     .label("Amount"),
   pin: Joi.number().required().label("Pin"),

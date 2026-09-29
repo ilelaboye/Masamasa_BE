@@ -50,11 +50,16 @@ export const DEPOSIT_FEE_EXEMPT_CURRENCIES = new Set([
 // The day is a calendar day in the app timezone (Africa/Lagos).
 export const WITHDRAWAL_MAX_PER_DAY = 5000000;
 
-// What address verification (tier 3) raises the ceiling to, and therefore the
-// highest limit any account may hold: the maximum an admin may set by hand and
-// the widest a single withdrawal may be. Both Joi schemas cap at this rather
-// than at the tier 2 figure, or a tier 3 account could never spend its ceiling.
+// What address verification (tier 3) raises the ceiling to — the highest limit
+// granted automatically. An admin can lift an individual account above it, as
+// far as WITHDRAWAL_LIMIT_ADMIN_MAX.
 export const WITHDRAWAL_MAX_ADDRESS_VERIFIED = 10000000;
+
+// The highest limit any account may hold: the most an admin may set by hand,
+// and therefore the widest a single withdrawal may be. Both Joi schemas cap at
+// this rather than at a tier figure — capping them at the tier 3 grant instead
+// would leave an account an admin had lifted unable to spend its own ceiling.
+export const WITHDRAWAL_LIMIT_ADMIN_MAX = 50000000;
 
 // Verification tier reached once identity is verified. Tier 1 is every
 // registered account; tier 3 is address verified.
