@@ -898,8 +898,6 @@ export class CronJob {
   }
 
   async generateNombaAccessToken() {
-    console.log("START GENERATING NOMBA ACCESS TOKEN");
-
     try {
       const res = await axiosClient(
         `${appConfig.NOMBA_BASE_URL}/v1/auth/token/issue`,
@@ -917,7 +915,6 @@ export class CronJob {
           },
         },
       );
-      console.log("Nomba access token response", res);
       if (res.data) {
         await this.accessTokenRepository
           .createQueryBuilder("access_token")
@@ -932,7 +929,6 @@ export class CronJob {
           metadata: res.data,
           created_at: new Date(),
         });
-        console.log("NOMBA ACCESS TOKEN GENERATED SUCCESSFULLY");
         return res.data;
       }
     } catch (e: any) {

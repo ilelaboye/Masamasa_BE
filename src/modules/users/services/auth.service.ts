@@ -164,7 +164,7 @@ export class AuthService extends BaseService {
         );
       }
     } else {
-      await this.cacheService.countGuess(`login_${fetch.id}`);
+      await this.cacheService.countGuess(`login_${fetch.id}`, "password");
       const verified = await verifyHash(loginStaffDto.password, fetch.password);
       if (!verified)
         throw new NotAcceptableException(
@@ -278,7 +278,7 @@ export class AuthService extends BaseService {
 
     // One counter for every endpoint that checks remember_token, or each
     // would hand out its own MAX_GUESSES at the same code.
-    await this.cacheService.countGuess(`code_${user.id}`);
+    await this.cacheService.countGuess(`code_${user.id}`, "code");
     if (user.remember_token !== token) {
       throw new BadRequestException("Invalid verification token provided.");
     }
@@ -558,7 +558,7 @@ export class AuthService extends BaseService {
         "Invalid email and token, please try again.",
       );
 
-    await this.cacheService.countGuess(`code_${user.id}`);
+    await this.cacheService.countGuess(`code_${user.id}`, "code");
     if (user.remember_token != token || this.codeExpired(user)) {
       throw new NotAcceptableException(
         "Incorrect token, please request for another one.",
@@ -610,7 +610,7 @@ export class AuthService extends BaseService {
     if (!fetch)
       throw new NotAcceptableException("User with this email not found.");
 
-    await this.cacheService.countGuess(`code_${fetch.id}`);
+    await this.cacheService.countGuess(`code_${fetch.id}`, "code");
     if (fetch.remember_token !== token || this.codeExpired(fetch)) {
       throw new BadRequestException("Invalid or expired verification code.");
     }

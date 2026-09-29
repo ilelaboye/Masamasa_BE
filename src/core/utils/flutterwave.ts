@@ -42,7 +42,6 @@ export async function transferWithFlutterWave({
     };
 
     const response = await flw().Transfer.initiate(payload);
-    console.log("response", response);
     return {
       status: response.status == "error" ? false : true,
       message: response.message,
@@ -61,7 +60,7 @@ export async function verifyTransfer({ id }) {
     };
 
     const response = await flw().Transfer.get_a_transfer(payload);
-    console.log("response", response);
+
     return {
       status: response.status == "error" ? false : true,
       message: response.message,

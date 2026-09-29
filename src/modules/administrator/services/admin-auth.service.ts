@@ -48,7 +48,7 @@ export class AdminAuthService {
         "Incorrect details given, please try again",
       );
 
-    await this.cacheService.countGuess(`admin_login_${admin.id}`);
+    await this.cacheService.countGuess(`admin_login_${admin.id}`, "password");
     const verified = await verifyHash(adminLoginDto.password, admin.password);
     if (!verified)
       throw new NotAcceptableException(

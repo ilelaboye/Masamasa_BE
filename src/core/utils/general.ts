@@ -26,8 +26,6 @@ export const verifyQuidaxWebhook = (
 
   if (!signatureHeader) return false;
 
-  console.log("signatureHeader", signatureHeader);
-
   const parts: Record<string, string> = {};
   for (const piece of signatureHeader.split(",")) {
     const [key, ...rest] = piece.split("=");
@@ -38,7 +36,6 @@ export const verifyQuidaxWebhook = (
   if (!timestamp || !signature) return false;
 
   const signedPayload = `${timestamp}.${JSON.stringify(payload)}`;
-  console.log("signedPayload", signedPayload);
   const expected = crypto
     .createHmac("sha256", secret)
     .update(signedPayload)
@@ -158,13 +155,8 @@ export const verifyNombaWebhook = (payload, signatureValue, nombaTimeStamp) => {
     // const signatureValue = "Kt9095hQxfgmVbx6iz7G2tPhHdbdXgLlyY/mf35sptw=";
     // const nombaTimeStamp = "2025-09-29T10:51:44Z";
     const secret = appConfig.NOMBA_WEBHOOK_SECRET;
-    console.log(`Using secret [${secret}]`);
 
     const mySig = generateSignature(payload, secret, nombaTimeStamp);
-
-    console.log(`Generated signature [${mySig}]`);
-    console.log(`Expected signature [${signatureValue}]`);
-
     if (signatureValue.toLowerCase() === mySig.toLowerCase()) {
       console.log(">>>>>>> Signatures match <<<<<<<<<<<");
     } else {
