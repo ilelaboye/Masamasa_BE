@@ -32,11 +32,16 @@ const ninResponse = {
   status: true,
   response_code: "00",
   data: {
-    firstname: "LEKAN",
-    middlename: "OLUWATOBI",
-    surname: "ILELABOYE",
-    birthdate: "01-04-1999",
-    nin: "52119847125",
+    status: true,
+    response_code: "00",
+    nin_data: {
+      firstname: "LEKAN",
+      middlename: "OLUWATOBI",
+      surname: "ILELABOYE",
+      birthdate: "01-04-1999",
+      photo: "/9j/4AAQSkZJRg...",
+      nin: "52119847125",
+    },
   },
 };
 
@@ -64,7 +69,10 @@ describe("recordVerification attributes the row to the user", () => {
     expect(saved[0].user_id).toBe(42);
     // The number itself is never stored in the clear beside the excerpt.
     expect(saved[0].value).toBe("521125");
-    expect(saved[0].metadata.nin).toBeUndefined();
+    // Nor the number or the holder's photo nested inside nin_data.
+    expect(saved[0].metadata.nin_data.nin).toBeUndefined();
+    expect(saved[0].metadata.nin_data.photo).toBeUndefined();
+    expect(saved[0].metadata.nin_data.firstname).toBe("LEKAN");
   });
 
   it("writes no row at all when the ID does not verify", async () => {

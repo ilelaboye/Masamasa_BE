@@ -92,13 +92,15 @@ export const IDENTITY_PROVIDERS: Record<IdentityType, IdentityProvider> = {
     url: `${PREMBLY}/vnin-basic`,
     body: ({ number }) => ({ number }),
     verified: (res) => Boolean(res?.status),
+    // The holder's details sit a level down, in data.nin_data. Reading them
+    // off data rejected every NIN as a name mismatch.
     names: (res) => [
-      res?.data?.firstname,
-      res?.data?.surname,
-      res?.data?.middlename,
+      res?.data?.nin_data?.firstname,
+      res?.data?.nin_data?.surname,
+      res?.data?.nin_data?.middlename,
     ],
     // Returned as DD-MM-YYYY, unlike every other endpoint here.
-    dob: (res) => res?.data?.birthdate,
+    dob: (res) => res?.data?.nin_data?.birthdate,
   },
 };
 

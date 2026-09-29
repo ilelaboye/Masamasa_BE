@@ -35,10 +35,18 @@ describe("identity provider table", () => {
     });
   });
 
+  // NIN nests the holder under data.nin_data (as Prembly's vnin-basic really
+  // answers). A flat fixture here once hid that every NIN failed on names.
   it("reads the names out of each response shape", () => {
     expect(
       IDENTITY_PROVIDERS.nin.names({
-        data: { firstname: "Lekan", surname: "Ilelaboye", middlename: "Tayo" },
+        data: {
+          nin_data: {
+            firstname: "Lekan",
+            surname: "Ilelaboye",
+            middlename: "Tayo",
+          },
+        },
       }),
     ).toEqual(["Lekan", "Ilelaboye", "Tayo"]);
 
@@ -51,7 +59,9 @@ describe("identity provider table", () => {
 
   it("reads each endpoint's birthdate field", () => {
     expect(
-      IDENTITY_PROVIDERS.nin.dob({ data: { birthdate: "21-08-1994" } }),
+      IDENTITY_PROVIDERS.nin.dob({
+        data: { nin_data: { birthdate: "21-08-1994" } },
+      }),
     ).toBe("21-08-1994");
     expect(
       IDENTITY_PROVIDERS.bvn.dob({ data: { dateOfBirth: "1994-08-21" } }),

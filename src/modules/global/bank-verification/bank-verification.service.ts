@@ -39,6 +39,23 @@ const SENSITIVE_FIELDS = [
 ];
 
 /**
+ * A copy of a provider response without SENSITIVE_FIELDS, at any depth —
+ * NIN nests the number and photo under data.nin_data, where a top-level
+ * delete never reached them.
+ */
+export function withoutSensitive(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(withoutSensitive);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([key]) => !SENSITIVE_FIELDS.includes(key))
+        .map(([key, v]) => [key, withoutSensitive(v)]),
+    );
+  }
+  return value;
+}
+
+/**
  * The verdict a verification returns. `unavailable` is a provider problem
  * rather than a rejection, and callers route it to manual review.
  */
@@ -110,7 +127,7 @@ export class BankVerificationService {
       response = await this.callPrembly(provider.url, provider.body(input));
       console.log(
         `response from ${type} verification, ${provider.url}`,
-        response,
+        withoutSensitive(response),
       );
     } catch (error) {
       console.error(`error from ${type} verification, ${provider.url}`, error);
@@ -183,7 +200,7 @@ export class BankVerificationService {
       });
       console.log(
         `response from ${documentType} verification, ${url}`,
-        response,
+        withoutSensitive(response),
       );
     } catch (error) {
       console.log(`error from ${documentType} verification, ${url}`, error);
@@ -263,8 +280,7 @@ export class BankVerificationService {
   ) {
     // Whatever the provider sent back, the ID number itself is not kept in the
     // clear alongside it.
-    const safeMetadata = { ...metadata };
-    for (const field of SENSITIVE_FIELDS) delete safeMetadata[field];
+    const safeMetadata = withoutSensitive(metadata) as Record<string, unknown>;
 
     const verification = this.bankVerificationRepository.create({
       type: type as BankVerificationType,
