@@ -63,6 +63,48 @@ const STABLECOINS_USD = new Set(["usdt", "usdc"]);
 // is read straight off that row instead of the market price feed.
 const NAIRA_QUOTED_COINS = new Set(["cngn"]);
 
+// CoinGecko id → the key /prices returns it under. The app reads these keys,
+// so they are a contract with shipped builds.
+const PRICE_FEED: Record<string, string> = {
+  bitcoin: "bitcoin",
+  ethereum: "ethereum",
+  binancecoin: "binancecoin",
+  solana: "solana",
+  tether: "tether",
+  "usd-coin": "usd-coin",
+  cardano: "cardano",
+  dogecoin: "doge",
+  ripple: "ripple",
+  "polygon-ecosystem-token": "pol",
+  tron: "tron",
+  "compliant-naira": "cngn",
+};
+
+// Deposit ticker → its key in the price feed. A fixed table rather than
+// CoinGecko's search, which cost a call per deposit and can pick a look-alike.
+const TICKER_TO_PRICE_KEY: Record<string, string> = {
+  btc: "bitcoin",
+  eth: "ethereum",
+  bnb: "binancecoin",
+  sol: "solana",
+  ada: "cardano",
+  doge: "doge",
+  xrp: "ripple",
+  pol: "pol",
+  matic: "pol",
+  trx: "tron",
+};
+
+// Every price read is served from one cached CoinGecko call, refreshed at
+// most every 5 minutes: ~8,600 calls a month, inside the Demo plan's 10k.
+const PRICES_CACHE_KEY = "COINGECKO_PRICES";
+const PRICES_MAX_AGE_MS = 5 * 60 * 1000;
+
+type PriceFeed = Record<
+  string,
+  { usd: number; change_24h: number; direction: "up" | "down" }
+>;
+
 @Injectable()
 export class PublicService {
   private readonly logger = new Logger(PublicService.name);
@@ -281,29 +323,26 @@ export class PublicService {
     // } catch {
     //   return { status: false };
     // }
+    const ticker = String(symbol ?? "").toLowerCase();
     // Dollar-pegged stablecoins are always $1 — skip the lookup entirely.
-    // Besides saving two CoinGecko calls, this avoids the search endpoint
-    // resolving "USDT"/"USDC" to a wrong (unpegged) look-alike token.
-    if (STABLECOINS_USD.has(String(symbol ?? "").toLowerCase())) {
+    if (STABLECOINS_USD.has(ticker)) {
       return { status: true, price: 1 };
     }
 
-    if (symbol.toLowerCase() == "pol") {
-      symbol = "POL (ex-MATIC)";
+    // Read off the cached feed /prices serves, so a deposit costs no call.
+    const key = TICKER_TO_PRICE_KEY[ticker];
+    if (!key) {
+      this.logger.error(`No price feed entry for ${symbol}`);
+      return { status: false, price: null };
     }
     try {
-      const coin = await axios.get(
-        `https://api.coingecko.com/api/v3/search?query=${symbol}`,
-      );
-      console.log("coin", coin.data);
-      // return coin;
-      const api_symbol = coin.data.coins[0].api_symbol;
-      const responses = await axios.get(
-        `https://api.coingecko.com/api/v3/simple/price?ids=${api_symbol}&vs_currencies=usd`,
-      );
-      return { status: true, price: responses.data[api_symbol].usd };
-    } catch (error) {
-      console.log(error);
+      const { data } = await this.getPrices();
+      const usd = data[key]?.usd;
+      // The feed writes 0 for a missing price; 0 is never a real price.
+      return usd
+        ? { status: true, price: usd }
+        : { status: false, price: null };
+    } catch {
       return { status: false, price: null };
     }
   }
@@ -361,47 +400,64 @@ export class PublicService {
     //   throw new BadRequestException("Failed to fetch prices");
     // }
 
+    const cached = await this.cacheService.get<{ at: number; data: PriceFeed }>(
+      PRICES_CACHE_KEY,
+    );
+    if (cached && Date.now() - cached.at < PRICES_MAX_AGE_MS) {
+      return { success: true, data: cached.data };
+    }
+
     try {
-      const response = await axios.get(
-        "https://api.coingecko.com/api/v3/coins/markets",
-        {
-          params: {
-            vs_currency: "usd",
-            ids: "bitcoin,ethereum,binancecoin,solana,tether,usd-coin,cardano,dogecoin,ripple,polygon-ecosystem-token,compliant-naira",
-            order: "market_cap_desc",
-            per_page: 100,
-            page: 1,
-            price_change_percentage: "24h",
-            x_cg_demo_api_key: "CG-gro4vWV1xoKGBx9x3t8o4LB7",
-          },
-        },
+      // Shared so requests arriving together at expiry make one call, not many.
+      this.pricesInFlight ??= this.fetchPrices().finally(
+        () => (this.pricesInFlight = null),
       );
-
-      // Transform response into your desired format
-      const data = {};
-      response.data.forEach((coin) => {
-        let id = coin.id;
-        if (coin.id === "dogecoin") id = "doge";
-        if (coin.id === "polygon-ecosystem-token") id = "pol";
-        if (coin.id === "compliant-naira") id = "cngn";
-        // CoinGecko sends null for coins without 24h data (cNGN today). Shipped
-        // apps hard-cast these to num, so a null crashes their login.
-        const change = coin.price_change_percentage_24h ?? 0;
-        data[id] = {
-          usd: coin.current_price ?? 0,
-          change_24h: change,
-          direction: change >= 0 ? "up" : "down",
-        };
-      });
-
-      return {
-        success: true,
-        data,
-      };
+      const data = await this.pricesInFlight;
+      this.cacheService.set(PRICES_CACHE_KEY, { at: Date.now(), data });
+      return { success: true, data };
     } catch (error) {
-      console.log(error);
+      // A few minutes old beats none. Survives as long as the store keeps the
+      // key (its 20-minute default; the ttl argument is ignored).
+      if (cached) return { success: true, data: cached.data };
+      this.logger.error(
+        `CoinGecko prices failed: ${(error as Error)?.message}`,
+      );
       throw new BadRequestException("Failed to fetch prices");
     }
+  }
+
+  private pricesInFlight: Promise<PriceFeed> | null = null;
+
+  private async fetchPrices() {
+    const response = await axios.get(
+      "https://api.coingecko.com/api/v3/coins/markets",
+      {
+        params: {
+          vs_currency: "usd",
+          ids: Object.keys(PRICE_FEED).join(","),
+          price_change_percentage: "24h",
+        },
+        headers: appConfig.COINGECKO_API_KEY
+          ? { "x-cg-demo-api-key": appConfig.COINGECKO_API_KEY }
+          : {},
+        timeout: 15000,
+      },
+    );
+
+    const data: PriceFeed = {};
+    response.data.forEach((coin) => {
+      const key = PRICE_FEED[coin.id];
+      if (!key) return;
+      // CoinGecko sends null for coins without 24h data (cNGN today). Shipped
+      // apps hard-cast these to num, so a null crashes their login.
+      const change = coin.price_change_percentage_24h ?? 0;
+      data[key] = {
+        usd: coin.current_price ?? 0,
+        change_24h: change,
+        direction: change >= 0 ? "up" : "down",
+      };
+    });
+    return data;
   }
 
   async getBanksFromNomba() {

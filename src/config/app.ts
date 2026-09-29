@@ -127,6 +127,9 @@ export const appConfig = {
 
   MORALIS_API_KEY: process.env.MORALIS_API_KEY || "",
 
+  // CoinGecko Demo key. Without one, CoinGecko rate-limits by IP.
+  COINGECKO_API_KEY: process.env.COINGECKO_API_KEY || "",
+
   // Force-update gate. Bump the MIN version on a release that every user
   // must run (breaking API change, critical fix); users below it are blocked
   // in-app until they update. LATEST is informational only.
