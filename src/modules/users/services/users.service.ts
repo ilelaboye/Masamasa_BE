@@ -353,6 +353,7 @@ export class UsersService extends BaseService {
       .where("user.id = :id", { id: user.id })
       .getOne();
     if (fetch) {
+      await this.cacheService.countGuess(`pin_${fetch.id}`);
       if (
         fetch.remember_token !== changePinDto.otp ||
         !fetch.token_created_at ||
@@ -362,6 +363,7 @@ export class UsersService extends BaseService {
       }
       const verified = await verifyHash(changePinDto.old_pin, fetch.pin);
       if (!verified) throw new BadRequestException("Incorrect old pin");
+      this.cacheService.clearGuesses(`pin_${fetch.id}`);
     } else {
       throw new BadRequestException("User not found");
     }
@@ -405,10 +407,12 @@ export class UsersService extends BaseService {
       throw new BadRequestException("PIN has not been set");
     }
 
+    await this.cacheService.countGuess(`pin_${fetch.id}`);
     const verified = await verifyHash(verifyPinDto.pin, fetch.pin);
     if (!verified) {
       throw new BadRequestException("Incorrect pin");
     }
+    this.cacheService.clearGuesses(`pin_${fetch.id}`);
 
     return { message: "PIN verified successfully" };
   }
@@ -706,8 +710,10 @@ export class UsersService extends BaseService {
       throw new UnauthorizedException("You can't transfer to yourself");
     }
 
+    await this.cacheService.countGuess(`pin_${user.id}`);
     const verified = await verifyHash(transferDto.pin, user.pin);
     if (!verified) throw new BadRequestException("Incorrect pin");
+    this.cacheService.clearGuesses(`pin_${user.id}`);
 
     this.assertPinResetFreeze(user);
 
@@ -903,8 +909,10 @@ export class UsersService extends BaseService {
       );
     }
 
+    await this.cacheService.countGuess(`pin_${user.id}`);
     const verified = await verifyHash(withdrawalDto.pin, user.pin);
     if (!verified) throw new BadRequestException("Incorrect pin");
+    this.cacheService.clearGuesses(`pin_${user.id}`);
 
     this.assertPinResetFreeze(user);
 

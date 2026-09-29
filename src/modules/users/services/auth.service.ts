@@ -1,6 +1,7 @@
 import { appConfig } from "@/config";
 import {
   _THROTTLE_TTL_,
+  GUESS_LOCKOUT_MINUTES,
   MAILJETTemplates,
   ZohoMailTemplates,
 } from "@/constants";
@@ -101,11 +102,18 @@ export class AuthService extends BaseService {
       .catch(() => {});
   }
 
+  /** Password-reset and MFA codes are valid for GUESS_LOCKOUT_MINUTES. */
+  private codeExpired(user: User) {
+    return (
+      !user.token_created_at ||
+      timeIsAfter(user.token_created_at, GUESS_LOCKOUT_MINUTES)
+    );
+  }
+
   async login(loginStaffDto: LoginStaffDto, req: UserRequest) {
     // const user = await this.userRepository.findOne({
     //   where: { email: loginStaffDto.email },
     // });
-    console.log("login", loginStaffDto);
     if (loginStaffDto.google_id) {
       const fetch = await this.userRepository
         .createQueryBuilder("user")
@@ -129,7 +137,6 @@ export class AuthService extends BaseService {
         email: loginStaffDto.email.toLowerCase(),
       })
       .getOne();
-    console.log("fetch", fetch);
 
     if (!fetch) {
       throw new NotAcceptableException(
@@ -157,11 +164,13 @@ export class AuthService extends BaseService {
         );
       }
     } else {
+      await this.cacheService.countGuess(`login_${fetch.id}`);
       const verified = await verifyHash(loginStaffDto.password, fetch.password);
       if (!verified)
         throw new NotAcceptableException(
           "Incorrect details given, please try again",
         );
+      this.cacheService.clearGuesses(`login_${fetch.id}`);
     }
 
     // Before MFA: the MFA branch hands out a session via verify-mfa, so an
@@ -267,9 +276,16 @@ export class AuthService extends BaseService {
       throw new BadRequestException("Invalid token type provided.");
     }
 
+    // One counter for every endpoint that checks remember_token, or each
+    // would hand out its own MAX_GUESSES at the same code.
+    await this.cacheService.countGuess(`code_${user.id}`);
     if (user.remember_token !== token) {
       throw new BadRequestException("Invalid verification token provided.");
     }
+    if (type == TokenType.forgot_password && this.codeExpired(user)) {
+      throw new BadRequestException("Verification code has expired.");
+    }
+    this.cacheService.clearGuesses(`code_${user.id}`);
 
     if (type == TokenType.email_verification) {
       await this.userRepository.update(
@@ -473,7 +489,7 @@ export class AuthService extends BaseService {
     const remember_token = generateRandomNumberString(6);
     this.userRepository.update(
       { email: email.toLowerCase() },
-      { remember_token },
+      { remember_token, token_created_at: new Date() },
     );
 
     sendZohoMailWithTemplate(
@@ -542,11 +558,13 @@ export class AuthService extends BaseService {
         "Invalid email and token, please try again.",
       );
 
-    if (user.remember_token != token) {
+    await this.cacheService.countGuess(`code_${user.id}`);
+    if (user.remember_token != token || this.codeExpired(user)) {
       throw new NotAcceptableException(
         "Incorrect token, please request for another one.",
       );
     }
+    this.cacheService.clearGuesses(`code_${user.id}`);
 
     if (password != password_confirmation) {
       throw new NotAcceptableException(
@@ -592,13 +610,11 @@ export class AuthService extends BaseService {
     if (!fetch)
       throw new NotAcceptableException("User with this email not found.");
 
-    if (fetch.remember_token !== token) {
+    await this.cacheService.countGuess(`code_${fetch.id}`);
+    if (fetch.remember_token !== token || this.codeExpired(fetch)) {
       throw new BadRequestException("Invalid or expired verification code.");
     }
-
-    if (!fetch.token_created_at || timeIsAfter(fetch.token_created_at, 15)) {
-      throw new BadRequestException("Invalid or expired verification code.");
-    }
+    this.cacheService.clearGuesses(`code_${fetch.id}`);
 
     await this.userRepository.update(
       { id: fetch.id },

@@ -372,6 +372,7 @@ export class PublicService {
             per_page: 100,
             page: 1,
             price_change_percentage: "24h",
+            x_cg_demo_api_key: "CG-gro4vWV1xoKGBx9x3t8o4LB7",
           },
         },
       );

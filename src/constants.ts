@@ -6,6 +6,12 @@ export const _IS_PROD_ = process.env.ENV === "production",
   _TTL_ = 1000 * 60 * 60 * 24 * 7,
   _THROTTLE_TTL_ = 60 * 5; //5mins
 
+// Wrong guesses at one account's password, PIN or emailed code before it is
+// locked out, and for how long. Per account, not per IP, so spreading guesses
+// over many IPs buys nothing. Emailed codes also expire after the same window.
+export const MAX_GUESSES = 5;
+export const GUESS_LOCKOUT_MINUTES = 15;
+
 export const CookieOptions = {
   httpOnly: true,
   secure: true,

@@ -17,6 +17,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Administrator, AdminStatus } from "../entities/administrator.entity";
 import { Repository } from "typeorm";
 import { JwtService } from "@nestjs/jwt";
+import { CacheService } from "@/modules/global/cache-container/cache-container.service";
 
 @Injectable()
 export class AdminAuthService {
@@ -24,6 +25,7 @@ export class AdminAuthService {
     @InjectRepository(Administrator)
     private readonly adminRepository: Repository<Administrator>,
     private readonly jwtService: JwtService,
+    private readonly cacheService: CacheService,
   ) {}
   async login(adminLoginDto: AdminLoginDto, req: AdminRequest) {
     // const { admin } = req;
@@ -46,11 +48,13 @@ export class AdminAuthService {
         "Incorrect details given, please try again",
       );
 
+    await this.cacheService.countGuess(`admin_login_${admin.id}`);
     const verified = await verifyHash(adminLoginDto.password, admin.password);
     if (!verified)
       throw new NotAcceptableException(
         "Incorrect details given, please try again",
       );
+    this.cacheService.clearGuesses(`admin_login_${admin.id}`);
 
     // let adminData = getAdminCookieData(admin.email, req);
 
