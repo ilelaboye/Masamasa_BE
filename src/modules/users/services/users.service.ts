@@ -566,7 +566,11 @@ export class UsersService extends BaseService {
 
       await this.userRepository.update(
         { id: user.id },
-        { kyc_image: uploadImageDto.image, kyc_status: KycStatus.pending },
+        {
+          kyc_image: uploadImageDto.image,
+          kyc_status: KycStatus.pending,
+          kyc_submitted_at: new Date(),
+        },
       );
       return { message: "KYC document uploaded successfully" };
     } else if (uploadImageDto.type == "profile_image") {
@@ -1241,7 +1245,12 @@ export class UsersService extends BaseService {
 
       await this.userRepository.update(
         { id: user.id },
-        { ...documents, kyc_status: KycStatus.pending, kyc_error: null },
+        {
+          ...documents,
+          kyc_status: KycStatus.pending,
+          kyc_error: null,
+          kyc_submitted_at: new Date(),
+        },
       );
       this.mixpanel.track("kyc result", user.id, {
         "kyc status": "pending",
@@ -1352,6 +1361,7 @@ export class UsersService extends BaseService {
         kyc_selfie,
         kyc_status: KycStatus.pending,
         kyc_error: null,
+        kyc_submitted_at: new Date(),
       },
     );
 
@@ -1422,6 +1432,7 @@ export class UsersService extends BaseService {
         address_proof_image,
         address_status: KycStatus.pending,
         address_error: null,
+        address_submitted_at: new Date(),
       },
     );
 

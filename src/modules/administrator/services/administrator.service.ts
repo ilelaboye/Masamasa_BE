@@ -320,25 +320,18 @@ export class AdministratorService {
     return parseFloat(result.balance) || 0;
   }
 
-  /**
-   * Users at a given KYC stage. Defaults to `none` — people who have not
-   * started verification — since that is what the admin KYC page lists.
-   *
-   * Pass ?status=pending for the review queue (documents awaiting a decision),
-   * or any other KycStatus value. `none` is stored as NULL on older rows, so
-   * it is matched with IS NULL as well.
-   *
-   * ?type=address switches to the tier 3 queue, which lives in its own
-   * `address_status` column — an account in it is already `kyc_status =
-   * success`, so the two queues would otherwise be indistinguishable.
-   */
   async getPendingKYC(req: AdminRequest) {
-    const { limit, page, skip, status, type } = getRequestQuery(req);
+    const { limit, page, skip, status, type, search } = getRequestQuery(req);
 
     const kycStatus = Object.values(KycStatus).includes(status as KycStatus)
       ? (status as KycStatus)
       : KycStatus.none;
     const column = type === "address" ? "address_status" : "kyc_status";
+
+    const submittedAt =
+      type === "address"
+        ? "users.address_submitted_at"
+        : "users.kyc_submitted_at";
 
     const queryRunner = this.userRepository.createQueryBuilder("users");
 
@@ -351,9 +344,30 @@ export class AdministratorService {
       queryRunner.where(`users.${column} = :status`, { status: kycStatus });
     }
 
+
+    if (search) {
+      queryRunner.andWhere(
+        new Brackets((qb) => {
+          qb.where("users.first_name ILIKE :search", { search: `%${search}%` })
+            .orWhere("users.last_name ILIKE :search", { search: `%${search}%` })
+            .orWhere("users.email ILIKE :search", { search: `%${search}%` })
+            .orWhere(
+              "CONCAT(users.first_name, ' ', users.last_name) ILIKE :search",
+              { search: `%${search}%` },
+            );
+        }),
+      );
+    }
+
     const count = await queryRunner.getCount();
+
+    const order =
+      (req.query.order as string)?.toLowerCase() === "asc" ? "ASC" : "DESC";
     const kyc = await queryRunner
-      .orderBy("users.updated_at", "ASC")
+      // NULLS LAST in both directions keeps accounts that never submitted below
+      // the real ones - the ones that never submitted are not actionable and should not be prioritized.
+      .orderBy(submittedAt, order, "NULLS LAST")
+      .addOrderBy("users.id", "DESC")
       .skip(skip)
       .take(limit)
       .getMany();
@@ -362,14 +376,6 @@ export class AdministratorService {
     return { kyc, metadata };
   }
 
-  /**
-   * Approve a tier 3 address submission.
-   *
-   * Tier 3 has no automated route — an admin looking at the document is the
-   * only way an account reaches it, so this is where the tier and the ceiling
-   * move. Guarded to the pending → success transition so it cannot reset a
-   * limit an admin set by hand on an already-verified account.
-   */
   async verifyAddressKyc(user_id: number, req: AdminRequest) {
     const user = await this.userRepository
       .createQueryBuilder("user")

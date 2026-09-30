@@ -88,12 +88,9 @@ export class User {
   @Column({ nullable: true })
   kyc_selfie?: string;
 
-  /**
-   * Verification tier reached. 1 is every registered account; 2 is identity
-   * verified; 3 is address verified. The tier is what the user is shown —
-   * `withdrawal_limit` is what a withdrawal is actually held to, because an
-   * admin can adjust that per account.
-   */
+  @Column({ type: "timestamp", nullable: true })
+  kyc_submitted_at?: Date | null;
+
   @Column({ type: "smallint", default: 1 })
   kyc_tier: number;
 
@@ -120,6 +117,10 @@ export class User {
   /** Why the last address submission was declined. Cleared on a fresh one. */
   @Column({ type: "varchar", nullable: true })
   address_error?: string | null;
+
+ 
+  @Column({ type: "timestamp", nullable: true })
+  address_submitted_at?: Date | null;
 
   @Column({ unique: true })
   email: string;

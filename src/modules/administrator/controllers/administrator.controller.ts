@@ -408,6 +408,18 @@ export class AdministratorController {
     enum: ["identity", "address"],
     description: "address reads the tier 3 queue (address_status)",
   })
+  @ApiQuery({
+    name: "search",
+    required: false,
+    description: "Matches first name, last name, full name or email",
+  })
+  @ApiQuery({
+    name: "order",
+    required: false,
+    enum: ["desc", "asc"],
+    description:
+      "By submission date. desc (default) is newest first; asc is oldest first.",
+  })
   @ApiQuery({ name: "page", required: false, type: Number })
   @ApiQuery({ name: "limit", required: false, type: Number })
   @AllowRoles(AdministratorRoles.support)
