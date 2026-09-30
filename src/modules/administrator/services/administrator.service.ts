@@ -344,7 +344,6 @@ export class AdministratorService {
       queryRunner.where(`users.${column} = :status`, { status: kycStatus });
     }
 
-
     if (search) {
       queryRunner.andWhere(
         new Brackets((qb) => {
@@ -747,10 +746,7 @@ export class AdministratorService {
     if (!user) throw new BadRequestException("User not found");
 
     // WITHDRAWAL_LIMIT_ADMIN_MAX belongs to tier 3 alone.
-    if (
-      user.kyc_tier < KYC_TIER_ADDRESS &&
-      withdrawal_limit > WITHDRAWAL_MAX_PER_DAY
-    ) {
+    if (user.kyc_tier != KYC_TIER_ADDRESS) {
       throw new BadRequestException(
         `Only accounts with a verified address (tier 3) can go above NGN ${WITHDRAWAL_MAX_PER_DAY.toLocaleString("en-NG")}. This account is on tier ${user.kyc_tier || 1}.`,
       );
