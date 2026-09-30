@@ -107,7 +107,20 @@ export class AdministratorController {
     return this.administratorService.updateProfile(updateAdminProfileDto, req);
   }
 
-  @ApiOperation({ summary: "Change the currently logged-in admin's password" })
+  @ApiOperation({
+    summary: "Email the OTP required to change the logged-in admin's password",
+  })
+  @AllowAllAdmins()
+  @Post("change-password/request-otp")
+  async requestPasswordOtp(@Req() req: AdminRequest) {
+    return this.administratorService.requestPasswordOtp(req);
+  }
+
+  @ApiOperation({
+    summary: "Change the currently logged-in admin's password",
+    description:
+      "Requires the OTP emailed by /admin/change-password/request-otp, alongside the current password.",
+  })
   @UsePipes(new JoiValidationPipe(ChangeAdminPasswordValidation))
   @AllowAllAdmins()
   @Post("change-password")

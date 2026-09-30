@@ -1,4 +1,5 @@
 import {
+  ADMIN_PASSWORD_OTP_MINUTES,
   KYC_TIER_ADDRESS,
   KYC_TIER_IDENTITY,
   WITHDRAWAL_MAX_ADDRESS_VERIFIED,
@@ -36,13 +37,16 @@ import {
   getRequestQuery,
   hashResource,
   sendAccountStatusChangedEmail,
+  sendAdminPasswordOtpEmail,
   sendKycDecisionEmail,
   sendStaffInviteEmail,
+  timeIsAfter,
   verifyHash,
 } from "@/core/utils";
 import {
   capitalizeString,
   generateInviteToken,
+  generateRandomNumberString,
   paginate,
 } from "@/core/helpers";
 import {
@@ -130,6 +134,39 @@ export class AdministratorService {
     return await this.adminRepository.findOne({ where: { id } });
   }
 
+  /**
+   * Emails the OTP that `changePassword` then requires.
+   *
+   * Knowing the current password is no longer enough to change it — an unlocked
+   * laptop or a shoulder-surfed password has to be paired with the inbox too.
+   * A fresh request replaces any outstanding OTP, so the last one emailed is
+   * always the only one that works.
+   */
+  async requestPasswordOtp(req: AdminRequest) {
+    const { id } = req.admin;
+
+    const admin = await this.adminRepository.findOne({ where: { id } });
+    if (!admin) {
+      throw new BadRequestException("Admin not found, please login again");
+    }
+
+    const otp = generateRandomNumberString(6);
+
+    await this.adminRepository.update(
+      { id },
+      { token: await hashResource(otp), token_sent_at: new Date() },
+    );
+
+    // Awaited, unlike the fire-and-forget notices elsewhere: with no email there
+    // is no OTP to type, so a send failure has to surface rather than report
+    // success and leave the admin waiting on a mail that never arrives.
+    await sendAdminPasswordOtpEmail(admin, otp, ADMIN_PASSWORD_OTP_MINUTES);
+
+    return {
+      message: `Confirm your action using the OTP we sent to ${admin.email}. It expires in ${ADMIN_PASSWORD_OTP_MINUTES} minutes.`,
+    };
+  }
+
   async changePassword(
     changeAdminPasswordDto: ChangeAdminPasswordDto,
     req: AdminRequest,
@@ -139,6 +176,7 @@ export class AdministratorService {
     const admin = await this.adminRepository
       .createQueryBuilder("admin")
       .addSelect("admin.password")
+      .addSelect("admin.token")
       .where("admin.id = :id", { id })
       .getOne();
 
@@ -161,9 +199,34 @@ export class AdministratorService {
     if (!verified)
       throw new BadRequestException("Your current password is incorrect");
 
+    if (!admin.token || !admin.token_sent_at) {
+      throw new BadRequestException(
+        "Request an OTP first — we will email it to you.",
+      );
+    }
+
+    if (timeIsAfter(admin.token_sent_at, ADMIN_PASSWORD_OTP_MINUTES)) {
+      throw new BadRequestException(
+        "That OTP has expired. Request a new one and try again.",
+      );
+    }
+
+    // Counted like every other emailed code in the app, so six digits cannot be
+    // walked through — five wrong tries and the account is locked out.
+    await this.cacheService.countGuess(`admin_otp_${id}`, "OTP");
+    const otpValid = await verifyHash(changeAdminPasswordDto.otp, admin.token);
+    if (!otpValid) throw new BadRequestException("That OTP is not correct.");
+    this.cacheService.clearGuesses(`admin_otp_${id}`);
+
+    // The OTP is cleared in the same write as the password, so it cannot be
+    // replayed against a second change.
     await this.adminRepository.update(
       { id },
-      { password: await hashResource(changeAdminPasswordDto.new_password) },
+      {
+        password: await hashResource(changeAdminPasswordDto.new_password),
+        token: null,
+        token_sent_at: null,
+      },
     );
 
     return { message: "Password changed successfully" };

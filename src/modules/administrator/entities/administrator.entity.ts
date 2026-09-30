@@ -68,6 +68,19 @@ export class Administrator {
   @Column({ type: "varchar", select: false, nullable: true })
   invite_token?: string | null;
 
+  /**
+   * bcrypt hash of the OTP emailed before a self-service password change.
+   * Hashed rather than stored in the clear because it is the second factor on
+   * that change — a readable OTP plus a shoulder-surfed password is the whole
+   * account. Cleared once used or replaced by a fresh request.
+   */
+  @Column({ type: "varchar", select: false, nullable: true })
+  token?: string | null;
+
+  /** The expiry window is measured from here; a new request resets it. */
+  @Column({ type: "timestamp", nullable: true })
+  token_sent_at?: Date | null;
+
   // the 48-hour expiry is measured from here, and resending an invite resets it.
   @Column({ type: "timestamp", nullable: true })
   invite_sent_at?: Date | null;

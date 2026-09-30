@@ -111,6 +111,12 @@ export class ChangeAdminPasswordDto {
 
   @ApiProperty({ example: "NewPassword@456" })
   new_password: string;
+
+  @ApiProperty({
+    example: "483920",
+    description: "The 6-digit OTP emailed by /admin/change-password/request-otp",
+  })
+  otp: string;
 }
 
 export class CreateStaffDto {

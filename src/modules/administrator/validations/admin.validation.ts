@@ -119,6 +119,18 @@ export const ChangeAdminPasswordValidation = Joi.object().keys({
       "any.invalid": "New password must be different from the old password",
     })
     .label("New password"),
+  // The OTP emailed by the request-otp route. Shape only — whether it is the
+  // right one, and still valid, is the service's call.
+  otp: Joi.string()
+    .trim()
+    .length(6)
+    .pattern(/^\d+$/)
+    .required()
+    .messages({
+      "string.length": "Enter the 6-digit OTP we emailed you",
+      "string.pattern.base": "Enter the 6-digit OTP we emailed you",
+    })
+    .label("OTP"),
 });
 
 export const CreateStaffValidation = Joi.object().keys({

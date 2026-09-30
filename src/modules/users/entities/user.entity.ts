@@ -94,12 +94,7 @@ export class User {
   @Column({ type: "smallint", default: 1 })
   kyc_tier: number;
 
-  /**
-   * Tier 3 (address verification) has its own status columns rather than
-   * reusing the kyc_* ones. A tier 3 submission arrives when `kyc_status` is
-   * already `success`, so sharing them would both be rejected by `userKyc`'s
-   * early return and misread by the admin identity queue as an ID review.
-   */
+
   @Column({
     type: "varchar",
     default: KycStatus.none,

@@ -12,6 +12,11 @@ export const _IS_PROD_ = process.env.ENV === "production",
 export const MAX_GUESSES = 5;
 export const GUESS_LOCKOUT_MINUTES = 15;
 
+// How long the code emailed before an admin changes their own password stays
+// valid. Deliberately shorter than the lockout window above: an admin requests
+// it and types it straight away, so a long life is only extra exposure.
+export const ADMIN_PASSWORD_OTP_MINUTES = 5;
+
 export const CookieOptions = {
   httpOnly: true,
   secure: true,

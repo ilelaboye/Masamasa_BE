@@ -110,6 +110,39 @@ export function sendPasswordChangedEmail(user: EmailUser) {
   ).catch(() => {});
 }
 
+/**
+ * The OTP an admin must confirm before their own password change goes through.
+ *
+ * Returned rather than fire-and-forget like the notices around it: if this send
+ * fails there is no OTP to type, so the request has to fail and say so instead
+ * of reporting success.
+ */
+export function sendAdminPasswordOtpEmail(
+  admin: EmailUser,
+  otp: string,
+  expiryMinutes: number,
+) {
+  return sendZohoMail(
+    {
+      to: {
+        name: `${capitalizeString(admin.first_name ?? "")} ${capitalizeString(admin.last_name ?? "")}`.trim(),
+        email: admin.email,
+      },
+    },
+    {
+      subject: "Your MasaMasa admin password change OTP",
+      html: shell(
+        admin.first_name ?? "",
+        `<p>Use this OTP to confirm the password change you started on the admin dashboard:</p>
+         <p style="margin:24px 0;font-size:28px;font-weight:700;letter-spacing:6px">${otp}</p>
+         <p>It expires in ${expiryMinutes} minutes and can only be used once.</p>
+         <p><b>If you did not trigger this action, please contact support immediately at
+         <a href="mailto:${appConfig.SUPPORT_EMAIL}">${appConfig.SUPPORT_EMAIL}</a>.</b></p>`,
+      ),
+    },
+  );
+}
+
 /** Confirmation that the transaction PIN was changed. */
 export function sendPinChangedEmail(user: EmailUser) {
   sendZohoMail(
