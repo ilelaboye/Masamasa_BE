@@ -134,14 +134,6 @@ export class AdministratorService {
     return await this.adminRepository.findOne({ where: { id } });
   }
 
-  /**
-   * Emails the OTP that `changePassword` then requires.
-   *
-   * Knowing the current password is no longer enough to change it — an unlocked
-   * laptop or a shoulder-surfed password has to be paired with the inbox too.
-   * A fresh request replaces any outstanding OTP, so the last one emailed is
-   * always the only one that works.
-   */
   async requestPasswordOtp(req: AdminRequest) {
     const { id } = req.admin;
 
@@ -149,7 +141,6 @@ export class AdministratorService {
     if (!admin) {
       throw new BadRequestException("Admin not found, please login again");
     }
-
     const otp = generateRandomNumberString(6);
 
     await this.adminRepository.update(
@@ -157,9 +148,6 @@ export class AdministratorService {
       { token: await hashResource(otp), token_sent_at: new Date() },
     );
 
-    // Awaited, unlike the fire-and-forget notices elsewhere: with no email there
-    // is no OTP to type, so a send failure has to surface rather than report
-    // success and leave the admin waiting on a mail that never arrives.
     await sendAdminPasswordOtpEmail(admin, otp, ADMIN_PASSWORD_OTP_MINUTES);
 
     return {
@@ -228,6 +216,9 @@ export class AdministratorService {
         token_sent_at: null,
       },
     );
+
+    const msg = `${req.admin.first_name} ${req.admin.last_name} changed their own password`;
+    this.createAdminLog(null, req.admin, AdminLogEntities.STAFF, msg);
 
     return { message: "Password changed successfully" };
   }
