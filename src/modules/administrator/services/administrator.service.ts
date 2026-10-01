@@ -55,7 +55,6 @@ import {
   Transactions,
   TransactionStatusType,
 } from "@/modules/transactions/transactions.entity";
-import { WithdrawalWallet } from "@/modules/web3/entity/withdrawal-wallet.entity";
 import { CronJob } from "@/modules/global/jobs/cron/cron.job";
 
 /**
@@ -79,8 +78,6 @@ export class AdministratorService {
     private readonly adminLogsRepository: Repository<AdminLogs>,
     @InjectRepository(Transactions)
     private readonly transactionsRepository: Repository<Transactions>,
-    @InjectRepository(WithdrawalWallet)
-    private readonly withdrawalWalletRepository: Repository<WithdrawalWallet>,
     private readonly cacheService: CacheService,
     private readonly exchangeRateService: ExchangeRateService,
     private readonly mixpanel: MixpanelService,
@@ -857,11 +854,6 @@ export class AdministratorService {
 
     const metadata = paginate(count, page, limit);
     return { transactions, metadata };
-  }
-
-  async withdrawalWallets(req: AdminRequest) {
-    const withdrawalWallets = await this.withdrawalWalletRepository.find();
-    return { withdrawalWallets };
   }
 
   async transactions(req: AdminRequest) {

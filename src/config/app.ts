@@ -77,55 +77,11 @@ export const appConfig = {
   CLOUDINARY_UPLOAD_PRESET: process.env.CLOUDINARY_UPLOAD_PRESET,
   CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME,
 
-  // seed phrase for HD wallet
-  MASTER_MNEMONIC: process.env.MASTER_MNEMONIC ?? "",
-  SOL_MASTER_MNEMONIC: process.env.SOL_MASTER_MNEMONIC ?? "",
-  TRX_MASTER_MNEMONIC: process.env.TRX_MASTER_MNEMONIC ?? "",
-  ADA_MASTER_MNEMONIC: process.env.ADA_MASTER_MNEMONIC ?? "",
-  BTC_MASTER_MNEMONIC: process.env.MASTER_MNEMONIC ?? "",
-  EVM_RPC_URL: "https://bsc-dataseed1.defibit.io",
-  BASE_RPC_URL: "https://base-mainnet.public.blastapi.io",
-  ETH_RPC_URL: process.env.ETH_RPC_URL || "https://ethereum.publicnode.com",
-  // Fallback Ethereum RPC URLs for automatic failover
-  ETH_RPC_URLS: [
-    "https://ethereum.publicnode.com",
-    "https://rpc.ankr.com/eth",
-    "https://eth-mainnet.public.blastapi.io",
-    "https://1rpc.io/eth",
-    "https://eth.drpc.org",
-  ],
-  SOL_RPC_URL: "https://api.mainnet-beta.solana.com",
-  SOL_RPC_URL2: "https://solana-rpc.publicnode.com",
-  POLY_RPC_URL:
-    process.env.POLY_RPC_URL || "https://polygon-bor-rpc.publicnode.com",
-  // Fallback Polygon RPC URLs for automatic failover on SSL/connection errors
-  POLY_RPC_URLS: [
-    "https://polygon-rpc.com",
-    "https://polygon-bor-rpc.publicnode.com",
-    "https://rpc-mainnet.matic.network",
-    "https://rpc-mainnet.maticvigil.com",
-    "https://polygon-mainnet.public.blastapi.io",
-  ],
-  XRP_RPC_URL: process.env.XRP_RPC_URL || "wss://s1.ripple.com",
-  // Alternative XRP RPC URLs for failover
-  XRP_RPC_URLS: [
-    "wss://s1.ripple.com",
-    "wss://s2.ripple.com",
-    "wss://xrplcluster.com",
-    "wss://xrpl.ws",
-  ],
-  TRX_API_KEY: process.env.TRX_API_KEY ?? "",
-  ETH_PRIVATE_KEY: process.env.PRIVATE_KEY ?? "",
-  //BLOCK
-  BLOCK_API_KEY: process.env.BLOCK_API_KEY,
-
   NOMBA_CLIENT_ID: process.env.NOMBA_CLIENT_ID || "",
   NOMBA_PRIVATE_KEY: process.env.NOMBA_PRIVATE_KEY || "",
   NOMBA_ACCOUNT_ID: process.env.NOMBA_ACCOUNT_ID || "",
   NOMBA_BASE_URL: process.env.NOMBA_BASE_URL || "https://api.nomba.com",
   NOMBA_WEBHOOK_SECRET: process.env.NOMBA_WEBHOOK_SECRET || "",
-
-  MORALIS_API_KEY: process.env.MORALIS_API_KEY || "",
 
   // CoinGecko Demo key. Without one, CoinGecko rate-limits by IP.
   COINGECKO_API_KEY: process.env.COINGECKO_API_KEY || "",

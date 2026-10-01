@@ -27,10 +27,8 @@ import {
   BankAccountVerificationValidation,
   // ConfirmUserEmailValidation,
 } from "./validations";
-import { BankAccountVerificationDto, TransactionWebhookDto } from "./dto";
+import { BankAccountVerificationDto } from "./dto";
 import { ExchangeRateService } from "@/modules/exchange-rates/exchange-rates.service";
-import { CreateWalletValidation } from "@/modules/wallet/wallet.validation";
-import { CreateWalletDto } from "@/modules/wallet/wallet.dto";
 
 @ApiTags("Public Routes")
 @Controller()
@@ -49,13 +47,6 @@ export class PublicController {
   //   const response =
   //     await this.publicService.confirmUserEmail(confirmUserEmailDto);
   //   successResponse(res, response);
-  // }
-
-  // move this out of here
-  // @UsePipes(new JoiValidationPipe(CreateWalletValidation))
-  // @Post("wallet/create")
-  // async create(@Body() createWalletDto: CreateWalletDto) {
-  //   return await this.publicService.saveWalletAddress(createWalletDto);
   // }
 
   @Post("webhook/flutterwave/transfer")
@@ -106,11 +97,6 @@ export class PublicController {
   async test(@Req() req) {
     return await this.publicService.test(req);
   }
-
-  // @Post("webhook/transaction")
-  // async transaction(@Body() transactionWebhookDto: TransactionWebhookDto) {
-  //   return await this.publicService.transactionWebhook(transactionWebhookDto);
-  // }
 
   @ApiQuery({ name: "platform", required: false, enum: ["android", "ios"] })
   @ApiQuery({ name: "version", required: false, type: String })

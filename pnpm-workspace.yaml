@@ -3,9 +3,6 @@
 # false = postinstall banner or optional speedup, deliberately skipped
 allowBuilds:
   bcrypt: true
-  bigint-buffer: true
-  keccak: true
-  secp256k1: true
   '@compodoc/compodoc': false
   '@firebase/util': false
   '@nestjs/core': false

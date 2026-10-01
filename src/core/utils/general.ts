@@ -15,16 +15,10 @@ export const verifyQuidaxWebhook = (
   signatureHeader: string | undefined,
 ): boolean => {
   const secret = appConfig.QUIDAX_SIGNATURE;
-  if (!secret) {
-    // Validation is only enforced once the secret is configured — log loudly
-    // so an unset env var doesn't silently disable it.
-    console.warn(
-      "[QuidaxWebhook] QUIDAX_SIGNATURE is not set — webhook signature NOT verified",
-    );
-    return true;
-  }
-
-  if (!signatureHeader) return false;
+  // Fail closed: this webhook credits deposits, so with no secret every
+  // request is rejected rather than trusted. Boot also refuses to start
+  // without it (validations.ts); this guards a config that bypasses that.
+  if (!secret || !signatureHeader) return false;
 
   const parts: Record<string, string> = {};
   for (const piece of signatureHeader.split(",")) {

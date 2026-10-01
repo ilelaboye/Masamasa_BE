@@ -31,4 +31,6 @@ export const ConfigModuleSchema = Joi.object({
   REDIS_HOST: Joi.string().required(),
   REDIS_PORT: Joi.string().allow(null, ""),
   REDIS_PASSWORD: Joi.string().allow(null, ""),
+  // Signs the Quidax deposit webhook. Without it no deposit can be credited.
+  QUIDAX_SIGNATURE: Joi.string().required(),
 });
