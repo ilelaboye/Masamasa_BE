@@ -1,6 +1,5 @@
 import { UserRequest } from "@/definitions";
-import { BadRequestException, Injectable } from "@nestjs/common";
-import { CreateWalletDto } from "./wallet.dto";
+import { Injectable } from "@nestjs/common";
 import { Status, Wallet } from "./wallet.entity";
 import { Repository } from "typeorm";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -11,22 +10,6 @@ export class WalletService {
     @InjectRepository(Wallet)
     private readonly walletRepository: Repository<Wallet>,
   ) {}
-
-  async saveWalletAddress(createWalletDto: CreateWalletDto, req: UserRequest) {
-    const existing = await this.walletRepository.exists({
-      where: { wallet_address: createWalletDto.wallet_address },
-    });
-    if (existing) {
-      throw new BadRequestException("Wallet address already exist");
-    }
-    const wallet = this.walletRepository.create({
-      user: req.user,
-      network: createWalletDto.network,
-      currency: createWalletDto.currency,
-      wallet_address: createWalletDto.wallet_address,
-    });
-    return await this.walletRepository.save(wallet);
-  }
 
   async findAll(req: UserRequest) {
     // Get all non-expired wallets for the user, ordered by creation date

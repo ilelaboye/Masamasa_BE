@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**Masamasa** is a multi-chain crypto wallet and fintech platform. Users hold cryptocurrency across 7 blockchains, pay utility bills (airtime, data, electricity, TV), make P2P transfers, and withdraw to external bank accounts. Admins manage exchange rates, KYC verification, withdrawal wallets, and blockchain operations.
+**Masamasa** is a multi-chain crypto wallet and fintech platform. Users deposit crypto (received through Quidax — the platform holds no keys of its own), pay utility bills (airtime, data, electricity, TV), make P2P transfers, and withdraw to external bank accounts. Admins manage exchange rates and KYC verification.
 
 **Stack**: NestJS 10 · TypeScript 5 · PostgreSQL (TypeORM 0.3.20) · Redis (caching + Bull queues) · Node.js ≥ 20.18.1
 
@@ -49,22 +49,9 @@ src/
     ├── transactions/               # Transaction history and balance calculation
     ├── transfers/                  # P2P transfer records
     ├── purchases/                  # Airtime, data, electricity, TV subscriptions (VTPass)
-    ├── web3/                       # Blockchain wallet generation, balance, sweep, disposable wallets
-    │   ├── entity/
-    │   │   ├── withdrawal-wallet.entity.ts   # Master withdrawal destinations (coin+network unique)
-    │   │   ├── withdrawal.entity.ts          # Individual withdrawal records
-    │   │   └── disposable-wallet.entity.ts   # One-time deposit wallets per user/network
-    │   ├── services/
-    │   │   └── disposable-wallet.service.ts
-    │   ├── hd-wallet.ts            # EVM HD wallet (BIP44)
-    │   ├── sol-hd-wallet.ts        # Solana HD wallet
-    │   ├── tron-hd-wallet.ts       # Tron HD wallet
-    │   ├── btc-hd-wallet.ts        # Bitcoin HD wallet
-    │   ├── ada-hd-wallet.ts        # Cardano HD wallet
-    │   ├── doge-hd-wallet.ts       # Dogecoin HD wallet
-    │   ├── xrp-hd-wallet.ts        # Ripple HD wallet
-    │   └── web3.service.ts         # ~2000-line service: wallet creation, balances, sweep, withdraw
-    ├── administrator/              # Admin panel: user mgmt, KYC, logs, exchange rates, withdrawal wallets
+    ├── wallet/                     # Per-user Quidax deposit addresses (read-only to users)
+    ├── quidax/                     # Quidax sub-accounts, deposit addresses, sweep-to-master cron
+    ├── administrator/              # Admin panel: user mgmt, KYC, logs, exchange rates
     │   ├── controllers/
     │   │   ├── admin-auth.controller.ts      # POST /admin/auth/login
     │   │   └── administrator.controller.ts   # All other /admin/* routes
@@ -105,9 +92,6 @@ src/
 | `Notification` | `notifications` | user_id, message, tag, is_read, metadata | — |
 | `AdminLogs` | `admin_logs` | admin_id, user_id, entity, note, visible, metadata | — |
 | `Beneficiary` | `beneficiaries` | user_id, bank_code, bank_name, account_name, account_number | — |
-| `WithdrawalWallet` | `withdrawal_wallets` | coin, network, address, admin_id | UNIQUE(coin, network) |
-| `Withdrawal` | `withdrawals` | amount, withdrawal_wallet_id, admin_id, transaction_hash?, metadata? | Immutable record |
-| `DisposableWallet` | `disposable_wallets` | address (unique), network, token_symbol, user_id?, derivation_index, status, expires_at | UUID pk |
 
 ---
 
@@ -343,21 +327,11 @@ Return plain objects from controllers — do not wrap manually.
 
 ---
 
-## Web3 / Blockchain
+## Crypto deposits (Quidax only)
 
-| Chain | Library | Mnemonic Env Var | HD Wallet Class |
-|---|---|---|---|
-| EVM (BSC, ETH, Base, Polygon) | ethers.js | `MASTER_MNEMONIC` | `HDWallet` (hd-wallet.ts) |
-| Solana | @solana/web3.js | `SOL_MASTER_MNEMONIC` | `SolHDWallet` |
-| Bitcoin | bitcoinjs-lib | `BTC_MASTER_MNEMONIC` | `BtcHDWallet` |
-| Tron | tronweb | `TRX_MASTER_MNEMONIC` | `TronHDWallet` |
-| Cardano | @emurgo/cardano-serialization-lib | `ADA_MASTER_MNEMONIC` | `CardanoHDWallet` |
-| Ripple | xrpl | — | `XrpHDWallet` |
-| Dogecoin | bitcoinjs-lib | `MASTER_MNEMONIC` | `DogeHDWallet` |
+The backend holds **no mnemonics or private keys**. Every user gets a Quidax sub-account; its deposit addresses live in the `wallet` table. Quidax's signed `POST /webhook/quidax` credits a deposit, and `QuidaxWalletCron` sweeps sub-account coin balances to the Quidax master account as a safety net.
 
-**Custody model**: User deposits → derived wallet → sweep cron moves funds to master wallet → withdrawals processed from master wallet (`ETH_PRIVATE_KEY`).
-
-**Disposable wallets** (`DisposableWallet` entity): One-time deposit addresses with expiry. Status lifecycle: `pending → funded → swept` or `expired/failed`.
+The old self-custody code (HD wallets per chain, `web3/` module, disposable wallets, admin `web3/*` routes) was removed. Its tables — `withdrawal_wallets`, `withdrawals`, `disposable_wallets` — were left in place with their data; no entity maps to them any more.
 
 ---
 
@@ -396,7 +370,6 @@ npm run seed:run              # Run seeders
 | Cloudinary | Media uploads | `CLOUDINARYNAME`, `CLOUDINARYAPIKEY`, `CLOUDINARYAPISECRET` |
 | Mailjet | Transactional email | `MAILJET_APIKEY_PUBLIC`, `MAILJET_APIKEY_PRIVATE` |
 | Zoho Mail | Transactional email | `ZOHO_MAIL_CLIENT_ID`, `ZOHO_MAIL_AGENT_ID` |
-| Moralis | On-chain data | `MORALIS_API_KEY` |
 | Paystack | Payments | `PAYSTACK_SECRET_KEY` |
 
 ### Webhook Security
@@ -418,8 +391,6 @@ CLOUDINARYNAME, CLOUDINARYAPIKEY, CLOUDINARYAPISECRET, CLOUDINARY_UPLOAD_PRESET,
 SWAGGER_PASSWORD (min 16 chars)
 REDIS_HOST
 DB_HOST, DB_USERNAME, DB_PASSWORD, DB_NAME
-MASTER_MNEMONIC, ETH_PRIVATE_KEY
-SOL_MASTER_MNEMONIC, TRX_MASTER_MNEMONIC, ADA_MASTER_MNEMONIC
 NOMBA_WEBHOOK_SECRET, ALLOWED_ORIGINS
 ```
 

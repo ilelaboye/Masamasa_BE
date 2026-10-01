@@ -62,9 +62,6 @@ import {
   UpdateWithdrawalLimitValidation,
 } from "../validations/admin.validation";
 import { Status } from "@/modules/users/entities/user.entity";
-import { Web3Service } from "@/modules/web3/web3.service";
-import { WithdrawTokenDto } from "@/modules/web3/web3.dto";
-import { WithdrawTokenValidation } from "@/modules/web3/web3.validation";
 import { QuidaxService } from "@/modules/quidax/quidax.service";
 import { AdminRoleGuard } from "@/guards/admin-role.guard";
 import { AllowAllAdmins, AllowRoles } from "@/guards/decorator/roles.decorator";
@@ -83,7 +80,6 @@ export class AdministratorController {
     private readonly administratorService: AdministratorService,
     private readonly cacheService: CacheService,
     private readonly exchangeRateService: ExchangeRateService,
-    private readonly web3Service: Web3Service,
     private readonly quidaxService: QuidaxService,
     private readonly notificationsService: NotificationsService,
     private readonly analyticsService: AnalyticsService,
@@ -622,11 +618,6 @@ export class AdministratorController {
     return this.administratorService.transactions(req);
   }
 
-  @Get("withdrawal-wallets")
-  async withdrawalWallets(@Req() req: AdminRequest) {
-    return this.administratorService.withdrawalWallets(req);
-  }
-
   @Post("create-exchange-rate")
   @UsePipes(new JoiValidationPipe(CreateUpdateExchangeRateValidation))
   async createExchangeRate(
@@ -647,29 +638,6 @@ export class AdministratorController {
     @Req() req: AdminRequest,
   ) {
     return this.administratorService.editBulkRate(editBulkRateDto, req);
-  }
-
-  //WEB3 API's
-  @Get("web3/balances")
-  async getAllBalances() {
-    return await this.web3Service.getAllBalances();
-  }
-
-  @Post("web3/withdraw-token")
-  @UsePipes(new JoiValidationPipe(WithdrawTokenValidation))
-  async withdrawToken(
-    @Body() body: WithdrawTokenDto,
-    @Req() req: AdminRequest,
-  ) {
-    return await this.web3Service.withdrawToken(body, req);
-  }
-
-  @ApiOperation({
-    summary: "Get withdrawal history from blockchain for master wallet",
-  })
-  @Get("withdraw/history")
-  async getWithdrawHistory(@Req() req: AdminRequest) {
-    return await this.web3Service.getWithdrawHistory();
   }
 
   @AllowAllAdmins()

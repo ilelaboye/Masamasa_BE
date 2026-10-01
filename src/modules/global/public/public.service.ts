@@ -17,7 +17,7 @@ import { User } from "@/modules/users/entities/user.entity";
 import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
-import { BankAccountVerificationDto, TransactionWebhookDto } from "./dto";
+import { BankAccountVerificationDto } from "./dto";
 import { Status, Wallet, WalletType } from "@/modules/wallet/wallet.entity";
 import {
   TransactionEntityType,
@@ -31,7 +31,6 @@ import { createHash } from "crypto";
 import { ExchangeRateService } from "@/modules/exchange-rates/exchange-rates.service";
 import { NotificationsService } from "@/modules/notifications/notifications.service";
 import { NotificationTag } from "@/modules/notifications/entities/notification.entity";
-import { CreateWalletDto } from "@/modules/wallet/wallet.dto";
 import {
   AccessToken,
   AccessTokenType,
@@ -128,98 +127,6 @@ export class PublicService {
     private readonly mixpanel: MixpanelService,
     private readonly referralsService: ReferralsService,
   ) {}
-
-  async transactionWebhook(transactionWebhook: TransactionWebhookDto) {
-    console.log("transactionWebhook", transactionWebhook);
-    const { address, network, amount, token_symbol, hash } = transactionWebhook;
-
-    const find = await this.webhookRepository.findOne({
-      where: { hash: hash },
-    });
-    if (find) {
-      throw new BadRequestException("Webhook already processed");
-    }
-
-    const wb = await this.webhookRepository.save({
-      address,
-      entity_type: WebhookEntityType.deposit,
-      metadata: JSON.stringify(transactionWebhook),
-      hash: hash,
-    });
-
-    const wallet = await this.walletRepository.findOne({
-      where: { wallet_address: address },
-      relations: ["user"],
-    });
-    if (!wallet) throw new BadRequestException("Wallet address not found");
-
-    const rate = await this.exchangeRateService.getCurrencyActiveRate(
-      token_symbol.toLowerCase(),
-    );
-    let exchange = 0;
-    console.log("rate", rate);
-    if (rate) {
-      exchange = rate.rate;
-    }
-    console.log("exchange", exchange);
-    const { coinPrice: coin_price, nairaPerCoin } = await this.getCoinPricing(
-      token_symbol,
-      exchange,
-    );
-    const naira_amount = nairaPerCoin * (parseFloat(`${amount}`) || 0);
-
-    const trans = await this.transactionsRepository.save({
-      user_id: wallet.user_id,
-      network: network,
-      coin_amount: amount,
-      wallet_address: wallet,
-      mode: TransactionModeType.credit,
-      entity_type: TransactionEntityType.deposit,
-      metadata: transactionWebhook,
-      exchange_rate_id: rate ? rate.id : null,
-      currency: token_symbol,
-      entity_id: wb.id,
-      dollar_amount: coin_price * amount,
-      amount: naira_amount,
-      coin_exchange_rate: coin_price,
-    } as unknown as Transactions);
-
-    sendZohoMailWithTemplate(
-      {
-        to: {
-          name: `${capitalizeString(wallet.user.first_name)}`,
-          email: wallet.user.email,
-        },
-      },
-      {
-        subject: `${token_symbol} Deposit Confirmed`,
-        templateId: ZohoMailTemplates.coins_deposit_confirmed,
-        variables: {
-          firstName: capitalizeString(wallet.user.first_name),
-          coin: `${amount} ${token_symbol}`,
-          network: network,
-          amount: `NGN ${naira_amount}`,
-          address: address,
-        },
-      },
-    );
-
-    this.notificationsService.create({
-      userId: wallet.user_id,
-      message: `Your deposit of ${currencyFormatter(amount, "NGN", 2, false)} ${token_symbol} is confirmed`,
-      tag: NotificationTag.deposit,
-      pushTitle: "Deposit Successful",
-      metadata: transactionWebhook,
-    });
-
-    // This deposit may be the one that takes the depositor past the referral
-    // threshold. Awaited so the reward is in place before the webhook returns,
-    // but the call swallows its own errors — referral bookkeeping must never
-    // fail a deposit that has already been credited.
-    await this.referralsService.evaluateQualification(wallet.user_id);
-
-    return trans;
-  }
 
   async flutterwaveTransferWebhook(webhook) {
     if (webhook["event.type"] == "Transfer") {
@@ -566,44 +473,6 @@ export class PublicService {
     // return getBanks();
     return await this.getBanksFromNomba();
   }
-
-  // async saveWalletAddress(createWalletDto: CreateWalletDto) {
-  //   console.log(
-  //     "called saveWalletAddress",
-  //     createWalletDto.user_id,
-  //     createWalletDto.network,
-  //     createWalletDto.wallet_address
-  //   );
-  //   const existing = await this.walletRepository.exists({
-  //     where: { wallet_address: createWalletDto.wallet_address },
-  //   });
-  //   if (existing) {
-  //     throw new BadRequestException("Wallet address already exist");
-  //   }
-
-  //   const user = await this.userRepository.exists({
-  //     where: { id: createWalletDto.user_id },
-  //   });
-  //   if (!user) {
-  //     throw new BadRequestException("User not found");
-  //   }
-  //   const user_wall = await this.walletRepository.exists({
-  //     where: { user_id: createWalletDto.user_id },
-  //   });
-  //   if (user_wall) {
-  //     throw new BadRequestException(
-  //       "Wallet has already been created for this user"
-  //     );
-  //   }
-  //   const wallet = this.walletRepository.create({
-  //     user: { id: createWalletDto.user_id },
-  //     network: createWalletDto.network,
-  //     currency: createWalletDto.currency,
-  //     wallet_address: createWalletDto.wallet_address,
-  //   });
-  //   console.log("done", wallet);
-  //   return await this.walletRepository.save(wallet);
-  // }
 
   async verifyAccountNumberFromNomba(accountNumber, bankCode, bankName) {
     let accessToken = await this.accessTokenRepository.findOne({
