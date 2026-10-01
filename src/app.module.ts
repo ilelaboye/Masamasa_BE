@@ -28,6 +28,7 @@ import {
   QuidaxModule,
   MixpanelModule,
   ReferralsModule,
+  AffiliatesModule,
 } from "./modules";
 import { ConfigModuleSchema } from "./validations";
 
@@ -79,6 +80,7 @@ import { ConfigModuleSchema } from "./validations";
     QuidaxModule,
     MixpanelModule,
     ReferralsModule,
+    AffiliatesModule,
   ],
   providers: [JwtService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

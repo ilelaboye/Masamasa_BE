@@ -47,7 +47,7 @@ function localDayKey(date: Date): string {
 /**
  * Start of the current calendar period — this week, this month, this year —
  */
-function periodStart(period: AnalyticsPeriod): Date {
+export function periodStart(period: AnalyticsPeriod): Date {
   const now = new Date();
   switch (period) {
     case "today": {

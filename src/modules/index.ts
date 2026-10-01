@@ -12,3 +12,4 @@ export * from "./purchases/purchases.module";
 export * from "./web3/web3.module";
 export * from "./quidax/quidax.module";
 export * from "./referrals/referrals.module";
+export * from "./affiliates/affiliates.module";

@@ -454,6 +454,35 @@ export function sendDepositConfirmedEmail(
 /**
  * Staff invite link.
  */
+/**
+ * Tells a user they are now an affiliate and gives them their unique link.
+ *
+ * Fire-and-forget: the affiliate record is already saved, so a mail outage must
+ * not fail the enrolment.
+ */
+export function sendAffiliateInviteEmail(user: EmailUser, link: string) {
+  sendZohoMail(
+    {
+      to: {
+        name: `${capitalizeString(user.first_name ?? "")} ${capitalizeString(user.last_name ?? "")}`.trim(),
+        email: user.email,
+      },
+    },
+    {
+      subject: "Welcome to the MasaMasa affiliate team",
+      html: shell(
+        user.first_name ?? "",
+        `<p>Welcome to the team! Use this link to access your dashboard:</p>
+         <p style="margin:24px 0">
+           <a href="${link}" style="display:inline-block;background:#1a1a1a;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:6px">Go to your dashboard</a>
+         </p>
+         <p style="word-break:break-all">${link}</p>
+         <p>Warm regards,</p>`,
+      ),
+    },
+  ).catch(() => {});
+}
+
 export function sendStaffInviteEmail(
   user: EmailUser,
   link: string,

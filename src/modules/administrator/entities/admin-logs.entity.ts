@@ -17,6 +17,7 @@ export enum AdminLogEntities {
   WITHDRAWAL_LIMIT = "WITHDRAWAL_LIMIT",
   STAFF = "STAFF",
   TRANSACTION = "TRANSACTION",
+  AFFILIATE = "AFFILIATE",
 }
 
 @Entity({ name: "admin_logs" })
