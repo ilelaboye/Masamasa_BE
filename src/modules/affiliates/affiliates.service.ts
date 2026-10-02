@@ -87,7 +87,7 @@ export class AffiliatesService {
       sendAffiliateInviteEmail(user, {
         dashboardLink: `${appConfig.AFFILIATE_FRONTEND}/${affiliate.uuid}`,
         referralCode: user.referral_code,
-        referralLink: `${appConfig.REFERRAL_LINK_BASE}/${user.referral_code}`,
+        referralLink: this.referralLink(user.referral_code),
       });
     }
 
@@ -220,6 +220,8 @@ export class AffiliatesService {
       affiliate: {
         first_name: affiliate.user.first_name,
         last_name: affiliate.user.last_name,
+        referral_code: affiliate.user.referral_code,
+        referral_link: this.referralLink(affiliate.user.referral_code),
       },
       period,
       kpi: affiliateKpi,
@@ -232,6 +234,12 @@ export class AffiliatesService {
         created_at: user.created_at,
       })),
     };
+  }
+
+  // The link in the invite email and on the affiliate's page — one builder so
+  // the two always match.
+  private referralLink(referralCode: string) {
+    return `${appConfig.REFERRAL_LINK_BASE}/${referralCode}`;
   }
 
   private affiliateByUuid(uuid: string) {
