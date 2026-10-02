@@ -25,8 +25,7 @@ export class CronService {
   // }
 
   // Every 5 minutes
-  // @Interval(300000)
-  @Interval(60000)
+  @Interval(300000)
   async verifyTransactions() {
     if (!_IS_PROD_) return;
     this.cronJob.verifyTransactionJob();
