@@ -1067,6 +1067,15 @@ export class AdministratorService {
       }
     }
 
+    // For the "make affiliate" picker. Removed affiliates are left out too,
+    // since createAffiliate refuses them as well.
+    const notAffiliate = req.query.not_affiliate === "true";
+    if (notAffiliate) {
+      queryRunner
+        .leftJoin("affiliates", "affiliate", "affiliate.user_id = users.id")
+        .andWhere("affiliate.id IS NULL");
+    }
+
     queryRunner.orderBy("users.created_at", "DESC");
 
     count = await queryRunner.getCount();

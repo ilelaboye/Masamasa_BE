@@ -187,6 +187,7 @@ export class AdministratorController {
     return this.administratorService.resendStaffInvite(id, req);
   }
 
+  @ApiQuery({ name: "not_affiliate", required: false, type: Boolean })
   @AllowRoles(AdministratorRoles.support)
   @Get("users")
   async users(@Req() req: AdminRequest) {

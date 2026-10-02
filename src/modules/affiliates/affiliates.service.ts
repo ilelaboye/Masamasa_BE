@@ -85,7 +85,7 @@ export class AffiliatesService {
       // The uuid is the link — it comes back from the insert, so the email can
       // only be built here.
       sendAffiliateInviteEmail(user, {
-        dashboardLink: `${appConfig.AFFILIATE_FRONTEND}/affiliate/${affiliate.uuid}`,
+        dashboardLink: `${appConfig.AFFILIATE_FRONTEND}/${affiliate.uuid}`,
         referralCode: user.referral_code,
         referralLink: `${appConfig.REFERRAL_LINK_BASE}/${user.referral_code}`,
       });
