@@ -85,7 +85,7 @@ export class AffiliatesService {
       // The uuid is the link — it comes back from the insert, so the email can
       // only be built here.
       sendAffiliateInviteEmail(user, {
-        dashboardLink: `${appConfig.APP_FRONTEND}/affiliate/${affiliate.uuid}`,
+        dashboardLink: `${appConfig.AFFILIATE_FRONTEND}/affiliate/${affiliate.uuid}`,
         referralCode: user.referral_code,
         referralLink: `${appConfig.REFERRAL_LINK_BASE}/${user.referral_code}`,
       });
@@ -250,9 +250,7 @@ export class AffiliatesService {
     const periodFrom = period ? periodStart(period) : null;
 
     // The referred-users table is always all-time; the period only scopes the
-    // KPIs, so each user carries both. Signup and activity are scoped
-    // separately: someone referred months ago who transacts today counts as
-    // transacting today, not as registered today.
+    // KPIs, so each user carries both.
     const withinPeriod = periodFrom ? " AND t.created_at >= :periodFrom" : "";
 
     const depositWhere = `t.user_id = "user"."id"

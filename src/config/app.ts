@@ -14,6 +14,7 @@ export const appConfig = {
   APP_URL: process.env.APP_URL ? process.env.APP_URL : "",
   WEB_FRONTEND: process.env.WEB_FRONTEND,
   ADMIN_FRONTEND: process.env.ADMIN_FRONTEND || "",
+  AFFILIATE_FRONTEND: process.env.AFFILIATE_FRONTEND || "",
   PORT: process.env.PORT || 4000,
   DEBUG: process.env.DEBUG,
   ENV: process.env.ENV || "dev",
