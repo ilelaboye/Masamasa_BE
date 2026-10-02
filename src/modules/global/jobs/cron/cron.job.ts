@@ -309,7 +309,7 @@ export class CronJob {
             await this.retryWithdrawal(trans, accessToken.token);
           } catch (retryErr: any) {
             console.log(
-              `Retry failed for ${trans.masamasa_ref}: ${retryErr?.response?.data?.description ?? retryErr?.message}`,
+              `Retry failed for ${trans.masamasa_ref}: ${retryErr?.response?.data?.description ?? retryErr?.message}, ${retryErr?.message}`,
               "VerifyTransactionJob",
             );
           }
