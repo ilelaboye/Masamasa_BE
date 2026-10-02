@@ -14,7 +14,7 @@ import {
 import { ReferralEarning } from "../referrals/entities/referral-earning.entity";
 import { AdminLogEntities } from "../administrator/entities/admin-logs.entity";
 import {
-  type AnalyticsPeriod,
+  isAnalyticsPeriod,
   periodStart,
 } from "../administrator/services/analytics.service";
 import { AdministratorService } from "../administrator/services/administrator.service";
@@ -84,10 +84,11 @@ export class AffiliatesService {
 
       // The uuid is the link — it comes back from the insert, so the email can
       // only be built here.
-      sendAffiliateInviteEmail(
-        user,
-        `${appConfig.APP_FRONTEND}/affiliate/${affiliate.uuid}`,
-      );
+      sendAffiliateInviteEmail(user, {
+        dashboardLink: `${appConfig.APP_FRONTEND}/affiliate/${affiliate.uuid}`,
+        referralCode: user.referral_code,
+        referralLink: `${appConfig.REFERRAL_LINK_BASE}/${user.referral_code}`,
+      });
     }
 
     const msg = `${req.admin.first_name} ${req.admin.last_name} made user(s) ${userIds.join(", ")} an affiliate`;
@@ -180,33 +181,86 @@ export class AffiliatesService {
     };
   }
 
-  async getAffiliate(uuid: string, period?: AnalyticsPeriod) {
-    if (!UUID_PATTERN.test(uuid)) {
-      throw new BadRequestException("Affiliate not found");
-    }
-
-    const periodFrom = period ? periodStart(period) : null;
-
-    const withinPeriod = periodFrom ? " AND t.created_at >= :periodFrom" : "";
-
-    const depositWhere = `t.user_id = "user"."id"
-        AND t.entity_type = :depositType
-        AND t.mode = :credit
-        AND t.status = :success${withinPeriod}`;
-
-    const affiliate = await this.affiliateRepository
-      .createQueryBuilder("affiliate")
-      .leftJoinAndSelect("affiliate.user", "user")
+  async getAffiliate(uuid: string, requestedPeriod?: string) {
+    const affiliate = await this.affiliateByUuid(uuid)
       .leftJoin("affiliate.admin", "admin")
       .addSelect(["admin.first_name", "admin.last_name"])
-      .where("affiliate.uuid = :uuid", { uuid })
       .getOne();
 
     if (!affiliate) {
       throw new BadRequestException("Affiliate not found");
     }
 
-    const referredQuery = this.userRepository
+    return {
+      affiliate,
+      ...(await this.buildReport(affiliate.user_id, requestedPeriod)),
+    };
+  }
+
+  async getAffiliateReport(uuid: string, requestedPeriod?: string) {
+    const affiliate = await this.affiliateByUuid(uuid)
+      .andWhere("affiliate.status = :active", {
+        active: AffiliateStatus.active,
+      })
+      .getOne();
+
+    if (!affiliate) {
+      throw new BadRequestException("Affiliate not found");
+    }
+
+    const { referred_users, period, kpi } = await this.buildReport(
+      affiliate.user_id,
+      requestedPeriod,
+    );
+    // Deposit figures are admin-only.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { deposit_volume, deposit_count, ...affiliateKpi } = kpi;
+
+    return {
+      affiliate: {
+        first_name: affiliate.user.first_name,
+        last_name: affiliate.user.last_name,
+      },
+      period,
+      kpi: affiliateKpi,
+      referred_users: referred_users.map((user) => ({
+        first_name: user.first_name,
+        last_name: user.last_name,
+        email: user.email,
+        status: user.status,
+        has_transacted: user.has_transacted,
+        created_at: user.created_at,
+      })),
+    };
+  }
+
+  private affiliateByUuid(uuid: string) {
+    if (!UUID_PATTERN.test(uuid)) {
+      throw new BadRequestException("Affiliate not found");
+    }
+
+    return this.affiliateRepository
+      .createQueryBuilder("affiliate")
+      .leftJoinAndSelect("affiliate.user", "user")
+      .where("affiliate.uuid = :uuid", { uuid });
+  }
+
+  private async buildReport(userId: number, requestedPeriod?: string) {
+    const period = isAnalyticsPeriod(requestedPeriod) ? requestedPeriod : null;
+    const periodFrom = period ? periodStart(period) : null;
+
+    // The referred-users table is always all-time; the period only scopes the
+    // KPIs, so each user carries both. Signup and activity are scoped
+    // separately: someone referred months ago who transacts today counts as
+    // transacting today, not as registered today.
+    const withinPeriod = periodFrom ? " AND t.created_at >= :periodFrom" : "";
+
+    const depositWhere = `t.user_id = "user"."id"
+        AND t.entity_type = :depositType
+        AND t.mode = :credit
+        AND t.status = :success`;
+
+    const rows = await this.userRepository
       .createQueryBuilder("user")
       .select("user.id", "id")
       .addSelect("user.first_name", "first_name")
@@ -231,26 +285,37 @@ export class AffiliatesService {
           WHERE ${depositWhere})`,
         "deposit_count",
       )
-      // Any transaction, not just a deposit — otherwise this says the same
-      // thing as deposit_count and the card stops meaning what it is labelled.
+
+      .addSelect(
+        `EXISTS (SELECT 1 FROM transactions t WHERE t.user_id = "user"."id")`,
+        "has_transacted",
+      )
+
+      .addSelect(
+        periodFrom ? `"user"."created_at" >= :periodFrom` : "TRUE",
+        "registered_in_period",
+      )
       .addSelect(
         `EXISTS (
           SELECT 1
           FROM transactions t
           WHERE t.user_id = "user"."id"${withinPeriod}
         )`,
-        "has_transacted",
+        "transacted_in_period",
       )
-      .where("user.referred_by_id = :userId", {
-        userId: affiliate.user_id,
-      });
-
-    // Only include users who registered during the selected period.
-    if (periodFrom) {
-      referredQuery.andWhere("user.created_at >= :periodFrom");
-    }
-
-    const rows = await referredQuery
+      .addSelect(
+        `(SELECT COALESCE(SUM(t.amount), 0)
+          FROM transactions t
+          WHERE ${depositWhere}${withinPeriod})`,
+        "period_deposit_volume",
+      )
+      .addSelect(
+        `(SELECT COUNT(*)
+          FROM transactions t
+          WHERE ${depositWhere}${withinPeriod})`,
+        "period_deposit_count",
+      )
+      .where("user.referred_by_id = :userId", { userId })
       .setParameters({
         depositType: TransactionEntityType.deposit,
         credit: TransactionModeType.credit,
@@ -261,43 +326,55 @@ export class AffiliatesService {
       .getRawMany();
 
     const referred_users = rows.map((user) => ({
-      ...user,
+      id: user.id,
+      first_name: user.first_name,
+      last_name: user.last_name,
+      username: user.username,
+      email: user.email,
+      phone: user.phone,
+      status: user.status,
+      kyc_status: user.kyc_status,
+      kyc_tier: user.kyc_tier,
+      created_at: user.created_at,
       deposit_volume: Number(user.deposit_volume),
       deposit_count: Number(user.deposit_count),
+      has_transacted: user.has_transacted,
     }));
 
     const earnings = await this.earningRepository.find({
-      where: { user_id: affiliate.user_id },
+      where: { user_id: userId },
     });
 
     const commission = earnings
       .filter((earning) => !periodFrom || earning.created_at >= periodFrom)
       .reduce((total, earning) => total + Number(earning.amount), 0);
 
-    const registered_users = referred_users.length;
-
-    const transacting_users = referred_users.filter(
-      (user) => user.has_transacted,
+    const registered_users = rows.filter(
+      (user) => user.registered_in_period,
     ).length;
 
-    const pending_kyc = referred_users.filter(
+    const transacting_users = rows.filter(
+      (user) => user.transacted_in_period,
+    ).length;
+
+    // A current state rather than an event, so not scoped to the period.
+    const pending_kyc = rows.filter(
       (user) => user.kyc_status === KycStatus.pending,
     ).length;
 
-    const deposit_volume = referred_users.reduce(
-      (total, user) => total + user.deposit_volume,
+    const deposit_volume = rows.reduce(
+      (total, user) => total + Number(user.period_deposit_volume),
       0,
     );
 
-    const deposit_count = referred_users.reduce(
-      (total, user) => total + user.deposit_count,
+    const deposit_count = rows.reduce(
+      (total, user) => total + Number(user.period_deposit_count),
       0,
     );
 
     return {
-      affiliate,
       referred_users,
-      period: period ?? null,
+      period,
       kpi: {
         registered_users,
         pending_kyc,

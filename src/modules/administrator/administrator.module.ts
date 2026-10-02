@@ -11,9 +11,11 @@ import { AdminLogs } from "./entities/admin-logs.entity";
 import { User } from "../users/entities/user.entity";
 import { Transactions } from "../transactions/transactions.entity";
 import { PurchaseRequest } from "../purchases/entities/purchases.entity";
+import { AffiliatesModule } from "../affiliates/affiliates.module";
 
 @Module({
   imports: [
+    AffiliatesModule,
     TypeOrmModule.forFeature([
       Administrator,
       AdminLogs,

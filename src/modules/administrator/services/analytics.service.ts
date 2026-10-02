@@ -13,26 +13,15 @@ import { ReferralEarning } from "@/modules/referrals/entities/referral-earning.e
 import { paginate } from "@/core/helpers";
 import { endOfDay, startOfDay } from "@/core/utils";
 
-export type AnalyticsPeriod = "today" | "week" | "month" | "year";
+export const ANALYTICS_PERIODS = ["today", "week", "month", "year"] as const;
+export type AnalyticsPeriod = (typeof ANALYTICS_PERIODS)[number];
+
+export const isAnalyticsPeriod = (value: unknown): value is AnalyticsPeriod =>
+  ANALYTICS_PERIODS.includes(value as AnalyticsPeriod);
 export type VolumeGranularity = "daily" | "weekly" | "monthly" | "yearly";
 
-/**
- * Timezone the product's calendar days are measured in. Matches `TZ` in the
- * environment, which is what every `setHours(0, 0, 0, 0)` here resolves
- * against — SQL day buckets must agree with it or they will not join.
- */
 const REPORTING_TIMEZONE = "Africa/Lagos";
 
-/**
- * SQL expression bucketing a bare UTC `timestamp` column into a
- * REPORTING_TIMEZONE calendar day, rendered as `YYYY-MM-DD`.
- *
- * The column is labelled UTC before the shift because `timestamp without time
- * zone` carries no offset of its own (see config/pg-timezone.ts). Rendering
- * the bucket as text rather than a timestamp keeps the join key exact: an
- * instant would have to survive the driver's UTC parser and a second
- * conversion in JS before it could be compared.
- */
 function localDayBucket(column: string): string {
   return `TO_CHAR(${column} AT TIME ZONE 'UTC' AT TIME ZONE '${REPORTING_TIMEZONE}', 'YYYY-MM-DD')`;
 }

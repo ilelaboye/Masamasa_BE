@@ -460,7 +460,11 @@ export function sendDepositConfirmedEmail(
  * Fire-and-forget: the affiliate record is already saved, so a mail outage must
  * not fail the enrolment.
  */
-export function sendAffiliateInviteEmail(user: EmailUser, link: string) {
+export function sendAffiliateInviteEmail(
+  user: EmailUser,
+  links: { dashboardLink: string; referralCode: string; referralLink: string },
+) {
+  const { dashboardLink, referralCode, referralLink } = links;
   sendZohoMail(
     {
       to: {
@@ -474,9 +478,12 @@ export function sendAffiliateInviteEmail(user: EmailUser, link: string) {
         user.first_name ?? "",
         `<p>Welcome to the team! Use this link to access your dashboard:</p>
          <p style="margin:24px 0">
-           <a href="${link}" style="display:inline-block;background:#1a1a1a;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:6px">Go to your dashboard</a>
+           <a href="${dashboardLink}" style="display:inline-block;background:#1a1a1a;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:6px">Go to your dashboard</a>
          </p>
-         <p style="word-break:break-all">${link}</p>
+         <p style="word-break:break-all">${dashboardLink}</p>
+         <p>Share your referral code or link so the people you bring in are counted as yours:</p>
+         <p>Your referral code: <strong>${esc(referralCode)}</strong></p>
+         <p style="word-break:break-all">Your referral link: <a href="${referralLink}">${referralLink}</a></p>
          <p>Warm regards,</p>`,
       ),
     },

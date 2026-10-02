@@ -6,7 +6,6 @@ import { AdminLogs } from "../administrator/entities/admin-logs.entity";
 import { AdministratorService } from "../administrator/services/administrator.service";
 import { ReferralEarning } from "../referrals/entities/referral-earning.entity";
 import { Transactions } from "../transactions/transactions.entity";
-import { WithdrawalWallet } from "../web3/entity/withdrawal-wallet.entity";
 import { AffiliatesController } from "./affiliates.controller";
 import { AffiliatesService } from "./affiliates.service";
 import { Affiliate } from "./entities/affiliate.entity";
@@ -20,10 +19,10 @@ import { Affiliate } from "./entities/affiliate.entity";
       Administrator,
       AdminLogs,
       Transactions,
-      WithdrawalWallet,
     ]),
   ],
   controllers: [AffiliatesController],
   providers: [AffiliatesService, AdministratorService],
+  exports: [AffiliatesService],
 })
 export class AffiliatesModule {}

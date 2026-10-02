@@ -70,6 +70,10 @@ import {
   TransactionEntityType,
   TransactionStatusType,
 } from "@/modules/transactions/transactions.entity";
+import { AffiliatesService } from "@/modules/affiliates/affiliates.service";
+import { CreateAffiliateDto } from "@/modules/affiliates/dto/affiliate.dto";
+import { AffiliateStatus } from "@/modules/affiliates/entities/affiliate.entity";
+import { CreateAffiliateValidation } from "@/modules/affiliates/validations/affiliate.validation";
 
 @ApiTags("Admin")
 @ApiCookieAuth(_ADMIN_AUTH_COOKIE_NAME_)
@@ -83,6 +87,7 @@ export class AdministratorController {
     private readonly quidaxService: QuidaxService,
     private readonly notificationsService: NotificationsService,
     private readonly analyticsService: AnalyticsService,
+    private readonly affiliatesService: AffiliatesService,
   ) {}
 
   @ApiOperation({ summary: "Get the currently logged-in admin's profile" })
@@ -638,6 +643,49 @@ export class AdministratorController {
     @Req() req: AdminRequest,
   ) {
     return this.administratorService.editBulkRate(editBulkRateDto, req);
+  }
+
+  @ApiOperation({ summary: "Save one or more users as affiliates" })
+  @UsePipes(new JoiValidationPipe(CreateAffiliateValidation))
+  @Post("affiliates")
+  async createAffiliate(
+    @Body() createAffiliateDto: CreateAffiliateDto,
+    @Req() req: AdminRequest,
+  ) {
+    return this.affiliatesService.createAffiliate(createAffiliateDto, req);
+  }
+
+  @ApiOperation({ summary: "Get all affiliates with their user details" })
+  @ApiQuery({
+    name: "search",
+    required: false,
+    description: "Matches first name, last name, full name, username or email",
+  })
+  @ApiQuery({ name: "status", required: false, enum: AffiliateStatus })
+  @ApiQuery({ name: "page", required: false, type: Number })
+  @ApiQuery({ name: "limit", required: false, type: Number })
+  @Get("affiliates")
+  async getAffiliates(@Req() req: AdminRequest) {
+    return this.affiliatesService.getAffiliates(req);
+  }
+
+  @ApiOperation({
+    summary:
+      "Get one affiliate with the users they referred and each referral's deposits",
+  })
+  @ApiQuery({
+    name: "period",
+    required: false,
+    enum: ["today", "week", "month", "year"],
+    description:
+      "Scopes transacting users, deposits and commission to that calendar period. Omit for all time.",
+  })
+  @Get("affiliates/:uuid")
+  async getAffiliate(
+    @Param("uuid") uuid: string,
+    @Query("period") period?: string,
+  ) {
+    return this.affiliatesService.getAffiliate(uuid, period);
   }
 
   @AllowAllAdmins()
